@@ -1,0 +1,83 @@
+name: Manual free market validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      universe:
+        description: 'NVDA first; watchlist35 only after reviewed NVDA success'
+        required: true
+        default: nvda
+        type: choice
+        options:
+          - nvda
+          - watchlist35
+      nvda_run_id:
+        description: 'Required for watchlist35: accepted NVDA run on this same commit'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: phase1-free-market-validation
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Verify prerequisite for the 35-symbol round
+        if: inputs.universe == 'watchlist35'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NVDA_ACCEPTED_RUN_ID: ${{ inputs.nvda_run_id }}
+        run: |
+          [[ "$NVDA_ACCEPTED_RUN_ID" =~ ^[0-9]+$ ]] || exit 1
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$NVDA_ACCEPTED_RUN_ID" > /tmp/nvda-run.json
+          python - <<'PY'
+          import json,os
+          run=json.load(open('/tmp/nvda-run.json'))
+          assert run['conclusion']=='success' and run['event']=='workflow_dispatch'
+          assert run['head_sha']==os.environ['GITHUB_SHA']
+          assert run['path']=='.github/workflows/01-free-market-validation.yml'
+          PY
+          gh run download "$NVDA_ACCEPTED_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'free-market-nvda-*' --dir /tmp/nvda-review
+          python - <<'PY'
+          import json,pathlib
+          files=list(pathlib.Path('/tmp/nvda-review').rglob('summary.json'))
+          assert len(files)==1
+          s=json.loads(files[0].read_text())
+          assert s['universe']=='nvda' and s['passed'] and s['valid']==1
+          assert s['safety_passed'] and all(v==0 for v in s['attempt_counters'].values())
+          assert s['llm_usage_rows'] in (None,0)
+          PY
+      - name: Checkout clean deployment baseline
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Python (same version as official daily workflow)
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install original dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -c "import futu; print('futu SDK import OK')"
+      - name: Run guarded upstream dry-run (no credentials)
+        env:
+          PYTHONIOENCODING: utf-8
+          LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+        run: python .github/scripts/free_market_validation.py --universe '${{ inputs.universe }}' --out validation-evidence
+      - name: Keep actual evidence, including failures
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: free-market-${{ inputs.universe }}-${{ github.run_id }}
+          path: validation-evidence/
+          retention-days: 7
