@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [测试] Add manual-only NVDA free preflight with shared sync/async one-POST transport guard and fixed business checkout.
+
 - [修复] Yahoo class-share request symbols use hyphens while canonical codes stay dotted; add manual original-API cold prefill and native CLI/MA60 acceptance.
 
 - [测试] Fork-only manual history/identity diagnostic: original 90-day provider parameter, isolated Yahoo BRK-B probe, no business routing modification.

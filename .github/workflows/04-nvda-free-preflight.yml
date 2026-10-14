@@ -1,0 +1,52 @@
+name: Manual NVDA transport guard preflight
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: nvda-manual-preflight
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          path: controller
+      - uses: actions/checkout@v5
+        with:
+          ref: 2b896241f69d0177c2b6f298cf69042b8531dd76
+          persist-credentials: false
+          path: upstream-fixed
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Fixed upstream dependencies and inspected SDK version
+        run: |
+          python -m pip install -r upstream-fixed/requirements.txt
+          python -m pip install litellm==1.105.1 httpx==0.28.1
+      - name: Offline fault injection before actual request construction
+        env:
+          LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+          PYTHONPATH: upstream-fixed
+          DSA_FIXED_SOURCE: upstream-fixed
+        run: python controller/.github/scripts/test_deepseek_post_guard.py > guard-tests.log 2>&1
+      - name: Fresh original NVDA prefill and intercepted native request
+        env:
+          LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+          PYTHONIOENCODING: utf-8
+        run: python controller/.github/scripts/nvda_free_preflight.py --source upstream-fixed --out nvda-evidence
+      - name: Public current provider pricing (no credential)
+        run: |
+          curl --fail --max-time 30 https://api-docs.deepseek.com/quick_start/pricing/ -o pricing.html
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: nvda-free-preflight-${{ github.run_id }}
+          path: |
+            nvda-evidence/
+            guard-tests.log
+            pricing.html
+          retention-days: 7
