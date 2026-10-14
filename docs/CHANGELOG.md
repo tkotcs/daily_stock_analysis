@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [测试] Fork-only manual history/identity diagnostic: original 90-day provider parameter, isolated Yahoo BRK-B probe, no business routing modification.
+
 - [chore] Fork deployment: add credential-free, manual-only upstream market dry-run; retain original workflows with disabled suffixes.
 
 - [文档] 三语 README 分别使用 Modelflare 简体中文、英文及繁体中文赞助横幅，保持现有版式与链接。
