@@ -1,52 +1,122 @@
-name: Manual free NVDA final request capture
+name: Manual authorized frozen NVDA Phase 2H one POST
 on:
   workflow_dispatch:
+    inputs:
+      execute_live:
+        type: boolean
+        default: false
+      request_sha256:
+        type: string
+        required: true
+      analysis_asof:
+        type: string
+        required: true
+      target_session:
+        type: string
+        required: true
+      pricing_sha256:
+        type: string
+        required: true
+      authorization_reference:
+        type: string
+        required: true
+      secret_upload_approval_reference:
+        type: string
+        required: true
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: nvda-final-free-capture
+  group: nvda-manual-preflight
   cancel-in-progress: false
 jobs:
-  prepare-only:
+  once:
+    if: ${{ inputs.execute_live && github.actor == github.repository_owner }}
+    environment: nvda-one-call-approval
     runs-on: ubuntu-latest
-    timeout-minutes: 25
     env:
-      LITELLM_LOCAL_MODEL_COST_MAP: 'True'
       CUSTOM_TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
       TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
-      PYTHONDONTWRITEBYTECODE: '1'
-      PYTHONIOENCODING: utf-8
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
         with:
-          path: controller
+          ref: 93d8ba0110460718517e0e4ca11d0b051b518a29
           persist-credentials: false
+          path: controller
       - uses: actions/checkout@v5
         with:
           ref: 578fc55364bf32b7299e84eea7a630eb7e93e973
-          path: upstream-fixed
           persist-credentials: false
+          path: upstream-fixed
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-      - name: Full dependencies and public tokenizer asset
+      - name: Dependencies and offline tests (no key)
+        env:
+          DSA_FIXED_SOURCE: upstream-fixed
+          PYTHONPATH: upstream-fixed
+          LITELLM_LOCAL_MODEL_COST_MAP: 'True'
         run: |
-          python -m pip install -r upstream-fixed/requirements.txt pytest
+          python -m pip install -r upstream-fixed/requirements.txt litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6
+          python -m pip install pytest
           python -m pip check
-          mkdir -p acceptance
-          python -m pip freeze > acceptance/dependencies.txt
-          python controller/.github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR" > acceptance/tokenizer-assets.json
-      - name: Offline one-POST, redaction and native compatibility tests
-        run: |
-          python controller/.github/scripts/phase2g_offline_tests.py 2>&1 | tee acceptance/offline-tests.log
-          python controller/.github/scripts/phase2g_upstream_regression.py 2>&1 | tee acceptance/upstream-tests.log
-      - name: Current NVDA data and native request intercepted before POST
-        run: python controller/.github/scripts/nvda_free_preflight.py --source upstream-fixed --out acceptance/nvda-inputs --include-free-research
-      - uses: actions/upload-artifact@v6
-        if: always()
+          python controller/.github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR"
+          python controller/.github/scripts/phase2g_offline_tests.py
+          python controller/.github/scripts/phase2g_upstream_regression.py
+      - uses: actions/download-artifact@v5
         with:
-          name: phase2h-request-${{ github.run_id }}
-          path: acceptance/
-          retention-days: 30
-          if-no-files-found: error
+          name: phase2h-request-38704910265
+          run-id: 38704910265
+          github-token: ${{ github.token }}
+          path: locked-evidence
+      - name: Bind the separately approved request to this run
+        env:
+          REQUEST_SHA: ${{ inputs.request_sha256 }}
+          SNAPSHOT_ASOF: ${{ inputs.analysis_asof }}
+          TARGET_SESSION: ${{ inputs.target_session }}
+          PRICING_SHA: ${{ inputs.pricing_sha256 }}
+          APPROVAL_REF: ${{ inputs.authorization_reference }}
+          SECRET_APPROVAL_REF: ${{ inputs.secret_upload_approval_reference }}
+        run: |
+          python - <<'PY'
+          import datetime,json,os,pathlib
+          if os.environ['GITHUB_RUN_ATTEMPT']!='1':raise SystemExit('rerun_forbidden')
+          import hashlib,subprocess
+          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd='controller',text=True).strip()=='93d8ba0110460718517e0e4ca11d0b051b518a29'
+          assert os.environ['REQUEST_SHA']=='f7ca322b236ff4b993a081e33090740eb9891fa584f0abf33dbab0677cf88e3b'
+          assert os.environ['SNAPSHOT_ASOF']=='2026-10-15T08:21:32.595610+00:00'
+          assert os.environ['TARGET_SESSION']=='2026-10-14'
+          packet=json.loads(pathlib.Path('locked-evidence/nvda-inputs/ORIGINAL_REQUEST_PACKET.json').read_text(encoding='utf-8'))
+          assert hashlib.sha256(json.dumps(packet,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()==os.environ['REQUEST_SHA']
+          now=datetime.datetime.now(datetime.timezone.utc)
+          data={'authorize_paid_post':True,'authorization_reference':os.environ['APPROVAL_REF'],'secret_upload_approval_reference':os.environ['SECRET_APPROVAL_REF'],'run_id':os.environ['GITHUB_RUN_ID'],'fixed_commit':'578fc55364bf32b7299e84eea7a630eb7e93e973','target_session':os.environ['TARGET_SESSION'],'request_sha256':os.environ['REQUEST_SHA'],'analysis_asof':os.environ['SNAPSHOT_ASOF'],'pricing_sha256':os.environ['PRICING_SHA'],'reservation_usd':'0.03','expires_at':(now+datetime.timedelta(minutes=15)).isoformat()}
+          pathlib.Path('approved-request.json').write_text(json.dumps(data),encoding='utf-8')
+          PY
+      - name: One authorized native call, no retry
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+          PYTHONIOENCODING: utf-8
+        run: python controller/.github/scripts/nvda_frozen_once.py --source upstream-fixed --bundle locked-evidence/nvda-inputs --out authorized-evidence --execute-authorized --authorization approved-request.json --run-id "$GITHUB_RUN_ID"
+      - name: Block artifact upload if credential is found
+        if: always()
+        id: scan
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          python - <<'PY'
+          import os,pathlib
+          key=os.environ.get('DEEPSEEK_API_KEY','').encode()
+          root=pathlib.Path('authorized-evidence')
+          if not key or not root.is_dir():raise SystemExit('no_safe_artifact')
+          if any(key in p.read_bytes() for p in root.rglob('*') if p.is_file()):raise SystemExit('credential_scan_failed_no_upload')
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as f:f.write('safe=true\n')
+          PY
+      - uses: actions/upload-artifact@v6
+        if: ${{ always() && steps.scan.outputs.safe == 'true' }}
+        with:
+          name: authorized-nvda-${{ github.run_id }}
+          path: authorized-evidence/
+          retention-days: 7
+

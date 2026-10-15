@@ -26,3 +26,15 @@ task and issues no live authorization. Read-only account checks do not grant
 permission to generate content.
 
 This deployment-specific English note has no pre-existing translation.
+
+## Separately authorized frozen execution
+
+The manual workflow now pins controller source to
+93d8ba0110460718517e0e4ca11d0b051b518a29 and business source to
+578fc55364bf32b7299e84eea7a630eb7e93e973. It downloads only the final
+Run 38704910265 artifact and accepts SHA
+f7ca322b236ff4b993a081e33090740eb9891fa584f0abf33dbab0677cf88e3b.
+The user must personally review nvda-one-call-approval. No automation approval
+is permitted. The snapshot and latest complete trading day are checked again
+without fetching or updating market/news data. One POST only, no fallback,
+retry, mail, batch analysis or cron. Workflow failure must not cause a rerun.

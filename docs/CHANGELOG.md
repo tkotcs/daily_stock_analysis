@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [测试] Prepare the separately authorized Phase 2H frozen NVDA request behind owner environment approval, pinned controller/business commits and a one-POST guard; no prompt or data refresh.
 - [测试] Pin manual NVDA request preparation and one-POST authorization to the accepted Phase 2G business commit; supply official RSS via native news_context with explicit financial period provenance, without model transmission.
 - [修复] Resolve quote currency separately from financial-statement currency for native research prompts and market snapshot tables; preserve raw historical model text.
 - [测试] Add a no-secret manual acceptance workflow with full upstream dependencies, offline replay and a read-only Yahoo fundamental probe.
