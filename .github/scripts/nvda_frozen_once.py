@@ -20,6 +20,17 @@ def render_native_report(parsed):
     from src.notification import NotificationService
     return NotificationService().generate_single_stock_report(parsed)
 
+
+def apply_supplied_news_metadata(parsed, contexts, audit):
+    """Only bind saved preparation metadata; never rewrite model narrative."""
+    news = audit.get('selected_news') or []
+    parsed.search_performed = False
+    parsed.news_result_count = None
+    parsed.news_evidence_present = bool(news)
+    note = '官方RSS标题及元数据已提供，未提供新闻全文；综合新闻搜索未执行。不能据此排除其他重大利空。' if news else '未提供可用官方RSS；综合新闻搜索未执行。'
+    parsed.data_sources = note + ('；' + parsed.data_sources if parsed.data_sources else '')
+    return parsed
+
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--execute-authorized',action='store_true');parser.add_argument('--source',required=True);parser.add_argument('--bundle',required=True);parser.add_argument('--authorization',required=True);parser.add_argument('--run-id',required=True);parser.add_argument('--out',required=True)
     args=parser.parse_args()
@@ -67,6 +78,9 @@ def main():
         session.save('NATIVE_NORMALIZED_USAGE.json',usage)
         parsed=analyzer._parse_response(text,'NVDA','英伟达');parsed.raw_response=text;parsed.model_used=config.litellm_model;parsed.report_language='zh';parsed.search_performed=False
         contexts=json.loads((bundle/'ORIGINAL_ENHANCED_CONTEXT.json').read_text(encoding='utf-8'))
+        audit_path=bundle/'RESEARCH_MATERIAL_AUDIT.json'
+        if audit_path.exists():
+            apply_supplied_news_metadata(parsed,contexts,json.loads(audit_path.read_text(encoding='utf-8')))
         parsed.market_snapshot=analyzer._build_market_snapshot(contexts[0])
         session.save('NATIVE_ANALYSIS_RESULT.json',parsed.to_dict())
         passed,missing=analyzer._check_content_integrity(parsed,require_phase_decision=True)

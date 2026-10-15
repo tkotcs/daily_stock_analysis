@@ -141,6 +141,9 @@ def _convert_to_yf_symbol(stock_code: str) -> str:
     if code.startswith("HK"):
         digits = code[2:].lstrip("0") or "0"
         return f"{digits.zfill(4)}.HK"
+    from .us_index_mapping import is_us_stock_code
+    if is_us_stock_code(code):
+        return code.replace('.', '-')
     if "." in code:
         return code
     # Assume US ticker by default for non-HK / non-CN callers

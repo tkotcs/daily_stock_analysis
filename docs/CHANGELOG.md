@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [测试] Add a review-branch manual Ubuntu acceptance workflow for Phase 2I corrections, immutable response replay and guarded free Yahoo coverage; no paid credentials, model requests, SMTP or scheduling.
+
+- [修复] Clarify computed gap/MA state versus confirmed crossings, limited-news provenance and financial/risk assumptions in native research inputs; preserve original model narratives and disabled paid workflows.
+- [修复] Apply Yahoo class-share symbol conversion to the existing fundamental adapter as well as prices.
+
 - [测试] Prepare the separately authorized Phase 2H frozen NVDA request behind owner environment approval, pinned controller/business commits and a one-POST guard; no prompt or data refresh.
 - [测试] Pin manual NVDA request preparation and one-POST authorization to the accepted Phase 2G business commit; supply official RSS via native news_context with explicit financial period provenance, without model transmission.
 - [修复] Resolve quote currency separately from financial-statement currency for native research prompts and market snapshot tables; preserve raw historical model text.

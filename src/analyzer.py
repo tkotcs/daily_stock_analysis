@@ -15,6 +15,7 @@ import logging
 import math
 import re
 import time
+from datetime import date
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Tuple, Callable, Union
 
@@ -4234,7 +4235,11 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
                 # 解析响应
                 result = self._parse_response(response_text, code, name)
                 result.raw_response = response_text
-                result.search_performed = bool(news_context)
+                # Content may be supplied by RSS/local intelligence without a search.
+                count = context.get('news_result_count')
+                result.search_performed = count is not None
+                result.news_result_count = count
+                result.news_evidence_present = bool(context.get('news_evidence_present', False) or count)
                 result.market_snapshot = self._build_market_snapshot(context)
                 result.model_used = model_used
                 result.report_language = report_language
@@ -4311,6 +4316,62 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
                 report_language=report_language,
             )
     
+    @staticmethod
+    def _format_computed_quote_facts(context: Dict[str, Any], *, english: bool = False) -> str:
+        """Describe supplied bars without confusing a position with a crossing event.
+
+        Never fill missing MAs or infer a prior MA from today's value. The caller
+        must supply two adjacent, comparable daily bars for a crossing assertion.
+        """
+        today = context.get('today') or {}
+        previous = context.get('yesterday') or {}
+
+        def number(row, key):
+            value = row.get(key)
+            if isinstance(value, bool):
+                return None
+            try:
+                value = float(value)
+                return value if math.isfinite(value) and value > 0 else None
+            except (TypeError, ValueError):
+                return None
+
+        comparable = False
+        try:
+            from src.core.trading_calendar import get_market_for_stock, get_trading_dates
+            first, last = date.fromisoformat(str(previous.get('date'))), date.fromisoformat(str(today.get('date')))
+            sessions = get_trading_dates(get_market_for_stock(context.get('code', '')), first, last)
+            comparable = sessions is not None and len(sessions) == 2 and sessions[0].date() == first and sessions[-1].date() == last
+        except (TypeError, ValueError):
+            pass
+        close, opening, prior_close = number(today, 'close'), number(today, 'open'), number(previous, 'close')
+        lines = ['\n### Computed quote facts' if english else '\n### 程序计算的行情事实']
+        if comparable and opening is not None and prior_close is not None:
+            direction = ('gap up' if opening > prior_close else 'gap down' if opening < prior_close else 'flat open') if english else ('高开' if opening > prior_close else '低开' if opening < prior_close else '平开')
+            lines.append(f'open={opening:g}; previous close={prior_close:g}; {direction}')
+        else:
+            lines.append('Opening gap unavailable: no verified previous-session close.' if english else '高低开无法核实：缺少可验证的相邻前交易日收盘。')
+        if close is not None and opening is not None:
+            direction = ('close above open' if close > opening else 'close below open' if close < opening else 'close equals open') if english else ('收盘高于开盘' if close > opening else '收盘低于开盘' if close < opening else '收盘等于开盘')
+            lines.append(f'close={close:g}; open={opening:g}; {direction}')
+        # A partial current bar may show a provisional crossing, never a close confirmation.
+        partial = bool(today.get('is_partial_bar') or today.get('is_estimated') or previous.get('is_partial_bar') or (context.get('market_phase_context') or {}).get('is_partial_bar'))
+        for period in (5, 10, 20, 60):
+            key = f'ma{period}'
+            current_ma, prior_ma = number(today, key), number(previous, key)
+            if close is None or current_ma is None:
+                lines.append(f'MA{period}: ' + ('unavailable; cannot judge' if english else '暂无可靠数据，无法判断'))
+                continue
+            state = ('above' if close > current_ma else 'below' if close < current_ma else 'equal to') if english else ('高于' if close > current_ma else '低于' if close < current_ma else '等于')
+            event = 'crossing unverified' if english else '穿越事件无法核实'
+            if comparable and prior_close is not None and prior_ma is not None and not partial:
+                down = prior_close >= prior_ma and close < current_ma
+                up = prior_close <= prior_ma and close > current_ma
+                event = ('new downward close crossing' if down else 'new upward close crossing' if up else 'no new close crossing') if english else ('本日收盘新下穿' if down else '本日收盘新上穿' if up else '本日无新收盘穿越')
+            lines.append(f'close {state} MA{period}={current_ma:g}; {event}')
+        lines.append('Position is not an event. Crossings do not establish a volume-confirmed breakout; specify closing confirmation and volume benchmark.' if english else '位置状态不等于新发生事件。均线穿越不等于有效放量突破；有效突破须说明收盘确认与成交量比较基准。')
+        return '\n'.join(lines) + '\n'
+
     def _format_prompt(
         self, 
         context: Dict[str, Any], 
@@ -4413,6 +4474,13 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
             prompt += f"\nQuote currency: {quote_currency or 'unverified'}. Prices, MA levels and trading turnover use this currency, not the financial-statement currency.\n"
         else:
             prompt += f"\n报价币种：{quote_currency or '未核实'}（{currency_label}）。价格、均线、交易点位和成交额使用报价币种；不得与财报币种混用。\n"
+        prompt += self._format_computed_quote_facts(context, english=english)
+        if context.get('news_source_note'):
+            prompt += '\n' + str(context['news_source_note']) + '\n'
+        if english:
+            prompt += "\nEvidence limits: supplied news is not a comprehensive search. Titles/metadata do not establish article details or absence of adverse news; mark no-adverse-news checklist items unverified when coverage is incomplete. For each hypothetical entry E and stop S, give nominal price loss (E-S)/E*100%; do not guarantee realized or portfolio drawdown. Yahoo financial ratios may be TTM/aggregated and are not individually issuer-verified unless explicitly stated. Revenue/profit amounts alone do not establish earnings quality; examine comparable-period cash flows and working capital, otherwise state uncertainty.\n"
+        else:
+            prompt += "\n证据与风险口径：提供新闻不等于执行综合搜索；标题和元数据不能证明全文细节，也不能证明不存在其他重大利空。仅有标题时必须明示；覆盖不足时，无利空检查项应标待核实，不得写近3日无减持、无处罚。对每个假设入场价E及止损S，分别说明名义价格损失(E-S)/E*100%；不能保证实际损失或组合回撤。Yahoo财务比率可能为TTM或聚合口径，除明确声明外未经公司逐项核验。收入、利润绝对金额不能证明盈利质量充分验证；需比较同期间现金流和营运资金，资料不足应保留不确定性。\n"
         prompt += format_market_phase_prompt_section(
             context.get("market_phase_context"),
             report_language=report_language,
@@ -4898,7 +4966,7 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 """
         if news_context and english:
             prompt += f"""
-Below are the news search results for **{stock_name}({code})** from the last {news_window_days} days. Focus on extracting:
+Below is the supplied news material for **{stock_name}({code})** within the last {news_window_days} days; it may come from RSS or local intelligence rather than comprehensive search. Focus on extracting:
 1. 🚨 **Risk alerts**: shareholder reductions, penalties, negative news
 2. 🎯 **Positive catalysts**: earnings, contracts, policy
 3. 📊 **Earnings expectations**: annual report previews, earnings flash reports
@@ -4913,7 +4981,7 @@ Below are the news search results for **{stock_name}({code})** from the last {ne
 """
         elif news_context:
             prompt += f"""
-以下是 **{stock_name}({code})** 近{news_window_days}日的新闻搜索结果，请重点提取：
+以下是 **{stock_name}({code})** 近{news_window_days}日的已提供新闻材料（可能为RSS或本地资讯，不代表综合搜索），请重点提取：
 1. 🚨 **风险警报**：减持、处罚、利空
 2. 🎯 **利好催化**：业绩、合同、政策
 3. 📊 **业绩预期**：年报预告、业绩快报
@@ -4928,11 +4996,11 @@ Below are the news search results for **{stock_name}({code})** from the last {ne
 """
         elif english:
             prompt += """
-No recent news was found for this stock. Base the analysis mainly on the technical data.
+No usable news evidence was provided for this analysis; this does not establish absence of news. Base the analysis mainly on the technical data.
 """
         else:
             prompt += """
-未搜索到该股票近期的相关新闻。请主要依据技术面数据进行分析。
+本次未提供可用新闻证据，不代表该股票没有近期新闻。请主要依据技术面数据进行分析。
 """
 
         # 注入缺失数据警告

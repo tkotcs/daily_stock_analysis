@@ -12,6 +12,7 @@ A股自选股智能分析系统 - 核心分析流水线
 """
 
 import logging
+import math
 import inspect
 import threading
 import time
@@ -849,6 +850,7 @@ class StockAnalysisPipeline:
                 )
                 llm_duration_ms = int((time.monotonic() - llm_started_at) * 1000)
                 if result is not None:
+                    result.search_performed = news_result_count is not None
                     # 交给展示层区分「未配置渠道」「检索零命中」和「正常命中」。
                     # 该值此前只进了诊断快照，报告层拿不到。
                     result.news_result_count = news_result_count
@@ -1095,6 +1097,10 @@ class StockAnalysisPipeline:
                 'signal_reasons': trend_result.signal_reasons,
                 'risk_factors': trend_result.risk_factors,
             }
+            # MA60 is computed by the existing trend engine; never substitute MA20.
+            if trend_result.data_points >= 60 and math.isfinite(trend_result.ma60) and trend_result.ma60 > 0:
+                enhanced['today'] = dict(enhanced.get('today') or {})
+                enhanced['today']['ma60'] = trend_result.ma60
 
         # Issue #234：盘中分析使用实时 OHLC 与趋势 MA 覆盖 today。
         # 防护条件：trend_result.ma5 > 0 表示 MA 计算已成功且数据量充足。
@@ -1642,6 +1648,7 @@ class StockAnalysisPipeline:
                         and self.search_service.is_available
                     ),
                 )
+                result.search_performed = result.news_result_count is not None
                 # 与普通路径同样按来源逐个登记：Agent 运行期自己搜到的条数、注入的
                 # 社交情绪、注入的本地资讯池。这条路径不经过 format_intel_report()，
                 # 但仍不传拼好的整段，避免以后有人往里加会造占位文本的来源。
@@ -2005,6 +2012,9 @@ class StockAnalysisPipeline:
         frame.columns = [str(column).lower() for column in frame.columns]
         if "date" in frame.columns:
             frame = frame.sort_values("date")
+        # Keep full history until the existing MA60 window has been evaluated.
+        if 'close' in frame.columns:
+            frame['ma60'] = pd.to_numeric(frame['close'], errors='coerce').rolling(60, min_periods=60).mean()
         frame = frame.tail(2)
         rows = frame.to_dict(orient="records")
         if not rows:
@@ -2012,7 +2022,7 @@ class StockAnalysisPipeline:
 
         def normalize_row(row: Dict[str, Any]) -> Dict[str, Any]:
             normalized: Dict[str, Any] = {"code": row.get("code") or code}
-            for key in ("open", "high", "low", "close", "volume", "amount", "pct_chg", "ma5", "ma10", "ma20", "volume_ratio"):
+            for key in ("open", "high", "low", "close", "volume", "amount", "pct_chg", "ma5", "ma10", "ma20", "ma60", "volume_ratio"):
                 value = row.get(key)
                 if pd.notna(value):
                     normalized[key] = float(value)

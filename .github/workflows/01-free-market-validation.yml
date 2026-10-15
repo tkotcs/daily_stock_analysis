@@ -1,83 +1,97 @@
-name: Manual free market validation
-
+name: Manual Phase 2J free integration acceptance
 on:
   workflow_dispatch:
-    inputs:
-      universe:
-        description: 'NVDA first; watchlist35 only after reviewed NVDA success'
-        required: true
-        default: nvda
-        type: choice
-        options:
-          - nvda
-          - watchlist35
-      nvda_run_id:
-        description: 'Required for watchlist35: accepted NVDA run on this same commit'
-        required: false
-        default: ''
-        type: string
-
 permissions:
   contents: read
   actions: read
-
 concurrency:
-  group: phase1-free-market-validation
+  group: phase2j-free-integration
   cancel-in-progress: false
-
 jobs:
-  validate:
+  free-acceptance:
+    if: github.actor == github.repository_owner
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
+    env:
+      PYTHONIOENCODING: utf-8
+      PYTHONDONTWRITEBYTECODE: '1'
+      LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+      CUSTOM_TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+      TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
     steps:
-      - name: Verify prerequisite for the 35-symbol round
-        if: inputs.universe == 'watchlist35'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          NVDA_ACCEPTED_RUN_ID: ${{ inputs.nvda_run_id }}
-        run: |
-          [[ "$NVDA_ACCEPTED_RUN_ID" =~ ^[0-9]+$ ]] || exit 1
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$NVDA_ACCEPTED_RUN_ID" > /tmp/nvda-run.json
-          python - <<'PY'
-          import json,os
-          run=json.load(open('/tmp/nvda-run.json'))
-          assert run['conclusion']=='success' and run['event']=='workflow_dispatch'
-          assert run['head_sha']==os.environ['GITHUB_SHA']
-          assert run['path']=='.github/workflows/01-free-market-validation.yml'
-          PY
-          gh run download "$NVDA_ACCEPTED_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'free-market-nvda-*' --dir /tmp/nvda-review
-          python - <<'PY'
-          import json,pathlib
-          files=list(pathlib.Path('/tmp/nvda-review').rglob('summary.json'))
-          assert len(files)==1
-          s=json.loads(files[0].read_text())
-          assert s['universe']=='nvda' and s['passed'] and s['valid']==1
-          assert s['safety_passed'] and all(v==0 for v in s['attempt_counters'].values())
-          assert s['llm_usage_rows'] in (None,0)
-          PY
-      - name: Checkout clean deployment baseline
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Python (same version as official daily workflow)
-        uses: actions/setup-python@v6
+      - name: Verify manual first attempt and source identity
+        run: |
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test ! -e .env
+          mkdir -p phase2j-evidence/tests
+          git rev-parse HEAD > phase2j-evidence/COMMIT.txt
+          cp .github/workflows/01-free-market-validation.yml phase2j-evidence/ACTUAL_WORKFLOW.yml
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: pip
-      - name: Install original dependencies
+      - name: Full native dependencies and public offline tokenizer
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-          python -c "import futu; print('futu SDK import OK')"
-      - name: Run guarded upstream dry-run (no credentials)
-        env:
-          PYTHONIOENCODING: utf-8
-          LITELLM_LOCAL_MODEL_COST_MAP: 'True'
-        run: python .github/scripts/free_market_validation.py --universe '${{ inputs.universe }}' --out validation-evidence
-      - name: Keep actual evidence, including failures
-        if: always()
-        uses: actions/upload-artifact@v6
+          python -m pip install -r requirements.txt litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6 pytest
+          python -m pip check
+          python -m pip freeze > phase2j-evidence/DEPENDENCIES.txt
+          python .github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR" > phase2j-evidence/TOKENIZER_ASSETS.json
+      - uses: actions/download-artifact@v5
         with:
-          name: free-market-${{ inputs.universe }}-${{ github.run_id }}
-          path: validation-evidence/
-          retention-days: 7
+          name: authorized-nvda-38693407248
+          run-id: 38693407248
+          github-token: ${{ github.token }}
+          path: historical-2e
+      - uses: actions/download-artifact@v5
+        with:
+          name: authorized-nvda-38706973098
+          run-id: 38706973098
+          github-token: ${{ github.token }}
+          path: historical-2h
+      - uses: actions/download-artifact@v5
+        with:
+          name: phase2h-request-38704910265
+          run-id: 38704910265
+          github-token: ${{ github.token }}
+          path: historical-inputs
+      - name: Free-only outbound guard fault injection
+        run: python .github/scripts/phase2j_guard_selftest.py > phase2j-evidence/GUARD_CONTROL_TEST.json
+      - name: Offline native regressions and one-POST fault injection - no credentials
+        run: |
+          set -o pipefail
+          python .github/scripts/phase2j_offline_tests.py . "$TIKTOKEN_CACHE_DIR" phase2j-evidence/tests 2>&1 | tee phase2j-evidence/OFFLINE_TESTS.log
+      - name: Replay immutable real responses without model or SMTP
+        run: |
+          set -o pipefail
+          python .github/scripts/phase2j_replay.py --phase2e historical-2e --phase2h historical-2h --inputs historical-inputs/nvda-inputs --out phase2j-evidence/replay 2>&1 | tee phase2j-evidence/REPLAY.log
+      - name: Free live Yahoo GETs only - no model keys or mail
+        run: |
+          set -o pipefail
+          python .github/scripts/phase2j_free_guard.py --out phase2j-evidence/free-data 2>&1 | tee phase2j-evidence/FREE_DATA.log
+      - name: Classify financial gaps and verify 35 native MA60 calculations offline
+        run: |
+          set -o pipefail
+          python .github/scripts/phase2j_data_review.py --data phase2j-evidence/free-data --out phase2j-evidence/data-review 2>&1 | tee phase2j-evidence/DATA_REVIEW.log
+      - name: Seal evidence hashes
+        if: always()
+        run: |
+          python - <<'PY'
+          import pathlib,hashlib,json,datetime,os
+          out=pathlib.Path('phase2j-evidence');out.mkdir(exist_ok=True)
+          meta={'run_id':os.environ['GITHUB_RUN_ID'],'attempt':os.environ['GITHUB_RUN_ATTEMPT'],'commit':os.environ['GITHUB_SHA'],'at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'paid_credentials_injected':False,'model_POSTs_allowed':False,'SMTP_allowed':False}
+          (out/'RUN_CONTEXT.json').write_text(json.dumps(meta,indent=2),encoding='utf-8')
+          files=[{'path':p.relative_to(out).as_posix(),'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(out.rglob('*')) if p.is_file() and p.name!='MANIFEST.json']
+          (out/'MANIFEST.json').write_text(json.dumps(files,indent=2),encoding='utf-8')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase2j-free-${{ github.run_id }}
+          path: phase2j-evidence/
+          retention-days: 14

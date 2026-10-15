@@ -132,6 +132,7 @@ class TrendAnalysisResult:
     signal_score: int = 0            # 综合评分 0-100
     signal_reasons: List[str] = field(default_factory=list)
     risk_factors: List[str] = field(default_factory=list)
+    data_points: int = 0  # Distinguish a real MA60 from the legacy short-history MA20 fallback.
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -215,6 +216,7 @@ class StockTrendAnalyzer:
             TrendAnalysisResult 分析结果
         """
         result = TrendAnalysisResult(code=code)
+        result.data_points = len(df) if df is not None else 0
         
         if df is None or df.empty or len(df) < 20:
             logger.warning(f"{code} 数据不足，无法进行趋势分析")

@@ -47,12 +47,16 @@ class ResearchMaterials:
 
     def prepare_artifacts(self,artifacts,trend):
         enhanced,news,notes=self.attach(artifacts.enhanced_context,trend)
-        prepared=replace(artifacts,enhanced_context=enhanced,fundamental_context=enhanced.get('fundamental_context'),news_context=news,news_result_count=len(self.news))
+        # RSS items are supplied evidence, not SearchService search hits.
+        prepared=replace(artifacts,enhanced_context=enhanced,fundamental_context=enhanced.get('fundamental_context'),news_context=news,news_result_count=None)
         self.prepared_context=enhanced;self.prepared_news=news
         return prepared,notes
 
     def attach(self,enhanced,trend):
         result=copy.deepcopy(enhanced);raw=result.get('fundamental_context') or {}
+        result['news_result_count']=None
+        result['news_evidence_present']=bool(self.news)
+        result['news_source_note']='官方RSS标题及元数据已提供，未提供新闻全文；综合新闻搜索未执行。不能据此排除其他重大利空。' if self.news else '未提供可用官方RSS；综合新闻搜索未执行。'
         (self.out/'ORIGINAL_YAHOO_FUNDAMENTAL_CONTEXT.json').write_text(json.dumps(raw,ensure_ascii=False,indent=2,default=str),encoding='utf-8')
         data=(raw.get('earnings') or {}).get('data') or {};fin=data.get('financial_report') or {}
         fields={k:fin.get(k) for k in ('revenue','net_profit_parent','operating_cash_flow')}
@@ -70,6 +74,9 @@ class ResearchMaterials:
             notes.append(f"财务仍为Yahoo聚合字段（币种{fin.get('currency')}、原列期间{fin.get('report_date')}），未全部通过官方核对，不能统称正式GAAP数据。缺失字段{[k for k,v in fields.items() if v is None]}。")
         if trend:
             t=trend[-1];notes.append(f"原版技术路径用{t['rows']}根真实日线计算；MA60={t['ma60']}，60根复算核验={t['ma60_verified']}；当前收盘={t['close']}，报价USD。均线位置是状态，不自行断言当天发生穿越事件。")
+            if t.get('ma60_verified') and t.get('ma60'):
+                result['today']=dict(result.get('today') or {})
+                result['today']['ma60']=t['ma60']
         notes.append('新闻仅由独立准备入口将官方RSS传入news_context；原SearchService仍未配置。不要将财报统计期或采集时间当新闻发布时间。')
         notes.append('ROE、估值、增长率与分红等其余Yahoo字段尚未逐项官方核验，可能为TTM或独立统计口径，不要将三个金额的核对结论扩展到全部指标。')
         news='\n\n'.join(f"来源：{n['source']}\n标题：{n['title']}\n发布时间：{n['published_at']}\n采集时间：{n['fetched_at']}\n原文：{n['url']}\n仅提供标题/发布元数据，未提供全文，不推断未给出的细节。" for n in self.news) or '暂无可验证的截止前官方RSS新闻。'
