@@ -1,11 +1,11 @@
-name: Manual Phase 2L NVDA offline output-space validation - zero paid POST
+name: Manual Phase 2M latest NVDA native request capture - zero paid POST
 on:
   workflow_dispatch:
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: phase2l-free-preflight
+  group: phase2m-free-preflight
   cancel-in-progress: false
 jobs:
   prepare:
@@ -36,10 +36,10 @@ jobs:
           test "$(git -C controller rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git -C upstream-fixed rev-parse HEAD)" = f93a7609e569e3b6c6372e652a3d36a27225d783
           test ! -e upstream-fixed/.env
-          mkdir -p phase2l-evidence/tests
-          git -C controller rev-parse HEAD > phase2l-evidence/CONTROLLER_COMMIT.txt
-          git -C upstream-fixed rev-parse HEAD > phase2l-evidence/BUSINESS_COMMIT.txt
-          cp controller/.github/workflows/01-free-market-validation.yml phase2l-evidence/ACTUAL_WORKFLOW.yml
+          mkdir -p phase2m-evidence/tests
+          git -C controller rev-parse HEAD > phase2m-evidence/CONTROLLER_COMMIT.txt
+          git -C upstream-fixed rev-parse HEAD > phase2m-evidence/BUSINESS_COMMIT.txt
+          cp controller/.github/workflows/01-free-market-validation.yml phase2m-evidence/ACTUAL_WORKFLOW.yml
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
@@ -49,23 +49,23 @@ jobs:
         run: |
           python -m pip install -r upstream-fixed/requirements.txt litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6 pytest
           python -m pip check
-          python -m pip freeze > phase2l-evidence/DEPENDENCIES.txt
-          python controller/.github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR" > phase2l-evidence/TOKENIZER_ASSETS.json
+          python -m pip freeze > phase2m-evidence/DEPENDENCIES.txt
+          python controller/.github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR" > phase2m-evidence/TOKENIZER_ASSETS.json
       - name: Offline pin, one-POST and native regression tests - no real key
         run: |
           set -o pipefail
-          python controller/.github/scripts/phase2j_offline_tests.py controller "$TIKTOKEN_CACHE_DIR" phase2l-evidence/tests 2>&1 | tee phase2l-evidence/OFFLINE_TESTS.log
-      - name: Offline saved-input native SDK capture, thinking disabled
+          python controller/.github/scripts/phase2j_offline_tests.py controller "$TIKTOKEN_CACHE_DIR" phase2m-evidence/tests 2>&1 | tee phase2m-evidence/OFFLINE_TESTS.log
+      - name: Fresh NVDA inputs and native SDK capture, thinking disabled
         run: |
           set -o pipefail
-          python controller/.github/scripts/phase2l_capture.py --source upstream-fixed --fixtures controller/.github/fixtures/phase2l --out phase2l-evidence/nvda-inputs
-          python controller/.github/scripts/phase2l_wire_replay.py --source upstream-fixed --bundle phase2l-evidence/nvda-inputs --out phase2l-evidence/frozen-wire --cache "$TIKTOKEN_CACHE_DIR" 2>&1 | tee phase2l-evidence/CAPTURE.log
+          python controller/.github/scripts/nvda_free_preflight.py --source upstream-fixed --out phase2m-evidence/nvda-inputs --include-free-research --non-thinking
+          python controller/.github/scripts/phase2l_wire_replay.py --source upstream-fixed --bundle phase2m-evidence/nvda-inputs --out phase2m-evidence/frozen-wire --cache "$TIKTOKEN_CACHE_DIR" 2>&1 | tee phase2m-evidence/CAPTURE.log
       - name: Seal read-only preparation evidence
         if: always()
         run: |
           python - <<'PY'
           import pathlib,hashlib,json,os,datetime
-          out=pathlib.Path('phase2l-evidence');out.mkdir(exist_ok=True)
+          out=pathlib.Path('phase2m-evidence');out.mkdir(exist_ok=True)
           (out/'RUN_CONTEXT.json').write_text(json.dumps({'run_id':os.environ['GITHUB_RUN_ID'],'attempt':os.environ['GITHUB_RUN_ATTEMPT'],'controller':os.environ['GITHUB_SHA'],'at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'real_key_injected':False,'paid_POSTs_allowed':False,'email_allowed':False},indent=2),encoding='utf-8')
           files=[{'path':p.relative_to(out).as_posix(),'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(out.rglob('*')) if p.is_file() and p.name!='MANIFEST.json']
           (out/'MANIFEST.json').write_text(json.dumps(files,indent=2),encoding='utf-8')
@@ -73,6 +73,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: phase2l-request-${{ github.run_id }}
-          path: phase2l-evidence/
+          name: phase2m-request-${{ github.run_id }}
+          path: phase2m-evidence/
           retention-days: 14

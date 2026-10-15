@@ -7,7 +7,9 @@ parser.add_argument('--execute-authorized',action='store_true',help='Default OFF
 parser.add_argument('--authorization',type=pathlib.Path);parser.add_argument('--run-id')
 parser.add_argument('--analysis-asof',help='Explicit frozen analysis snapshot timestamp, not the system clock')
 parser.add_argument('--include-free-research',action='store_true',help='Free capture only: Yahoo financials and official RSS/IR sources')
+parser.add_argument('--non-thinking',action='store_true',help='Free-only latest capture using the reviewed native LiteLLM YAML')
 args=parser.parse_args()
+if args.non_thinking and (args.execute_authorized or not args.include_free_research):parser.error('non-thinking preparation is free-only and requires free research')
 if args.execute_authorized and args.include_free_research:parser.error('research preparation cannot send; use separately approved frozen entry')
 if not args.execute_authorized and (args.authorization or args.run_id):parser.error('authorization options require explicit execute flag')
 live=None;safe_log=None;real_key=None
@@ -34,6 +36,7 @@ for name in list(os.environ):
         os.environ.pop(name,None)
 os.environ.update(DEEPSEEK_API_KEY='preflight-placeholder-never-transmitted',LITELLM_MODEL='deepseek/deepseek-flash',LITELLM_FALLBACK_MODELS='',GENERATION_BACKEND='litellm',GENERATION_FALLBACK_BACKEND='litellm',DATABASE_PATH=str(C/'fresh-upstream.sqlite'),LOG_DIR=str(C/'logs'),REPORTS_DIR=str(C/'reports'),SCHEDULE_ENABLED='false',MARKET_REVIEW_ENABLED='false',DAILY_MARKET_CONTEXT_ENABLED='false',AGENT_MODE='false',AGENT_SKILLS='',SINGLE_STOCK_NOTIFY='false',AUTO_BACKTEST_ENABLED='false',SEARXNG_PUBLIC_INSTANCES_ENABLED='false',MAX_WORKERS='1',ENABLE_CHIP_DISTRIBUTION='false',ENABLE_REALTIME_QUOTE='false',ENABLE_FUNDAMENTAL_PIPELINE='false',REPORT_INTEGRITY_RETRY='0',LITELLM_LOCAL_MODEL_COST_MAP='True',REPORT_LANGUAGE='zh')
 os.environ['DEEPSEEK_API_BASE']='https://api.deepseek.com'
+if args.non_thinking:os.environ['LITELLM_CONFIG']=str(pathlib.Path(__file__).resolve().parents[1]/'phase2l-deepseek.yaml')
 if args.include_free_research:os.environ['ENABLE_FUNDAMENTAL_PIPELINE']='true';os.environ['FUNDAMENTAL_RETRY_MAX']='0'
 if live:os.environ['DEEPSEEK_API_KEY']=real_key
 assert not (G/'.env').exists()
@@ -108,6 +111,7 @@ def observe_trend(self,df,code,*a,**kw):
     result=original_trend(self,df,code,*a,**kw)
     expected=sum(float(v) for v in df['close'].iloc[-60:])/60
     trend.append({'code':code,'rows':len(df),'close':result.current_price,'ma60':result.ma60,'ma20':result.ma20,'ma60_verified':len(df)>=60 and math.isclose(result.ma60,expected,rel_tol=1e-12)})
+    if args.non_thinking and len(df)>=61:trend[-1]['previous_ma60']=sum(float(v) for v in df['close'].iloc[-61:-1])/60
     return result
 StockTrendAnalyzer.analyze=observe_trend
 original_analyze=GeminiAnalyzer.analyze
@@ -118,6 +122,19 @@ if args.include_free_research:
     original_pack_outputs=StockAnalysisPipeline._build_analysis_context_pack_outputs
     def prepare_pack_outputs(self,artifacts,**kw):
         prepared,notes=materials.prepare_artifacts(artifacts,trend)
+        if args.non_thinking:
+            from dataclasses import replace
+            from phase2l_inputs import correct_inputs
+            corrected=prepared.enhanced_context
+            if trend and 'previous_ma60' in trend[-1]:
+                corrected=dict(corrected);corrected['yesterday']=dict(corrected.get('yesterday') or {})
+                corrected['yesterday']['ma60']=trend[-1]['previous_ma60']
+            dummy,corrected,corrections=correct_inputs({'messages':[{'role':'user','content':''}]},corrected)
+            prepared=replace(prepared,enhanced_context=corrected)
+            materials.prepared_context=corrected
+            (C/'INPUT_CORRECTIONS.json').write_text(json.dumps(corrections,ensure_ascii=False,indent=2),encoding='utf-8')
+            notes+='\n'+dummy['messages'][0]['content']
+            notes+=f'\n本次日线截止{target}，并非研究截止时刻的盘中报价；实时行情未提供，不得将上一完整交易日走势说成当前交易日已发生的盘中事实。'
         summary,overview=original_pack_outputs(self,prepared,**kw)
         return summary+'\n'+notes,overview
     StockAnalysisPipeline._build_analysis_context_pack_outputs=prepare_pack_outputs
@@ -135,6 +152,9 @@ def observe_dispatch(self,model,call_kwargs,*a,**kw):
     logical.append(safe);return original_dispatch(self,model,call_kwargs,*a,**kw)
 GeminiAnalyzer._dispatch_litellm_completion=observe_dispatch
 pipeline=StockAnalysisPipeline(config=config,max_workers=1,daily_market_context_enabled=False,daily_market_context_allow_generate=False)
+if args.non_thinking:
+    assert len(config.llm_model_list)==1 and not config.litellm_fallback_models and pipeline.analyzer._router is not None
+    pipeline.analyzer._router.num_retries=0
 outcome='not_captured';error=None;native_result=None
 try:
     native_result=pipeline.process_single_stock('NVDA',skip_analysis=False,report_type=ReportType.SIMPLE,current_time=analysis_time)
@@ -165,6 +185,11 @@ if materials:
     report['news_empty']=not bool(materials.audit.get('selected_news'))
     report['research_material_audit']=materials.audit
 report['analysis_snapshot_asof']=analysis_time.isoformat()
+if args.non_thinking:
+    assert packet.get('thinking')=={'type':'disabled'} and packet.get('max_tokens')==8192 and packet.get('stream_options')=={'include_usage':True}
+    report['thinking']=packet['thinking'];report['router_retries']=pipeline.analyzer._router.num_retries
+    report['valid_until_utc']=(analysis_time+timedelta(hours=24)).isoformat()
+    report['invalid_if_latest_completed_session_changes']=True
 report['forbidden_call_attempts']=limits.calls
 if live:
     report['paid_POSTs_transmitted']=(1 if live.status is not None else None) if guard.allowed else 0
