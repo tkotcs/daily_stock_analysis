@@ -85,7 +85,8 @@ class LiveSession:
         if canonical_sha(body)!=self.auth.get('request_sha256'):raise GuardStop('request_hash_mismatch')
         if body.get('model')!='deepseek-flash' or body.get('max_tokens')!=8192 or body.get('stream') is not True:raise GuardStop('request_parameters_changed')
         if body.get('stream_options')!={'include_usage':True}:raise GuardStop('stream_usage_option_required')
-        if set(body)-{'model','max_tokens','stream','stream_options','temperature','messages'}:raise GuardStop('unreviewed_request_parameters')
+        if set(body)-{'model','max_tokens','stream','stream_options','temperature','messages','thinking'}:raise GuardStop('unreviewed_request_parameters')
+        if 'thinking' in body and body['thinking']!={'type':'disabled'}:raise GuardStop('unreviewed_thinking_mode')
         content=json.dumps(body,ensure_ascii=False,separators=(',',':')).encode()
         if self.key.encode() in content:raise GuardStop('credential_in_request_body')
         allowance=len(content)+1024

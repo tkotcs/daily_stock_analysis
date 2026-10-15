@@ -1,0 +1,62 @@
+{
+  "asof": "2026-10-15T12:42:02.263395+00:00",
+  "official_source": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/",
+  "provided_fields": [
+    "revenue",
+    "net_profit_parent",
+    "operating_cash_flow"
+  ],
+  "selected_news": [
+    {
+      "title": "NVIDIA Expands Advanced Technology Access for Europe’s Scientific Community Through Open Learning Resources, Collaborations and Compute",
+      "url": "https://blogs.nvidia.com/blog/ec-scientific-computing-pledge/",
+      "published_at": "2026-10-15T10:00:12+00:00",
+      "fetched_at": "2026-10-15T12:42:04.231626+00:00",
+      "source": "NVIDIA official newsroom RSS"
+    },
+    {
+      "title": "The Nordics and NVIDIA Show What’s Possible When a Region Commits to Advanced Computing",
+      "url": "https://blogs.nvidia.com/blog/nordics-technology-ecosystem/",
+      "published_at": "2026-10-15T05:00:12+00:00",
+      "fetched_at": "2026-10-15T12:42:04.231626+00:00",
+      "source": "NVIDIA official newsroom RSS"
+    },
+    {
+      "title": "NVIDIA and Semiconductor Leaders Advance AI Across Chip Design and Manufacturing for AI-Defined Fabs",
+      "url": "https://nvidianews.nvidia.com/news/nvidia-and-semiconductor-leaders-advance-ai-across-chip-design-and-manufacturing-for-ai-defined-labs",
+      "published_at": "2026-10-14T16:10:00+00:00",
+      "fetched_at": "2026-10-15T12:42:04.231626+00:00",
+      "source": "NVIDIA official newsroom RSS"
+    }
+  ],
+  "errors": [],
+  "OFFICIAL_FINANCIAL_RELEASE.html": {
+    "url": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/",
+    "status": 200,
+    "fetched_at": "2026-10-15T12:42:03.941678+00:00"
+  },
+  "OFFICIAL_NEWS_RSS.xml": {
+    "url": "https://nvidianews.nvidia.com/releases.xml",
+    "status": 200,
+    "fetched_at": "2026-10-15T12:42:04.231626+00:00"
+  },
+  "official_verification": {
+    "period_end": "2026-07-26",
+    "published_date": "2026-08-26",
+    "publication_time_exact": null,
+    "currency": "USD",
+    "values": {
+      "revenue": 96221000000.0,
+      "net_profit_parent": 59688000000.0,
+      "operating_cash_flow": 24077000000.0
+    }
+  },
+  "yahoo_report_date": "2026-07-31",
+  "yahoo_currency": "USD",
+  "official_value_matches": {
+    "revenue": true,
+    "net_profit_parent": true,
+    "operating_cash_flow": true
+  },
+  "period_normalized_to_official": true
+}

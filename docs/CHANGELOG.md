@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [测试] Add isolated Phase 2L offline DeepSeek non-thinking capture, input clarification, and immutable historical failure replay.
+
 - [测试] Pin the manual NVDA controller to the accepted Phase 2J business commit and prepare a no-secret native SDK interception, without paid transmission or approval-policy changes.
 
 - [测试] Add a review-branch manual Ubuntu acceptance workflow for Phase 2I corrections, immutable response replay and guarded free Yahoo coverage; no paid credentials, model requests, SMTP or scheduling.
