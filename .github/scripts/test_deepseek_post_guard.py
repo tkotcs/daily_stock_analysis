@@ -59,6 +59,18 @@ class Tests(unittest.TestCase):
                 async with httpx.AsyncClient(follow_redirects=True) as c:self.assertFalse(c.follow_redirects)
             asyncio.run(run())
         finally:g.restore()
+    def test_custom_transports_replaced_with_zero_retry_standard(self):
+        g=OnePostGuard();g.install()
+        try:
+            with httpx.Client(transport=httpx.MockTransport(response)) as c:
+                self.assertIs(type(c._transport),httpx.HTTPTransport)
+                self.assertEqual(c._transport._pool._retries,0)
+            async def run():
+                async with httpx.AsyncClient(transport=httpx.MockTransport(response)) as c:
+                    self.assertIs(type(c._transport),httpx.AsyncHTTPTransport)
+                    self.assertEqual(c._transport._pool._retries,0)
+            asyncio.run(run())
+        finally:g.restore()
     def test_native_parameter_recovery_blocked(self):
         from src.llm.errors import call_litellm_with_param_recovery
         def failure(t,r):self.sent+=1;raise RuntimeError("Unsupported parameter: 'temperature'")

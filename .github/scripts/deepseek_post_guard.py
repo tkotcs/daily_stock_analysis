@@ -31,9 +31,8 @@ class OnePostGuard:
                 kw['follow_redirects']=False
                 if kw.get('mounts'):raise GuardStop('custom_mounts_forbidden')
                 expected=httpx.AsyncHTTPTransport if _async else httpx.HTTPTransport
-                if kw.get('transport') is not None and type(kw['transport']) is not expected:raise GuardStop('custom_transport_forbidden')
-                if kw.get('transport') is None:
-                    kw['transport']=(httpx.AsyncHTTPTransport if _async else httpx.HTTPTransport)(retries=0)
+                # Replace SDK-specific transports so every attempt crosses this boundary.
+                kw['transport']=expected(retries=0)
                 _original(instance,*a,**kw)
             setattr(cls,method,init)
         for cls,method in ((httpx.Client,'send'),(httpx.AsyncClient,'send')):
