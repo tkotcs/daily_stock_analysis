@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [测试] Prepare explicitly approved frozen NVDA request execution without rebuilding prompts or refreshing research inputs; require manual environment approval.
+
 - [测试] Add controller-only streaming usage metadata, official terminal-usage fixtures, and a manual hosted preflight with a protected empty approval probe.
 
 - [测试] Prepare default-off single-call NVDA controller with explicit authorization binding, read-only account checks and raw streaming response capture; not deployed.

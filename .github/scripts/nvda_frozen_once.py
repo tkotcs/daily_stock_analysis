@@ -1,0 +1,78 @@
+"""One manually approved frozen request through the original DSA client; no prompt build."""
+import argparse,atexit,hashlib,json,os,pathlib,smtplib,subprocess,sys
+from datetime import datetime,timezone
+from authorized_once import LiveSession,SafeWriter,canonical_sha,FIXED
+from deepseek_post_guard import OnePostGuard,GuardStop
+
+def load_packet(bundle,expected):
+    packet=json.loads((bundle/'ORIGINAL_REQUEST_PACKET.json').read_text(encoding='utf-8'))
+    if canonical_sha(packet)!=expected:raise GuardStop('frozen_packet_hash_mismatch')
+    return packet
+
+def dispatch_frozen(analyzer,packet,config):
+    """No analyze()/prompt builder, data fetcher, recovery helper, or retry loop."""
+    kwargs=dict(packet);kwargs['model']=config.litellm_model
+    stream=analyzer._dispatch_litellm_completion(config.litellm_model,kwargs,config=config,use_channel_router=False,router_model_names=set())
+    return analyzer._consume_litellm_stream(stream,model=config.litellm_model,usage_model='deepseek-flash',provider='deepseek')
+
+def main():
+    parser=argparse.ArgumentParser();parser.add_argument('--execute-authorized',action='store_true');parser.add_argument('--source',required=True);parser.add_argument('--bundle',required=True);parser.add_argument('--authorization',required=True);parser.add_argument('--run-id',required=True);parser.add_argument('--out',required=True)
+    args=parser.parse_args()
+    if not args.execute_authorized:raise SystemExit('default_off_no_POST')
+    if os.getenv('GITHUB_ACTIONS')!='true' or os.getenv('GITHUB_RUN_ID')!=args.run_id or os.getenv('GITHUB_RUN_ATTEMPT')!='1':raise SystemExit('protected_manual_GitHub_run_required')
+    source=pathlib.Path(args.source).resolve();bundle=pathlib.Path(args.bundle).resolve();out=pathlib.Path(args.out).resolve();out.mkdir(exist_ok=False)
+    assert subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,encoding='utf-8').strip()==FIXED
+    assert not (source/'.env').exists()
+    auth=json.loads(pathlib.Path(args.authorization).read_text(encoding='utf-8'))
+    packet=load_packet(bundle,auth['request_sha256'])
+    summary=json.loads((bundle/'CAPTURE_SUMMARY.json').read_text(encoding='utf-8'))
+    if summary['request_sha256']!=auth['request_sha256'] or summary['analysis_snapshot_asof']!=auth['analysis_asof']:raise SystemExit('locked_bundle_identity_mismatch')
+    now=datetime.now(timezone.utc);snapshot=datetime.fromisoformat(auth['analysis_asof'])
+    if snapshot.tzinfo is None or snapshot>now or (now-snapshot).total_seconds()>86400:raise SystemExit('snapshot_invalid_or_expired_no_POST')
+    key=os.getenv('DEEPSEEK_API_KEY','').strip()
+    if not key:raise SystemExit('missing_key_no_POST')
+    log=SafeWriter(out/'REDACTED_PROCESS.log',key);sys.stdout=log;sys.stderr=log;atexit.register(log.close)
+    session=LiveSession(out,auth,key,args.run_id)
+    session.save('AUTHORIZATION_USED.json',auth)
+    for name in list(os.environ):
+        if name.endswith(('_API_KEY','_API_KEYS','_PASSWORD','_ACCESS_TOKEN','_APP_SECRET','_WEBHOOK_URL')) or name in ('TUSHARE_TOKEN','MODELFLARE_KEY','AIHUBMIX_KEY','TELEGRAM_BOT_TOKEN','GH_TOKEN','GITHUB_TOKEN','LITELLM_CONFIG','LLM_CHANNELS','DEEPSEEK_API_BASE','DEEPSEEK_BASE_URL','OPENAI_BASE_URL','OPENAI_API_BASE') or name.startswith('LLM_'):os.environ.pop(name,None)
+    os.environ.update(DEEPSEEK_API_KEY=key,DEEPSEEK_API_BASE='https://api.deepseek.com',LITELLM_MODEL='deepseek/deepseek-flash',LITELLM_FALLBACK_MODELS='',LITELLM_LOCAL_MODEL_COST_MAP='True',REPORT_INTEGRITY_RETRY='0',ENABLE_FUNDAMENTAL_PIPELINE='false',ENABLE_REALTIME_QUOTE='false',AGENT_MODE='false',SCHEDULE_ENABLED='false',MARKET_REVIEW_ENABLED='false',DAILY_MARKET_CONTEXT_ENABLED='false',SINGLE_STOCK_NOTIFY='false',REPORT_LANGUAGE='zh',DATABASE_PATH=str(out/'native.sqlite'))
+    sys.path.insert(0,str(source))
+    guard=OnePostGuard(preflight=False,before_send=session.approve,on_response=session.on_response,on_error=session.on_error);guard.install()
+    blocked={'notification':0,'other_network':0}
+    def deny(kind):
+        def stop(*a,**kw):blocked[kind]+=1;raise GuardStop('forbidden_'+kind)
+        return stop
+    smtplib.SMTP=deny('notification');smtplib.SMTP_SSL=deny('notification')
+    import requests,curl_cffi.requests as curl
+    requests.Session.request=deny('other_network');curl.Session.request=deny('other_network')
+    from src.core.trading_calendar import get_effective_trading_date,_XCALS_AVAILABLE
+    if not _XCALS_AVAILABLE or get_effective_trading_date('us',current_time=now).isoformat()!=auth['target_session']:raise SystemExit('approved_session_no_longer_latest_no_POST')
+    from src.config import get_config
+    from src.analyzer import GeminiAnalyzer
+    from src.notification import NotificationService
+    from src.notification_sender.email_sender import EmailSender
+    NotificationService.send=deny('notification');EmailSender.send_to_email=deny('notification')
+    config=get_config();analyzer=GeminiAnalyzer(config=config)
+    if analyzer._router is not None or config.litellm_model!='deepseek/deepseek-flash' or config.litellm_fallback_models:raise SystemExit('unexpected_route_no_POST')
+    failure=None;parsed=None
+    session.save('AUTHORIZED_REQUEST_PACKET.json',packet)
+    try:
+        text,usage=dispatch_frozen(analyzer,packet,config)
+        session.save('NATIVE_NORMALIZED_USAGE.json',usage)
+        parsed=analyzer._parse_response(text,'NVDA','英伟达');parsed.raw_response=text;parsed.model_used=config.litellm_model;parsed.report_language='zh';parsed.search_performed=False
+        contexts=json.loads((bundle/'ORIGINAL_ENHANCED_CONTEXT.json').read_text(encoding='utf-8'))
+        parsed.market_snapshot=analyzer._build_market_snapshot(contexts[0])
+        session.save('NATIVE_ANALYSIS_RESULT.json',parsed.to_dict())
+        passed,missing=analyzer._check_content_integrity(parsed,require_phase_decision=True)
+        session.save('NATIVE_INTEGRITY_RESULT.json',{'passed':passed,'missing_fields':missing,'repairs_called':False,'parser_success':parsed.success})
+        report=NotificationService(config=config).generate_single_stock_report(parsed)
+        (out/'NATIVE_NVDA_REPORT.md').write_text(report.replace(key,'[REDACTED]'),encoding='utf-8')
+    except BaseException as exc:failure=type(exc).__name__
+    finally:
+        session.finish()
+        session.save('POST_GUARD_RESULT.json',{'run_id':args.run_id,'authorized_sha256':auth['request_sha256'],'wire':guard.captured,'attempts':guard.attempts,'allowed_transport_attempts':guard.allowed,'blocked':guard.blocked,'error_category':failure,'other_calls':blocked,'prompt_rebuilt':False,'new_market_or_news_fetched':False,'automatic_retry':False,'actual_execution_at':now.isoformat()})
+    if failure or guard.allowed!=1:raise SystemExit('STOP_review_evidence_do_not_retry')
+    result=json.loads((out/'RESPONSE_RESULT.json').read_text(encoding='utf-8'))
+    if result['result_unknown'] or result['truncated'] or result['cost_estimate']['status'].startswith('unknown') or not parsed or not parsed.success:raise SystemExit('STOP_result_requires_review_no_retry')
+if __name__=='__main__':main()
