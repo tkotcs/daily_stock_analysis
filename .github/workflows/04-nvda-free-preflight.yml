@@ -1,4 +1,4 @@
-name: Manual authorized frozen NVDA Phase 2K one POST
+name: Manual authorized frozen NVDA Phase 2N one POST
 on:
   workflow_dispatch:
     inputs:
@@ -31,7 +31,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   once:
-    if: ${{ inputs.execute_live && github.actor == github.repository_owner }}
+    if: ${{ inputs.execute_live && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
     environment: nvda-one-call-approval
     runs-on: ubuntu-latest
     env:
@@ -41,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: 39b224567f89f313c54b5c6fb4791a6a3f2caf1e
+          ref: adeb8cc9759217b306e1b0ea74369790c5684025
           persist-credentials: false
           path: controller
       - uses: actions/checkout@v5
@@ -66,8 +66,8 @@ jobs:
           python controller/.github/scripts/phase2g_upstream_regression.py
       - uses: actions/download-artifact@v5
         with:
-          name: phase2k-request-38736466986
-          run-id: 38736466986
+          name: phase2m-request-38748119384
+          run-id: 38748119384
           github-token: ${{ github.token }}
           path: locked-evidence
       - name: Bind the separately approved request to this run
@@ -83,14 +83,39 @@ jobs:
           import datetime,json,os,pathlib
           if os.environ['GITHUB_RUN_ATTEMPT']!='1':raise SystemExit('rerun_forbidden')
           import hashlib,subprocess
-          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd='controller',text=True).strip()=='39b224567f89f313c54b5c6fb4791a6a3f2caf1e'
-          assert os.environ['REQUEST_SHA']=='043d5d42d52c016c12cec10fef9f73865459290aec634bbe7bd7adcea8acce71'
-          assert os.environ['SNAPSHOT_ASOF']=='2026-10-15T12:42:02.263395+00:00'
+          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd='controller',text=True).strip()=='adeb8cc9759217b306e1b0ea74369790c5684025'
+          assert os.environ['REQUEST_SHA']=='13c38395630faeef2a638e10dcf5966396c7cbf40d26110045f3b47712a06ccd'
+          assert os.environ['SNAPSHOT_ASOF']=='2026-10-15T14:05:23.935154+00:00'
           assert os.environ['TARGET_SESSION']=='2026-10-14'
+          assert os.environ['PRICING_SHA']=='210f102275ccf1a6542f08a3bc9e4b4c7c83278cb74b35217bffa112df6363b2'
+          assert os.environ['APPROVAL_REF'].strip() and os.environ['SECRET_APPROVAL_REF'].strip()
+          # Verify immutable Runner files before reading the request; no fetch/prompt rebuild.
+          base=pathlib.Path('locked-evidence').resolve()
+          assert hashlib.sha256((base/'MANIFEST.json').read_bytes()).hexdigest()=='d6c2e8cb1f14d79bd676d68843e9831f657feb2cf6815522254088afb7af68fe'
+          for entry in json.loads((base/'MANIFEST.json').read_text(encoding='utf-8')):
+              path=(base/entry['path']).resolve()
+              assert path.is_relative_to(base)
+              raw=path.read_bytes()
+              assert len(raw)==entry['bytes'] and hashlib.sha256(raw).hexdigest()==entry['sha256']
           packet=json.loads(pathlib.Path('locked-evidence/nvda-inputs/ORIGINAL_REQUEST_PACKET.json').read_text(encoding='utf-8'))
           assert hashlib.sha256(json.dumps(packet,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()==os.environ['REQUEST_SHA']
+          assert packet['model']=='deepseek-flash' and packet['thinking']=={'type':'disabled'}
+          assert packet['max_tokens']==8192 and packet['stream'] is True
+          assert packet['stream_options']=={'include_usage':True}
+          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd='upstream-fixed',text=True).strip()=='f93a7609e569e3b6c6372e652a3d36a27225d783'
+          sys_path=pathlib.Path('upstream-fixed').resolve()
+          import sys
+          sys.path.insert(0,str(sys_path))
+          from src.core.trading_calendar import get_effective_trading_date,_XCALS_AVAILABLE
           now=datetime.datetime.now(datetime.timezone.utc)
-          data={'authorize_paid_post':True,'authorization_reference':os.environ['APPROVAL_REF'],'secret_upload_approval_reference':os.environ['SECRET_APPROVAL_REF'],'run_id':os.environ['GITHUB_RUN_ID'],'fixed_commit':'f93a7609e569e3b6c6372e652a3d36a27225d783','target_session':os.environ['TARGET_SESSION'],'request_sha256':os.environ['REQUEST_SHA'],'analysis_asof':os.environ['SNAPSHOT_ASOF'],'pricing_sha256':os.environ['PRICING_SHA'],'reservation_usd':'0.03','expires_at':(now+datetime.timedelta(minutes=15)).isoformat()}
+          snapshot=datetime.datetime.fromisoformat(os.environ['SNAPSHOT_ASOF'])
+          material_expiry=min(snapshot+datetime.timedelta(hours=24),datetime.datetime.fromisoformat('2026-10-15T20:00:00+00:00'))
+          if now>=material_expiry:raise SystemExit('EXPIRED_no_POST_no_refresh')
+          assert _XCALS_AVAILABLE and get_effective_trading_date('us',current_time=now).isoformat()==os.environ['TARGET_SESSION']
+          # Shorter per-run authorization; never extend the frozen material window.
+          execution_expiry=min(now+datetime.timedelta(minutes=15),material_expiry-datetime.timedelta(seconds=30))
+          if now>=execution_expiry:raise SystemExit('too_close_to_material_expiry_no_POST')
+          data={'authorize_paid_post':True,'authorization_reference':os.environ['APPROVAL_REF'],'secret_upload_approval_reference':os.environ['SECRET_APPROVAL_REF'],'run_id':os.environ['GITHUB_RUN_ID'],'fixed_commit':'f93a7609e569e3b6c6372e652a3d36a27225d783','target_session':os.environ['TARGET_SESSION'],'request_sha256':os.environ['REQUEST_SHA'],'analysis_asof':os.environ['SNAPSHOT_ASOF'],'pricing_sha256':os.environ['PRICING_SHA'],'reservation_usd':'0.03','expires_at':execution_expiry.isoformat()}
           pathlib.Path('approved-request.json').write_text(json.dumps(data),encoding='utf-8')
           PY
       - name: One authorized native call, no retry
@@ -106,11 +131,15 @@ jobs:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: |
           python - <<'PY'
-          import os,pathlib
+          import os,pathlib,gzip
           key=os.environ.get('DEEPSEEK_API_KEY','').encode()
           root=pathlib.Path('authorized-evidence')
           if not key or not root.is_dir():raise SystemExit('no_safe_artifact')
-          if any(key in p.read_bytes() for p in root.rglob('*') if p.is_file()):raise SystemExit('credential_scan_failed_no_upload')
+          for p in root.rglob('*'):
+              if not p.is_file():continue
+              raw=p.read_bytes()
+              if key in raw:raise SystemExit('credential_scan_failed_no_upload')
+              if raw.startswith(b'\x1f\x8b') and key in gzip.decompress(raw):raise SystemExit('compressed_credential_scan_failed_no_upload')
           with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as f:f.write('safe=true\n')
           PY
       - uses: actions/upload-artifact@v6

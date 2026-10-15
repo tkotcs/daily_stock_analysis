@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [测试] Bind the disabled one-call NVDA workflow to the verified Phase 2M frozen request and controller, with expiry checks before any paid request.
+
 - [测试] Refresh native NVDA inputs with reviewed non-thinking YAML and pre-transmission interception in a manual-only Phase 2M workflow.
 
 - [测试] Add isolated Phase 2L offline DeepSeek non-thinking capture, input clarification, and immutable historical failure replay.
