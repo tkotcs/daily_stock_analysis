@@ -6,7 +6,7 @@ from html.parser import HTMLParser
 import httpx
 from deepseek_post_guard import GuardStop
 
-FIXED='578fc55364bf32b7299e84eea7a630eb7e93e973'
+FIXED='f93a7609e569e3b6c6372e652a3d36a27225d783'
 BASE='https://api.deepseek.com'
 PRICING='https://api-docs.deepseek.com/quick_start/pricing/'
 def canonical_sha(body):return hashlib.sha256(json.dumps(body,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()

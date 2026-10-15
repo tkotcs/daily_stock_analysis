@@ -1,14 +1,14 @@
-name: Manual Phase 2J free integration acceptance
+name: Manual Phase 2K NVDA request capture - zero paid POST
 on:
   workflow_dispatch:
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: phase2j-free-integration
+  group: phase2k-free-preflight
   cancel-in-progress: false
 jobs:
-  free-acceptance:
+  prepare:
     if: github.actor == github.repository_owner
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -23,75 +23,55 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Verify manual first attempt and source identity
+          path: controller
+      - uses: actions/checkout@v5
+        with:
+          ref: f93a7609e569e3b6c6372e652a3d36a27225d783
+          persist-credentials: false
+          path: upstream-fixed
+      - name: Enforce first manual attempt and fixed business source
         run: |
           test "$GITHUB_EVENT_NAME" = workflow_dispatch
           test "$GITHUB_RUN_ATTEMPT" = 1
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test ! -e .env
-          mkdir -p phase2j-evidence/tests
-          git rev-parse HEAD > phase2j-evidence/COMMIT.txt
-          cp .github/workflows/01-free-market-validation.yml phase2j-evidence/ACTUAL_WORKFLOW.yml
+          test "$(git -C controller rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git -C upstream-fixed rev-parse HEAD)" = f93a7609e569e3b6c6372e652a3d36a27225d783
+          test ! -e upstream-fixed/.env
+          mkdir -p phase2k-evidence/tests
+          git -C controller rev-parse HEAD > phase2k-evidence/CONTROLLER_COMMIT.txt
+          git -C upstream-fixed rev-parse HEAD > phase2k-evidence/BUSINESS_COMMIT.txt
+          cp controller/.github/workflows/01-free-market-validation.yml phase2k-evidence/ACTUAL_WORKFLOW.yml
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: pip
-      - name: Full native dependencies and public offline tokenizer
+          cache-dependency-path: upstream-fixed/requirements.txt
+      - name: Original full dependencies and public tokenizer
         run: |
-          python -m pip install -r requirements.txt litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6 pytest
+          python -m pip install -r upstream-fixed/requirements.txt litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6 pytest
           python -m pip check
-          python -m pip freeze > phase2j-evidence/DEPENDENCIES.txt
-          python .github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR" > phase2j-evidence/TOKENIZER_ASSETS.json
-      - uses: actions/download-artifact@v5
-        with:
-          name: authorized-nvda-38693407248
-          run-id: 38693407248
-          github-token: ${{ github.token }}
-          path: historical-2e
-      - uses: actions/download-artifact@v5
-        with:
-          name: authorized-nvda-38706973098
-          run-id: 38706973098
-          github-token: ${{ github.token }}
-          path: historical-2h
-      - uses: actions/download-artifact@v5
-        with:
-          name: phase2h-request-38704910265
-          run-id: 38704910265
-          github-token: ${{ github.token }}
-          path: historical-inputs
-      - name: Free-only outbound guard fault injection
-        run: python .github/scripts/phase2j_guard_selftest.py > phase2j-evidence/GUARD_CONTROL_TEST.json
-      - name: Offline native regressions and one-POST fault injection - no credentials
+          python -m pip freeze > phase2k-evidence/DEPENDENCIES.txt
+          python controller/.github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR" > phase2k-evidence/TOKENIZER_ASSETS.json
+      - name: Offline pin, one-POST and native regression tests - no real key
         run: |
           set -o pipefail
-          python .github/scripts/phase2j_offline_tests.py . "$TIKTOKEN_CACHE_DIR" phase2j-evidence/tests 2>&1 | tee phase2j-evidence/OFFLINE_TESTS.log
-      - name: Replay immutable real responses without model or SMTP
+          python controller/.github/scripts/phase2j_offline_tests.py controller "$TIKTOKEN_CACHE_DIR" phase2k-evidence/tests 2>&1 | tee phase2k-evidence/OFFLINE_TESTS.log
+      - name: Fresh NVDA quote, official IR/RSS and native SDK request interception
         run: |
           set -o pipefail
-          python .github/scripts/phase2j_replay.py --phase2e historical-2e --phase2h historical-2h --inputs historical-inputs/nvda-inputs --out phase2j-evidence/replay 2>&1 | tee phase2j-evidence/REPLAY.log
-      - name: Free live Yahoo GETs only - no model keys or mail
-        run: |
-          set -o pipefail
-          python .github/scripts/phase2j_free_guard.py --out phase2j-evidence/free-data 2>&1 | tee phase2j-evidence/FREE_DATA.log
-      - name: Classify financial gaps and verify 35 native MA60 calculations offline
-        run: |
-          set -o pipefail
-          python .github/scripts/phase2j_data_review.py --data phase2j-evidence/free-data --out phase2j-evidence/data-review 2>&1 | tee phase2j-evidence/DATA_REVIEW.log
-      - name: Seal evidence hashes
+          python controller/.github/scripts/nvda_free_preflight.py --source upstream-fixed --out phase2k-evidence/nvda-inputs --include-free-research 2>&1 | tee phase2k-evidence/CAPTURE.log
+      - name: Seal read-only preparation evidence
         if: always()
         run: |
           python - <<'PY'
-          import pathlib,hashlib,json,datetime,os
-          out=pathlib.Path('phase2j-evidence');out.mkdir(exist_ok=True)
-          meta={'run_id':os.environ['GITHUB_RUN_ID'],'attempt':os.environ['GITHUB_RUN_ATTEMPT'],'commit':os.environ['GITHUB_SHA'],'at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'paid_credentials_injected':False,'model_POSTs_allowed':False,'SMTP_allowed':False}
-          (out/'RUN_CONTEXT.json').write_text(json.dumps(meta,indent=2),encoding='utf-8')
+          import pathlib,hashlib,json,os,datetime
+          out=pathlib.Path('phase2k-evidence');out.mkdir(exist_ok=True)
+          (out/'RUN_CONTEXT.json').write_text(json.dumps({'run_id':os.environ['GITHUB_RUN_ID'],'attempt':os.environ['GITHUB_RUN_ATTEMPT'],'controller':os.environ['GITHUB_SHA'],'at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'real_key_injected':False,'paid_POSTs_allowed':False,'email_allowed':False},indent=2),encoding='utf-8')
           files=[{'path':p.relative_to(out).as_posix(),'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(out.rglob('*')) if p.is_file() and p.name!='MANIFEST.json']
           (out/'MANIFEST.json').write_text(json.dumps(files,indent=2),encoding='utf-8')
           PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: phase2j-free-${{ github.run_id }}
-          path: phase2j-evidence/
+          name: phase2k-request-${{ github.run_id }}
+          path: phase2k-evidence/
           retention-days: 14

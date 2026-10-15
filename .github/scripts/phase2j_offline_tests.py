@@ -23,5 +23,5 @@ modules = ['tests/test_phase2i_quote_facts.py', 'tests/test_yfinance_class_share
  'tests/test_notification_report_fixtures.py', 'tests/test_pipeline_index_targets.py',
  '.github/scripts/test_nvda_frozen_once.py', '.github/scripts/test_deepseek_post_guard.py',
  '.github/scripts/test_authorized_once.py', '.github/scripts/test_nvda_native_render.py',
- '.github/scripts/test_quote_currency.py', '.github/scripts/test_nvda_research_materials.py', '.github/scripts/test_phase2j_free_guard.py']
+ '.github/scripts/test_quote_currency.py', '.github/scripts/test_nvda_research_materials.py', '.github/scripts/test_phase2j_free_guard.py', '.github/scripts/test_phase2k_binding.py']
 raise SystemExit(pytest.main(['-q', '-p', 'no:cacheprovider', '--junitxml='+str(output/'TESTS.xml')] + modules))
