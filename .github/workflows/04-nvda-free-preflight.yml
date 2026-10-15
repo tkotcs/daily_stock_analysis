@@ -1,4 +1,4 @@
-name: Manual authorized frozen NVDA Phase 2H one POST
+name: Manual authorized frozen NVDA Phase 2K one POST
 on:
   workflow_dispatch:
     inputs:
@@ -41,12 +41,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: 93d8ba0110460718517e0e4ca11d0b051b518a29
+          ref: 39b224567f89f313c54b5c6fb4791a6a3f2caf1e
           persist-credentials: false
           path: controller
       - uses: actions/checkout@v5
         with:
-          ref: 578fc55364bf32b7299e84eea7a630eb7e93e973
+          ref: f93a7609e569e3b6c6372e652a3d36a27225d783
           persist-credentials: false
           path: upstream-fixed
       - uses: actions/setup-python@v6
@@ -66,8 +66,8 @@ jobs:
           python controller/.github/scripts/phase2g_upstream_regression.py
       - uses: actions/download-artifact@v5
         with:
-          name: phase2h-request-38704910265
-          run-id: 38704910265
+          name: phase2k-request-38736466986
+          run-id: 38736466986
           github-token: ${{ github.token }}
           path: locked-evidence
       - name: Bind the separately approved request to this run
@@ -83,14 +83,14 @@ jobs:
           import datetime,json,os,pathlib
           if os.environ['GITHUB_RUN_ATTEMPT']!='1':raise SystemExit('rerun_forbidden')
           import hashlib,subprocess
-          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd='controller',text=True).strip()=='93d8ba0110460718517e0e4ca11d0b051b518a29'
-          assert os.environ['REQUEST_SHA']=='f7ca322b236ff4b993a081e33090740eb9891fa584f0abf33dbab0677cf88e3b'
-          assert os.environ['SNAPSHOT_ASOF']=='2026-10-15T08:21:32.595610+00:00'
+          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd='controller',text=True).strip()=='39b224567f89f313c54b5c6fb4791a6a3f2caf1e'
+          assert os.environ['REQUEST_SHA']=='043d5d42d52c016c12cec10fef9f73865459290aec634bbe7bd7adcea8acce71'
+          assert os.environ['SNAPSHOT_ASOF']=='2026-10-15T12:42:02.263395+00:00'
           assert os.environ['TARGET_SESSION']=='2026-10-14'
           packet=json.loads(pathlib.Path('locked-evidence/nvda-inputs/ORIGINAL_REQUEST_PACKET.json').read_text(encoding='utf-8'))
           assert hashlib.sha256(json.dumps(packet,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()==os.environ['REQUEST_SHA']
           now=datetime.datetime.now(datetime.timezone.utc)
-          data={'authorize_paid_post':True,'authorization_reference':os.environ['APPROVAL_REF'],'secret_upload_approval_reference':os.environ['SECRET_APPROVAL_REF'],'run_id':os.environ['GITHUB_RUN_ID'],'fixed_commit':'578fc55364bf32b7299e84eea7a630eb7e93e973','target_session':os.environ['TARGET_SESSION'],'request_sha256':os.environ['REQUEST_SHA'],'analysis_asof':os.environ['SNAPSHOT_ASOF'],'pricing_sha256':os.environ['PRICING_SHA'],'reservation_usd':'0.03','expires_at':(now+datetime.timedelta(minutes=15)).isoformat()}
+          data={'authorize_paid_post':True,'authorization_reference':os.environ['APPROVAL_REF'],'secret_upload_approval_reference':os.environ['SECRET_APPROVAL_REF'],'run_id':os.environ['GITHUB_RUN_ID'],'fixed_commit':'f93a7609e569e3b6c6372e652a3d36a27225d783','target_session':os.environ['TARGET_SESSION'],'request_sha256':os.environ['REQUEST_SHA'],'analysis_asof':os.environ['SNAPSHOT_ASOF'],'pricing_sha256':os.environ['PRICING_SHA'],'reservation_usd':'0.03','expires_at':(now+datetime.timedelta(minutes=15)).isoformat()}
           pathlib.Path('approved-request.json').write_text(json.dumps(data),encoding='utf-8')
           PY
       - name: One authorized native call, no retry
