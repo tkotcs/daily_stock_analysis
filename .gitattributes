@@ -41,3 +41,6 @@ Makefile text eol=lf
 *.crt binary
 *.key binary
 *.p12 binary
+
+# Immutable real-call regression evidence: keep exact bytes across platforms.
+tests/fixtures/phase2p/* -text
