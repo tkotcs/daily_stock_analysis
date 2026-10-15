@@ -1,0 +1,62 @@
+{
+  "asof": "2026-10-15T14:05:23.935154+00:00",
+  "official_source": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/",
+  "provided_fields": [
+    "revenue",
+    "net_profit_parent",
+    "operating_cash_flow"
+  ],
+  "selected_news": [
+    {
+      "title": "Dial Up the Cloud: NVIDIA DLSS 4.5 Controls Arrive on GeForce NOW",
+      "url": "https://blogs.nvidia.com/blog/geforce-now-thursday-enshrouded-update/",
+      "published_at": "2026-10-15T13:00:59+00:00",
+      "fetched_at": "2026-10-15T14:05:26.241398+00:00",
+      "source": "NVIDIA official newsroom RSS"
+    },
+    {
+      "title": "NVIDIA Expands Advanced Technology Access for Europe’s Scientific Community Through Open Learning Resources, Collaborations and Compute",
+      "url": "https://blogs.nvidia.com/blog/ec-scientific-computing-pledge/",
+      "published_at": "2026-10-15T10:00:12+00:00",
+      "fetched_at": "2026-10-15T14:05:26.241398+00:00",
+      "source": "NVIDIA official newsroom RSS"
+    },
+    {
+      "title": "The Nordics and NVIDIA Show What’s Possible When a Region Commits to Advanced Computing",
+      "url": "https://blogs.nvidia.com/blog/nordics-technology-ecosystem/",
+      "published_at": "2026-10-15T05:00:12+00:00",
+      "fetched_at": "2026-10-15T14:05:26.241398+00:00",
+      "source": "NVIDIA official newsroom RSS"
+    }
+  ],
+  "errors": [],
+  "OFFICIAL_FINANCIAL_RELEASE.html": {
+    "url": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/",
+    "status": 200,
+    "fetched_at": "2026-10-15T14:05:25.899071+00:00"
+  },
+  "OFFICIAL_NEWS_RSS.xml": {
+    "url": "https://nvidianews.nvidia.com/releases.xml",
+    "status": 200,
+    "fetched_at": "2026-10-15T14:05:26.241398+00:00"
+  },
+  "official_verification": {
+    "period_end": "2026-07-26",
+    "published_date": "2026-08-26",
+    "publication_time_exact": null,
+    "currency": "USD",
+    "values": {
+      "revenue": 96221000000.0,
+      "net_profit_parent": 59688000000.0,
+      "operating_cash_flow": 24077000000.0
+    }
+  },
+  "yahoo_report_date": "2026-07-31",
+  "yahoo_currency": "USD",
+  "official_value_matches": {
+    "revenue": true,
+    "net_profit_parent": true,
+    "operating_cash_flow": true
+  },
+  "period_normalized_to_official": true
+}

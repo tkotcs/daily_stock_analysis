@@ -4178,7 +4178,7 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
             # 设置生成配置
             generation_config = {
                 "temperature": config.llm_temperature,
-                "max_output_tokens": 8192,
+                "max_output_tokens": getattr(config, 'stock_analysis_max_tokens', 16384),
             }
 
             logger.info(f"[LLM调用] 开始调用 {model_name}...")
@@ -4355,7 +4355,14 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
             direction = ('close above open' if close > opening else 'close below open' if close < opening else 'close equals open') if english else ('收盘高于开盘' if close > opening else '收盘低于开盘' if close < opening else '收盘等于开盘')
             lines.append(f'close={close:g}; open={opening:g}; {direction}')
         # A partial current bar may show a provisional crossing, never a close confirmation.
-        partial = bool(today.get('is_partial_bar') or today.get('is_estimated') or previous.get('is_partial_bar') or (context.get('market_phase_context') or {}).get('is_partial_bar'))
+        phase = context.get('market_phase_context') or {}
+        # An intraday session flag must not invalidate a DIFFERENT completed daily bar.
+        phase_partial = phase.get('is_partial_bar') and (
+            not phase.get('session_date') or str(phase['session_date']) == str(today.get('date')))
+        partial = bool(today.get('is_partial_bar') or today.get('is_estimated') or
+                       previous.get('is_partial_bar') or previous.get('is_estimated') or phase_partial)
+        lines.append(('Daily bar date (not the current intraday session): ' if english else
+                      '以下“本日”指所用日线日期，非当前盘中交易日：') + str(today.get('date', 'N/A')))
         for period in (5, 10, 20, 60):
             key = f'ma{period}'
             current_ma, prior_ma = number(today, key), number(previous, key)
@@ -4475,6 +4482,38 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
         else:
             prompt += f"\n报价币种：{quote_currency or '未核实'}（{currency_label}）。价格、均线、交易点位和成交额使用报价币种；不得与财报币种混用。\n"
         prompt += self._format_computed_quote_facts(context, english=english)
+        if english:
+            prompt += """
+Research depth: retain the existing dashboard JSON and all required fields. Use
+short/medium horizons, bullish/bearish scenarios, support/resistance, closing and
+volume confirmation, false-breakout and invalidation conditions. Distinguish
+current MA position from a NEW crossing today, including in summaries; do not
+call all below-MA states new breakdowns. State financial source/period/currency
+and news evidence limits. Missing evidence stays unavailable. Avoid duplicated
+indicator lists and filler; 5000-6000 output tokens is a planning range, not a quota.
+Add dashboard.battle_plan.risk_plan with numeric max_position_pct (0-100) and
+scenarios: [{"entry":100,"stop":95,"target":110,"position_pct":10,
+"trigger":"hypothetical closing and volume confirmation",
+"invalidation":"hypothesis invalidation"}]. Example numbers are NOT this stock's
+levels. Use null for risk_plan when no justified entry/stop exists, and null for
+an unsupported target. Python computes loss_pct=(entry-stop)/entry*100 and
+reward_risk=(target-entry)/(entry-stop); never invent arithmetic percentages.
+Scenarios are alternatives, not simultaneous allocations. All scenarios and position narratives must respect the same maximum position;
+do not repeat numeric position or loss percentages in legacy prose fields.
+"""
+        else:
+            prompt += """
+研究深度：保留原版dashboard JSON及全部必需字段。围绕短期/中期趋势、支撑阻力、
+看多/看空情景展开因果分析，逐一说明触发、收盘和成交量确认、假突破、失效条件与风险。
+摘要及看空信号也必须区分当前均线下方状态与“本日新下穿”；不能把所有低于均线写成新跌破。
+财务须标来源、期间和币种；新闻仅依据已提供内容；缺失材料直接说明，不补造。
+按资料丰富程度分配篇幅，正常5000–6000输出Token仅为规划区间，不是最低字数要求；不重复堆指标。
+在dashboard.battle_plan增加risk_plan对象，含数值max_position_pct（0–100）与scenarios数组：
+{"entry":100,"stop":95,"target":110,"position_pct":10,"trigger":"假设的收盘与量能确认","invalidation":"判断失效条件"}。
+以上仅演示结构，不是本股价位。没有依据的入场/止损时risk_plan=null；无依据目标target=null。
+名义损失率=(entry-stop)/entry*100，收益风险比=(target-entry)/(entry-stop)，由Python计算，模型不得自行填写算术百分比。
+各情景互为备选，不同时叠加；所有情景仓位不得超过唯一max_position_pct；原有仓位/入场文案仅写条件，不重复数字仓位、损失率或收益风险比。
+"""
         if context.get('news_source_note'):
             prompt += '\n' + str(context['news_source_note']) + '\n'
         if english:
@@ -5250,6 +5289,7 @@ Output the complete Decision Dashboard in JSON format."""
                 change_amount = None
 
         snapshot = {
+            "computed_quote_facts": self._format_computed_quote_facts(context, english=normalize_report_language(context.get('report_language')) == 'en'),
             "quote_currency": quote_currency,
             "date": context.get('date', '未知'),
             "close": self._format_price(close),

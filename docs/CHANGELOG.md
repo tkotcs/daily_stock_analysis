@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [改进] Make the native stock research output ceiling configurable at 16384 tokens, clarify scenario evidence, and display deterministic risk arithmetic and unabridged detailed research without changing paid controllers.
+
 - [测试] Bind the disabled one-call NVDA workflow to the verified Phase 2M frozen request and controller, with expiry checks before any paid request.
 
 - [测试] Refresh native NVDA inputs with reviewed non-thinking YAML and pre-transmission interception in a manual-only Phase 2M workflow.
