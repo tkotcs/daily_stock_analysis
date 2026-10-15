@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Tuple, Callable, Union
 
 import litellm
+from src.formatters import QUOTE_CURRENCY_LABELS, resolve_quote_currency
 from json_repair import repair_json
 from litellm import Router
 
@@ -2020,10 +2021,10 @@ class GeminiAnalyzer:
 
         "battle_plan": {
             "sniper_points": {
-                "ideal_buy": "理想买入点：XX元（在MA5附近）",
-                "secondary_buy": "次优买入点：XX元（在MA10附近）",
-                "stop_loss": "止损位：XX元（跌破MA20或X%）",
-                "take_profit": "目标位：XX元（前高/整数关口）"
+                "ideal_buy": "理想买入点：XX（报价币种，在MA5附近）",
+                "secondary_buy": "次优买入点：XX（报价币种，在MA10附近）",
+                "stop_loss": "止损位：XX（报价币种，跌破MA20或X%）",
+                "take_profit": "目标位：XX（报价币种，前高/整数关口）"
             },
             "position_strategy": {
                 "suggested_position": "建议仓位：X成",
@@ -2208,10 +2209,10 @@ class GeminiAnalyzer:
 
         "battle_plan": {
             "sniper_points": {
-                "ideal_buy": "理想入场位：XX元（满足主要技能触发条件）",
-                "secondary_buy": "次优入场位：XX元（更保守或确认后执行）",
-                "stop_loss": "止损位：XX元（失效条件或X%风险）",
-                "take_profit": "目标位：XX元（按阻力位/风险回报比制定）"
+                "ideal_buy": "理想入场位：XX（报价币种，满足主要技能触发条件）",
+                "secondary_buy": "次优入场位：XX（报价币种，更保守或确认后执行）",
+                "stop_loss": "止损位：XX（报价币种，失效条件或X%风险）",
+                "take_profit": "目标位：XX（报价币种，按阻力位/风险回报比制定）"
             },
             "position_strategy": {
                 "suggested_position": "建议仓位：X成",
@@ -4349,14 +4350,16 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
         quote_section_title, close_price_label = _phase_aware_quote_labels(context, report_language)
         hide_regular_session_ohlc = _should_hide_regular_session_ohlc(context)
         realtime_overlay_quote = hide_regular_session_ohlc and _today_has_realtime_overlay(today)
+        quote_currency = resolve_quote_currency(context)
+        currency_label = QUOTE_CURRENCY_LABELS.get(quote_currency, "币种未核实")
         if english:
-            price_unit = ""
+            price_unit = f" {quote_currency or 'currency unverified'}"
             pct_chg_label = "Realtime Change" if realtime_overlay_quote else "Change"
             volume_label = "Realtime Volume" if realtime_overlay_quote else "Volume"
             amount_label = "Realtime Turnover" if realtime_overlay_quote else "Turnover"
             open_label, high_label, low_label = "Open", "High", "Low"
         else:
-            price_unit = " 元"
+            price_unit = f" {currency_label}"
             pct_chg_label = "实时涨跌幅" if realtime_overlay_quote else "涨跌幅"
             volume_label = "实时成交量" if realtime_overlay_quote else "成交量"
             amount_label = "实时成交额" if realtime_overlay_quote else "成交额"
@@ -4376,7 +4379,7 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
             [
                 f"| {pct_chg_label} | {today.get('pct_chg', 'N/A')}% |",
                 f"| {volume_label} | {self._format_volume(today.get('volume'), report_language)} |",
-                f"| {amount_label} | {self._format_amount(today.get('amount'), report_language)} |",
+                f"| {amount_label} | {self._format_amount(today.get('amount'), report_language, quote_currency)} |",
             ]
         )
         quote_rows_text = "\n".join(quote_rows)
@@ -4406,6 +4409,10 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 
 ---
 """
+        if english:
+            prompt += f"\nQuote currency: {quote_currency or 'unverified'}. Prices, MA levels and trading turnover use this currency, not the financial-statement currency.\n"
+        else:
+            prompt += f"\n报价币种：{quote_currency or '未核实'}（{currency_label}）。价格、均线、交易点位和成交额使用报价币种；不得与财报币种混用。\n"
         prompt += format_market_phase_prompt_section(
             context.get("market_phase_context"),
             report_language=report_language,
@@ -4473,8 +4480,8 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 | **Turnover Rate** | **{rt.get('turnover_rate', 'N/A')}%** | |
 | PE (TTM/dynamic) | {rt.get('pe_ratio', 'N/A')} | |
 | PB | {rt.get('pb_ratio', 'N/A')} | |
-| Total Market Cap | {self._format_amount(rt.get('total_mv'), report_language)} | |
-| Float Market Cap | {self._format_amount(rt.get('circ_mv'), report_language)} | |
+| Total Market Cap | {self._format_amount(rt.get('total_mv'), report_language, quote_currency)} | |
+| Float Market Cap | {self._format_amount(rt.get('circ_mv'), report_language, quote_currency)} | |
 | 60-Day Change | {rt.get('change_60d', 'N/A')}% | Medium-term performance |
 """
         elif 'realtime' in context:
@@ -4483,13 +4490,13 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 ### 实时行情增强数据
 | 指标 | 数值 | 解读 |
 |------|------|------|
-| 当前价格 | {rt.get('price', 'N/A')} 元 | |
+| 当前价格 | {rt.get('price', 'N/A')}{price_unit} | |
 | **量比** | **{rt.get('volume_ratio', 'N/A')}** | {rt.get('volume_ratio_desc', '')} |
 | **换手率** | **{rt.get('turnover_rate', 'N/A')}%** | |
 | 市盈率(动态) | {rt.get('pe_ratio', 'N/A')} | |
 | 市净率 | {rt.get('pb_ratio', 'N/A')} | |
-| 总市值 | {self._format_amount(rt.get('total_mv'))} | |
-| 流通市值 | {self._format_amount(rt.get('circ_mv'))} | |
+| 总市值 | {self._format_amount(rt.get('total_mv'), report_language, quote_currency)} | |
+| 流通市值 | {self._format_amount(rt.get('circ_mv'), report_language, quote_currency)} | |
 | 60日涨跌幅 | {rt.get('change_60d', 'N/A')}% | 中期表现 |
 """
 
@@ -4693,7 +4700,7 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 | 指标 | 数值 | 健康标准 |
 |------|------|----------|
 | **获利比例** | **{profit_ratio:.1%}** | 70-90%时警惕 |
-| 平均成本 | {chip.get('avg_cost', 'N/A')} 元 | 现价应高于5-15% |
+| 平均成本 | {chip.get('avg_cost', 'N/A')}{price_unit} | 现价应高于5-15% |
 | 90%筹码集中度 | {chip.get('concentration_90', 0):.2%} | <15%为集中 |
 | 70%筹码集中度 | {chip.get('concentration_70', 0):.2%} | |
 | 筹码状态 | {chip.get('chip_status', unknown_text)} | |
@@ -5105,18 +5112,19 @@ Output the complete Decision Dashboard in JSON format."""
         else:
             return f"{volume:.0f} 股"
     
-    def _format_amount(self, amount: Optional[float], report_language: str = "zh") -> str:
+    def _format_amount(self, amount: Optional[float], report_language: str = "zh", currency: Optional[str] = "CNY") -> str:
         """格式化成交额显示"""
         if amount is None:
             return 'N/A'
         if normalize_report_language(report_language) in ("en", "ko"):
-            return self._format_scaled_number_en(amount)
+            return f"{self._format_scaled_number_en(amount)} {currency or 'currency unverified'}"
+        suffix = QUOTE_CURRENCY_LABELS.get(currency, "（币种未核实）")
         if amount >= 1e8:
-            return f"{amount / 1e8:.2f} 亿元"
+            return f"{amount / 1e8:.2f} 亿{suffix}"
         elif amount >= 1e4:
-            return f"{amount / 1e4:.2f} 万元"
+            return f"{amount / 1e4:.2f} 万{suffix}"
         else:
-            return f"{amount:.0f} 元"
+            return f"{amount:.0f} {suffix}"
 
     @staticmethod
     def _format_scaled_number_en(value: float) -> str:
@@ -5153,6 +5161,8 @@ Output the complete Decision Dashboard in JSON format."""
         realtime = context.get('realtime', {}) or {}
         yesterday = context.get('yesterday', {}) or {}
 
+        quote_currency = resolve_quote_currency(context)
+
         prev_close = yesterday.get('close')
         close = today.get('close')
         high = today.get('high')
@@ -5172,6 +5182,7 @@ Output the complete Decision Dashboard in JSON format."""
                 change_amount = None
 
         snapshot = {
+            "quote_currency": quote_currency,
             "date": context.get('date', '未知'),
             "close": self._format_price(close),
             "open": self._format_price(today.get('open')),
@@ -5182,7 +5193,7 @@ Output the complete Decision Dashboard in JSON format."""
             "change_amount": self._format_price(change_amount),
             "amplitude": self._format_percent(amplitude),
             "volume": self._format_volume(today.get('volume')),
-            "amount": self._format_amount(today.get('amount')),
+            "amount": self._format_amount(today.get('amount'), currency=quote_currency),
         }
 
         if realtime:

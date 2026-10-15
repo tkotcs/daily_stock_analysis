@@ -1,111 +1,63 @@
-name: Manual authorized NVDA one POST
+name: Manual free NVDA integration acceptance
 on:
   workflow_dispatch:
-    inputs:
-      execute_live:
-        type: boolean
-        default: false
-      request_sha256:
-        type: string
-        required: true
-      analysis_asof:
-        type: string
-        required: true
-      target_session:
-        type: string
-        required: true
-      pricing_sha256:
-        type: string
-        required: true
-      authorization_reference:
-        type: string
-        required: true
-      secret_upload_approval_reference:
-        type: string
-        required: true
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: nvda-manual-preflight
+  group: nvda-free-integration
   cancel-in-progress: false
 jobs:
-  once:
-    if: ${{ inputs.execute_live && github.actor == github.repository_owner }}
-    environment: nvda-one-call-approval
+  offline-and-free-data:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    env:
+      LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONIOENCODING: utf-8
+      AGENT_MODE: 'false'
+      SCHEDULE_ENABLED: 'false'
+      SINGLE_STOCK_NOTIFY: 'false'
+      TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+      CUSTOM_TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.sha }}
           persist-credentials: false
-          path: controller
-      - uses: actions/checkout@v5
-        with:
-          ref: 2b896241f69d0177c2b6f298cf69042b8531dd76
-          persist-credentials: false
-          path: upstream-fixed
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-      - name: Dependencies and offline tests (no key)
-        env:
-          DSA_FIXED_SOURCE: upstream-fixed
-          PYTHONPATH: upstream-fixed
-          LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+      - name: Full upstream dependencies, no credentials
         run: |
-          python -m pip install -r upstream-fixed/requirements.txt
-          python -m pip install litellm==1.105.1 httpx==0.28.1 tiktoken==0.11.0
-          python controller/.github/scripts/test_nvda_frozen_once.py
-          python controller/.github/scripts/test_deepseek_post_guard.py
-          python controller/.github/scripts/test_authorized_once.py
+          python -m pip install -r requirements.txt pytest
+          python -m pip check
+          mkdir -p acceptance
+          python -m pip freeze > acceptance/dependencies.txt
+          python .github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR" > acceptance/tokenizer-assets.json
+      - uses: actions/download-artifact@v5
+        with:
+          name: authorized-nvda-38693407248
+          run-id: 38693407248
+          github-token: ${{ github.token }}
+          path: evidence/artifacts
       - uses: actions/download-artifact@v5
         with:
           name: nvda-free-preflight-38688465193
           run-id: 38688465193
           github-token: ${{ github.token }}
           path: locked-evidence
-      - name: Bind the separately approved request to this run
-        env:
-          REQUEST_SHA: ${{ inputs.request_sha256 }}
-          SNAPSHOT_ASOF: ${{ inputs.analysis_asof }}
-          TARGET_SESSION: ${{ inputs.target_session }}
-          PRICING_SHA: ${{ inputs.pricing_sha256 }}
-          APPROVAL_REF: ${{ inputs.authorization_reference }}
-          SECRET_APPROVAL_REF: ${{ inputs.secret_upload_approval_reference }}
+      - name: Offline tests and immutable saved-response replay
         run: |
-          python - <<'PY'
-          import datetime,json,os,pathlib
-          if os.environ['GITHUB_RUN_ATTEMPT']!='1':raise SystemExit('rerun_forbidden')
-          now=datetime.datetime.now(datetime.timezone.utc)
-          data={'authorize_paid_post':True,'authorization_reference':os.environ['APPROVAL_REF'],'secret_upload_approval_reference':os.environ['SECRET_APPROVAL_REF'],'run_id':os.environ['GITHUB_RUN_ID'],'fixed_commit':'2b896241f69d0177c2b6f298cf69042b8531dd76','target_session':os.environ['TARGET_SESSION'],'request_sha256':os.environ['REQUEST_SHA'],'analysis_asof':os.environ['SNAPSHOT_ASOF'],'pricing_sha256':os.environ['PRICING_SHA'],'reservation_usd':'0.03','expires_at':(now+datetime.timedelta(minutes=15)).isoformat()}
-          pathlib.Path('approved-request.json').write_text(json.dumps(data),encoding='utf-8')
-          PY
-      - name: One authorized native call, no retry
-        env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          LITELLM_LOCAL_MODEL_COST_MAP: 'True'
-          PYTHONIOENCODING: utf-8
-        run: python controller/.github/scripts/nvda_frozen_once.py --source upstream-fixed --bundle locked-evidence/nvda-evidence --out authorized-evidence --execute-authorized --authorization approved-request.json --run-id "$GITHUB_RUN_ID"
-      - name: Block artifact upload if credential is found
-        if: always()
-        id: scan
-        env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-        run: |
-          python - <<'PY'
-          import os,pathlib
-          key=os.environ.get('DEEPSEEK_API_KEY','').encode()
-          root=pathlib.Path('authorized-evidence')
-          if not key or not root.is_dir():raise SystemExit('no_safe_artifact')
-          if any(key in p.read_bytes() for p in root.rglob('*') if p.is_file()):raise SystemExit('credential_scan_failed_no_upload')
-          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as f:f.write('safe=true\n')
-          PY
+          cp -R locked-evidence/nvda-evidence evidence/input-evidence
+          python .github/scripts/phase2g_offline_tests.py 2>&1 | tee acceptance/offline-tests.log
+          python .github/scripts/replay_saved_nvda.py --source . --evidence evidence --out acceptance/replay --rebuild-snapshot
+          python .github/scripts/phase2g_upstream_regression.py 2>&1 | tee acceptance/upstream-tests.log
+      - name: Free Yahoo adapter and public newsroom RSS only
+        run: python .github/scripts/probe_nvda_free_inputs.py --out acceptance/free-inputs
       - uses: actions/upload-artifact@v6
-        if: ${{ always() && steps.scan.outputs.safe == 'true' }}
+        if: always()
         with:
-          name: authorized-nvda-${{ github.run_id }}
-          path: authorized-evidence/
-          retention-days: 7
-
+          name: phase2g-free-acceptance-${{ github.run_id }}
+          path: acceptance/
+          if-no-files-found: error
+          retention-days: 30

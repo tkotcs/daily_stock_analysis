@@ -2147,8 +2147,12 @@ class NotificationService(
         report_language = self._get_report_language(result)
         labels = get_report_labels(report_language)
 
+        currency = snapshot.get("quote_currency")
+        currency_note = f"报价币种：{currency or '未核实'}" if report_language == "zh" else f"Quote currency: {currency or 'unverified'}"
         lines.extend([
             f"### 📈 {labels['market_snapshot_heading']}",
+            "",
+            currency_note,
             "",
             f"| {labels['close_label']} | {labels['prev_close_label']} | {labels['open_label']} | {labels['high_label']} | {labels['low_label']} | {labels['change_pct_label']} | {labels['change_amount_label']} | {labels['amplitude_label']} | {labels['volume_label']} | {labels['amount_label']} |",
             "|------|------|------|------|------|-------|-------|------|--------|--------|",

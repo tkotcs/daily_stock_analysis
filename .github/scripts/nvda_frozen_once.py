@@ -15,6 +15,11 @@ def dispatch_frozen(analyzer,packet,config):
     stream=analyzer._dispatch_litellm_completion(config.litellm_model,kwargs,config=config,use_channel_router=False,router_model_names=set())
     return analyzer._consume_litellm_stream(stream,model=config.litellm_model,usage_model='deepseek-flash',provider='deepseek')
 
+def render_native_report(parsed):
+    """Render locally with the upstream constructor; never dispatch a request."""
+    from src.notification import NotificationService
+    return NotificationService().generate_single_stock_report(parsed)
+
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--execute-authorized',action='store_true');parser.add_argument('--source',required=True);parser.add_argument('--bundle',required=True);parser.add_argument('--authorization',required=True);parser.add_argument('--run-id',required=True);parser.add_argument('--out',required=True)
     args=parser.parse_args()
@@ -66,7 +71,7 @@ def main():
         session.save('NATIVE_ANALYSIS_RESULT.json',parsed.to_dict())
         passed,missing=analyzer._check_content_integrity(parsed,require_phase_decision=True)
         session.save('NATIVE_INTEGRITY_RESULT.json',{'passed':passed,'missing_fields':missing,'repairs_called':False,'parser_success':parsed.success})
-        report=NotificationService(config=config).generate_single_stock_report(parsed)
+        report=render_native_report(parsed)
         (out/'NATIVE_NVDA_REPORT.md').write_text(report.replace(key,'[REDACTED]'),encoding='utf-8')
     except BaseException as exc:failure=type(exc).__name__
     finally:

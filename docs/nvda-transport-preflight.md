@@ -31,3 +31,12 @@ No live-sending Actions job is included. Separate explicit Secret-upload and sin
 After the user approved the exact Phase 2E SHA, the manual workflow is prepared to load the previously captured artifact, not rebuild a prompt or refresh quote/news inputs. `nvda_frozen_once.py` passes the saved packet to the original analyzer dispatch/stream consumer and reuses its native parser and report renderer. The tested OnePostGuard/LiveSession modules are unchanged. The wire hash still must match before any POST. Actual latest completed session and snapshot age are checked without replacing the approved evidence.
 
 The workflow is dispatch-only, owner-only, protected by `nvda-one-call-approval`, and defaults execute_live=false. An actual run must wait for the user's GitHub review; the automation must not approve the environment. The downloaded source artifact is Run 38688465193. The model key is injected only into the send step and the final credential scan; no mail or batch analysis step exists. A failed/unknown send must never be rerun. Frozen replay has separate fake-network tests, including byte-equivalent JSON body identity through original LiteLLM.
+# Phase 2F offline renderer repair
+
+The frozen controller now calls `NotificationService()` through `render_native_report`,
+matching the fixed upstream constructor. No analysis source, request parameters,
+transport guard, historical response or workflow trigger is changed. The original
+paid Run 38693407248 remains a failure after its successful unique POST; it must
+never be rerun to repair rendering. Replay the saved response locally with all
+network and SMTP access denied, keeping derived reports separate from evidence.
+The two constructor contract tests are offline; no new hosted paid run is authorized.

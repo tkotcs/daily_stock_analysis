@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [修复] Resolve quote currency separately from financial-statement currency for native research prompts and market snapshot tables; preserve raw historical model text.
+- [测试] Add a no-secret manual acceptance workflow with full upstream dependencies, offline replay and a read-only Yahoo fundamental probe.
+- [修复] Use the upstream no-argument notification renderer in the independent frozen NVDA test controller; replay saved responses offline without another model request.
 - [测试] Prepare explicitly approved frozen NVDA request execution without rebuilding prompts or refreshing research inputs; require manual environment approval.
 
 - [测试] Add controller-only streaming usage metadata, official terminal-usage fixtures, and a manual hosted preflight with a protected empty approval probe.
