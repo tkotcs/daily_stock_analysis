@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [测试] Add controller-only streaming usage metadata, official terminal-usage fixtures, and a manual hosted preflight with a protected empty approval probe.
+
+- [测试] Prepare default-off single-call NVDA controller with explicit authorization binding, read-only account checks and raw streaming response capture; not deployed.
+
 - [测试] Add manual-only NVDA free preflight with shared sync/async one-POST transport guard and fixed business checkout.
 
 - [修复] Yahoo class-share request symbols use hyphens while canonical codes stay dotted; add manual original-API cold prefill and native CLI/MA60 acceptance.

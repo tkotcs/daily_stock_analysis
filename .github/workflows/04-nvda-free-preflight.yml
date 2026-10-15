@@ -1,6 +1,11 @@
 name: Manual NVDA transport guard preflight
 on:
   workflow_dispatch:
+    inputs:
+      approval_probe:
+        description: 'Only test the environment approval barrier; never a model call'
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -8,6 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   preflight:
+    if: ${{ !inputs.approval_probe }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -26,13 +32,15 @@ jobs:
       - name: Fixed upstream dependencies and inspected SDK version
         run: |
           python -m pip install -r upstream-fixed/requirements.txt
-          python -m pip install litellm==1.105.1 httpx==0.28.1
+          python -m pip install litellm==1.105.1 httpx==0.28.1 tiktoken==0.11.0
       - name: Offline fault injection before actual request construction
         env:
           LITELLM_LOCAL_MODEL_COST_MAP: 'True'
           PYTHONPATH: upstream-fixed
           DSA_FIXED_SOURCE: upstream-fixed
-        run: python controller/.github/scripts/test_deepseek_post_guard.py > guard-tests.log 2>&1
+        run: |
+          python controller/.github/scripts/test_deepseek_post_guard.py > guard-tests.log 2>&1
+          python controller/.github/scripts/test_authorized_once.py > authorized-once-tests.log 2>&1
       - name: Fresh original NVDA prefill and intercepted native request
         env:
           LITELLM_LOCAL_MODEL_COST_MAP: 'True'
@@ -48,5 +56,14 @@ jobs:
           path: |
             nvda-evidence/
             guard-tests.log
+            authorized-once-tests.log
             pricing.html
           retention-days: 7
+  approval-probe:
+    if: ${{ inputs.approval_probe }}
+    environment: nvda-one-call-approval
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: No credentials, model, mail or deployment
+        run: echo 'This approval probe contains no model call and no credential.'
