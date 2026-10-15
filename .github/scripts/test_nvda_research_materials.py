@@ -25,4 +25,12 @@ class Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             m=self.material(pathlib.Path(t));m.news=[{'source':'official','title':'fixture','published_at':'2026-10-14T10:00:00+00:00','fetched_at':'2026-10-15T00:00:00+00:00','url':'https://nvidianews.nvidia.com/fixture'}]
             _,news,notes=m.attach(self.context(),[]);self.assertIn('未提供全文',news);self.assertIn('未配置',notes)
+    def test_native_pack_sees_supplied_news_before_summary(self):
+        from src.services.analysis_context_builder import PipelineAnalysisArtifacts,_build_news_block
+        with tempfile.TemporaryDirectory() as t:
+            m=self.material(pathlib.Path(t));m.news=[{'source':'official','title':'fixture','published_at':'2026-10-14T10:00:00+00:00','fetched_at':'2026-10-15T00:00:00+00:00','url':'https://nvidianews.nvidia.com/fixture'}]
+            a=PipelineAnalysisArtifacts(code='NVDA',stock_name='英伟达',market='us',phase=None,base_context={},enhanced_context=self.context(),realtime_quote=None,trend_result=None,chip_data=None,fundamental_context=None,news_context=None,news_result_count=None,metadata={})
+            prepared,_=m.prepare_artifacts(a,[])
+            self.assertEqual(_build_news_block(prepared).status.value,'available')
+            self.assertIsNone(a.news_context)
 if __name__=='__main__':unittest.main()

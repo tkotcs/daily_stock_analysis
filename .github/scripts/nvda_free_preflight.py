@@ -115,11 +115,16 @@ materials=None
 if args.include_free_research:
     from nvda_research_materials import ResearchMaterials
     materials=ResearchMaterials(C,analysis_time)
+    original_pack_outputs=StockAnalysisPipeline._build_analysis_context_pack_outputs
+    def prepare_pack_outputs(self,artifacts,**kw):
+        prepared,notes=materials.prepare_artifacts(artifacts,trend)
+        summary,overview=original_pack_outputs(self,prepared,**kw)
+        return summary+'\n'+notes,overview
+    StockAnalysisPipeline._build_analysis_context_pack_outputs=prepare_pack_outputs
 def observe_analyze(self,enhanced,*a,**kw):
     if materials:
-        enhanced,news,notes=materials.attach(enhanced,trend)
-        kw['news_context']=news
-        kw['analysis_context_pack_summary']=(kw.get('analysis_context_pack_summary') or '')+'\n'+notes
+        enhanced=materials.prepared_context
+        kw['news_context']=materials.prepared_news
     context.append(enhanced);return original_analyze(self,enhanced,*a,**kw)
 GeminiAnalyzer.analyze=observe_analyze
 original_dispatch=GeminiAnalyzer._dispatch_litellm_completion

@@ -1,6 +1,7 @@
 """Small free-input adapter for manual native request preparation; never calls a model."""
 import copy,json,re,urllib.request,xml.etree.ElementTree as ET,email.utils
 from datetime import datetime,timedelta,timezone
+from dataclasses import replace
 IR='https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/'
 RSS='https://nvidianews.nvidia.com/releases.xml'
 
@@ -43,6 +44,12 @@ class ResearchMaterials:
 
     def save(self):
         (self.out/'RESEARCH_MATERIAL_AUDIT.json').write_text(json.dumps(self.audit,ensure_ascii=False,indent=2),encoding='utf-8')
+
+    def prepare_artifacts(self,artifacts,trend):
+        enhanced,news,notes=self.attach(artifacts.enhanced_context,trend)
+        prepared=replace(artifacts,enhanced_context=enhanced,fundamental_context=enhanced.get('fundamental_context'),news_context=news,news_result_count=len(self.news))
+        self.prepared_context=enhanced;self.prepared_news=news
+        return prepared,notes
 
     def attach(self,enhanced,trend):
         result=copy.deepcopy(enhanced);raw=result.get('fundamental_context') or {}
