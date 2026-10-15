@@ -1,63 +1,52 @@
-name: Manual free NVDA integration acceptance
+name: Manual free NVDA final request capture
 on:
   workflow_dispatch:
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: nvda-free-integration
+  group: nvda-final-free-capture
   cancel-in-progress: false
 jobs:
-  offline-and-free-data:
+  prepare-only:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
       LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+      CUSTOM_TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+      TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
       PYTHONDONTWRITEBYTECODE: '1'
       PYTHONIOENCODING: utf-8
-      AGENT_MODE: 'false'
-      SCHEDULE_ENABLED: 'false'
-      SINGLE_STOCK_NOTIFY: 'false'
-      TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
-      CUSTOM_TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
     steps:
       - uses: actions/checkout@v5
         with:
+          path: controller
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        with:
+          ref: 578fc55364bf32b7299e84eea7a630eb7e93e973
+          path: upstream-fixed
           persist-credentials: false
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-      - name: Full upstream dependencies, no credentials
+      - name: Full dependencies and public tokenizer asset
         run: |
-          python -m pip install -r requirements.txt pytest
+          python -m pip install -r upstream-fixed/requirements.txt pytest
           python -m pip check
           mkdir -p acceptance
           python -m pip freeze > acceptance/dependencies.txt
-          python .github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR" > acceptance/tokenizer-assets.json
-      - uses: actions/download-artifact@v5
-        with:
-          name: authorized-nvda-38693407248
-          run-id: 38693407248
-          github-token: ${{ github.token }}
-          path: evidence/artifacts
-      - uses: actions/download-artifact@v5
-        with:
-          name: nvda-free-preflight-38688465193
-          run-id: 38688465193
-          github-token: ${{ github.token }}
-          path: locked-evidence
-      - name: Offline tests and immutable saved-response replay
+          python controller/.github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR" > acceptance/tokenizer-assets.json
+      - name: Offline one-POST, redaction and native compatibility tests
         run: |
-          cp -R locked-evidence/nvda-evidence evidence/input-evidence
-          python .github/scripts/phase2g_offline_tests.py 2>&1 | tee acceptance/offline-tests.log
-          python .github/scripts/replay_saved_nvda.py --source . --evidence evidence --out acceptance/replay --rebuild-snapshot
-          python .github/scripts/phase2g_upstream_regression.py 2>&1 | tee acceptance/upstream-tests.log
-      - name: Free Yahoo adapter and public newsroom RSS only
-        run: python .github/scripts/probe_nvda_free_inputs.py --out acceptance/free-inputs
+          python controller/.github/scripts/phase2g_offline_tests.py 2>&1 | tee acceptance/offline-tests.log
+          python controller/.github/scripts/phase2g_upstream_regression.py 2>&1 | tee acceptance/upstream-tests.log
+      - name: Current NVDA data and native request intercepted before POST
+        run: python controller/.github/scripts/nvda_free_preflight.py --source upstream-fixed --out acceptance/nvda-inputs --include-free-research
       - uses: actions/upload-artifact@v6
         if: always()
         with:
-          name: phase2g-free-acceptance-${{ github.run_id }}
+          name: phase2h-request-${{ github.run_id }}
           path: acceptance/
-          if-no-files-found: error
           retention-days: 30
+          if-no-files-found: error

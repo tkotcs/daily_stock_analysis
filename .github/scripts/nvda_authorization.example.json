@@ -3,7 +3,7 @@
   "authorization_reference": "PENDING_SEPARATE_USER_APPROVAL",
   "secret_upload_approval_reference": "PENDING_SEPARATE_USER_APPROVAL",
   "run_id": "PENDING_ACTUAL_GITHUB_RUN_ID",
-  "fixed_commit": "2b896241f69d0177c2b6f298cf69042b8531dd76",
+  "fixed_commit": "578fc55364bf32b7299e84eea7a630eb7e93e973",
   "target_session": "2026-10-14",
   "request_sha256": "REFRESH_AFTER_HOSTED_INCLUDE_USAGE_CAPTURE",
   "analysis_asof": "REFRESH_FROM_CAPTURE_SUMMARY",

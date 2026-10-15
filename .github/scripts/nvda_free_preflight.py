@@ -5,7 +5,10 @@ from urllib.parse import urlsplit
 parser=argparse.ArgumentParser();parser.add_argument('--source',required=True);parser.add_argument('--out',required=True)
 parser.add_argument('--execute-authorized',action='store_true',help='Default OFF; requires separate Secret and one-call approvals')
 parser.add_argument('--authorization',type=pathlib.Path);parser.add_argument('--run-id')
-parser.add_argument('--analysis-asof',help='Explicit frozen analysis snapshot timestamp, not the system clock');args=parser.parse_args()
+parser.add_argument('--analysis-asof',help='Explicit frozen analysis snapshot timestamp, not the system clock')
+parser.add_argument('--include-free-research',action='store_true',help='Free capture only: Yahoo financials and official RSS/IR sources')
+args=parser.parse_args()
+if args.execute_authorized and args.include_free_research:parser.error('research preparation cannot send; use separately approved frozen entry')
 if not args.execute_authorized and (args.authorization or args.run_id):parser.error('authorization options require explicit execute flag')
 live=None;safe_log=None;real_key=None
 if args.execute_authorized:
@@ -14,7 +17,7 @@ if args.execute_authorized:
     if not real_key:raise SystemExit('missing_key_no_request')
 G=pathlib.Path(args.source).resolve();C=pathlib.Path(args.out).resolve();C.mkdir(exist_ok=False)
 if os.getenv('GITHUB_RUN_ATTEMPT','1')!='1':raise SystemExit('manual rerun forbidden')
-FIXED='2b896241f69d0177c2b6f298cf69042b8531dd76'
+from authorized_once import FIXED
 assert subprocess.check_output(['git','rev-parse','HEAD'],cwd=G,encoding='utf-8').strip()==FIXED
 if args.execute_authorized:
     from authorized_once import LiveSession,SafeWriter
@@ -24,13 +27,14 @@ if args.execute_authorized:
     sys.stdout=safe_log;sys.stderr=safe_log
     import atexit
     atexit.register(safe_log.close)
-sys.path[:0]=[str(G),str(G/'.github/scripts')]
+sys.path.insert(0,str(G))
 # Never pass the actual key to the model SDK, or serialize inherited environment.
 for name in list(os.environ):
     if name.endswith(('_API_KEY','_API_KEYS','_PASSWORD','_ACCESS_TOKEN','_APP_SECRET','_WEBHOOK_URL')) or name in ('TUSHARE_TOKEN','MODELFLARE_KEY','AIHUBMIX_KEY','TELEGRAM_BOT_TOKEN','GH_TOKEN','GITHUB_TOKEN','LITELLM_CONFIG','LLM_CHANNELS','DEEPSEEK_API_BASE','DEEPSEEK_BASE_URL','OPENAI_BASE_URL','OPENAI_API_BASE') or name.startswith('LLM_'):
         os.environ.pop(name,None)
 os.environ.update(DEEPSEEK_API_KEY='preflight-placeholder-never-transmitted',LITELLM_MODEL='deepseek/deepseek-flash',LITELLM_FALLBACK_MODELS='',GENERATION_BACKEND='litellm',GENERATION_FALLBACK_BACKEND='litellm',DATABASE_PATH=str(C/'fresh-upstream.sqlite'),LOG_DIR=str(C/'logs'),REPORTS_DIR=str(C/'reports'),SCHEDULE_ENABLED='false',MARKET_REVIEW_ENABLED='false',DAILY_MARKET_CONTEXT_ENABLED='false',AGENT_MODE='false',AGENT_SKILLS='',SINGLE_STOCK_NOTIFY='false',AUTO_BACKTEST_ENABLED='false',SEARXNG_PUBLIC_INSTANCES_ENABLED='false',MAX_WORKERS='1',ENABLE_CHIP_DISTRIBUTION='false',ENABLE_REALTIME_QUOTE='false',ENABLE_FUNDAMENTAL_PIPELINE='false',REPORT_INTEGRITY_RETRY='0',LITELLM_LOCAL_MODEL_COST_MAP='True',REPORT_LANGUAGE='zh')
 os.environ['DEEPSEEK_API_BASE']='https://api.deepseek.com'
+if args.include_free_research:os.environ['ENABLE_FUNDAMENTAL_PIPELINE']='true';os.environ['FUNDAMENTAL_RETRY_MAX']='0'
 if live:os.environ['DEEPSEEK_API_KEY']=real_key
 assert not (G/'.env').exists()
 from free_market_validation import Limits,SafetyStop
@@ -107,7 +111,15 @@ def observe_trend(self,df,code,*a,**kw):
     return result
 StockTrendAnalyzer.analyze=observe_trend
 original_analyze=GeminiAnalyzer.analyze
+materials=None
+if args.include_free_research:
+    from nvda_research_materials import ResearchMaterials
+    materials=ResearchMaterials(C,analysis_time)
 def observe_analyze(self,enhanced,*a,**kw):
+    if materials:
+        enhanced,news,notes=materials.attach(enhanced,trend)
+        kw['news_context']=news
+        kw['analysis_context_pack_summary']=(kw.get('analysis_context_pack_summary') or '')+'\n'+notes
     context.append(enhanced);return original_analyze(self,enhanced,*a,**kw)
 GeminiAnalyzer.analyze=observe_analyze
 original_dispatch=GeminiAnalyzer._dispatch_litellm_completion
@@ -142,6 +154,11 @@ with contextlib.closing(sqlite3.connect(C/'fresh-upstream.sqlite')) as con:usage
 report={'fixed_commit':FIXED,'captured_at':datetime.now(timezone.utc).isoformat(),'outcome':outcome,'error':error,'actual_model':config.litellm_model,'router_present':pipeline.analyzer._router is not None,'fallback_models':config.litellm_fallback_models,'report_integrity_retry':config.report_integrity_retry,'source':origin,'live_source_error':fresh_error,'target_session':target,'database_path':str(db._engine.url.database),'prefill_rows':len(frame),'database_reads':reads,'technical_checks':trend,'logical_dispatch_attempts_intercepted':len(logical),'SDK_wire_POSTs_intercepted':len(wire),'paid_POSTs_transmitted':0,'notifications_transmitted':0,'llm_usage_rows':usage,'versions':versions,'request_sha256':hashlib.sha256(canonical).hexdigest(),'messages_utf8_bytes':byte_size,'messages_characters':chars,'cl100k_input_estimate_not_supplier_usage':estimated,'token_estimate_error':token_error,'conservative_byte_based_input_allowance_not_formal_guarantee':byte_size+1024,'output_limit':packet.get('max_tokens'),'wire_endpoint':wire[0]['url'] if wire else None,'credentials_used_for_native_capture':'placeholder_only; real key used in separate official free GETs','live_HTTP_requests':len(limits.http),'guard_attempts':guard.attempts,'guard_blocked':guard.blocked,'guard_allowed_network_posts':guard.allowed,'fundamentals_empty':True,'news_empty':True,'run_id':os.getenv('GITHUB_RUN_ID')}
 report['credentials_used_for_native_capture']='actual_key_in_memory_only' if live else 'placeholder_only_no_account_check_in_this_process'
 report['actual_execution_started_at']=now.isoformat()
+report['financials_and_official_RSS_preparation']=bool(materials)
+if materials:
+    report['fundamentals_empty']=not bool(materials.audit.get('provided_fields'))
+    report['news_empty']=not bool(materials.audit.get('selected_news'))
+    report['research_material_audit']=materials.audit
 report['analysis_snapshot_asof']=analysis_time.isoformat()
 report['forbidden_call_attempts']=limits.calls
 if live:
