@@ -1,8 +1,10 @@
 """Manual native DSA integration: fresh free Yahoo data, synthetic model only."""
-import argparse,datetime as dt,hashlib,html,json,math,os,pathlib,smtplib,socket,subprocess,sys,time
+import argparse,datetime as dt,hashlib,html,json,math,os,pathlib,re,smtplib,socket,subprocess,sys,time
 from urllib.parse import urlsplit
 
 SYMBOLS=('NVDA','MU','QQQ')
+sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
+from free_market_validation import WATCHLIST,ETFS,NAMES
 NOTICE='模拟模型响应，仅验证流水线；行情为本次注明的数据来源，不是已通过验收的真实AI研报。'
 
 
@@ -119,17 +121,20 @@ def run_symbol(source,out,code,offline=None,inject=False):
         charts=[]
         for record in trace:
             if record.get('response_file'):charts.extend(json.loads((out/record['response_file']).read_text('utf-8')).get('chart',{}).get('result') or [])
-        meta=next(c['meta'] for c in reversed(charts) if c['meta'].get('symbol')==code)
+        from data_provider import YfinanceFetcher
+        alias=YfinanceFetcher()._convert_stock_code(code)
+        meta=next(c['meta'] for c in reversed(charts) if c['meta'].get('symbol')==alias)
         assert meta['currency']=='USD' and meta['exchangeTimezoneName']=='America/New_York'
-        assert meta['instrumentType']==('ETF' if code=='QQQ' else 'EQUITY')
+        assert re.search(NAMES[code],meta.get('longName') or meta.get('shortName') or '',re.I),'security_name_mismatch'
+        assert meta['instrumentType']==('ETF' if code in ETFS else 'EQUITY')
         check=[{'date':str(r['date'])[:10],**{k:float(r[k]) for k in ('open','high','low','close','volume')}} for _,r in frame.iterrows()]
-        matched=match_source(check,charts,code);assert matched==len(frame)
-        save(out/'PRICE_AUDIT.json',{'metadata':meta,'target':target,'matched_OHLCV_rows':matched,'fetched_at':now.isoformat(),'adjustment':'native yfinance auto_adjust=True','cache_restored':False})
+        matched=match_source(check,charts,alias);assert matched==len(frame)
+        save(out/'PRICE_AUDIT.json',{'canonical_symbol':code,'provider_symbol':alias,'metadata':meta,'target':target,'matched_OHLCV_rows':matched,'fetched_at':now.isoformat(),'adjustment':'native yfinance auto_adjust=True','cache_restored':False,'identity_scope':'Yahoo metadata and source OHLCV; not independent legal issuer verification','ADR_ratio':None if code=='SKHY' else 'not_applicable_or_not_checked','identity_limit':'ADR conversion ratio unverified; USD quote never mixed with KRW financial figures' if code=='SKHY' else 'provider identity does not independently prove SpaceX issuer identity' if code=='SPCX' else None})
     # Use the native pipeline's same-database path; no model receives stale caches.
     if offline:pipeline.fetch_and_save_stock_data=lambda *a,**k:(True,None)
-    manager._cache_stock_name(code,{'NVDA':'NVIDIA','MU':'Micron Technology','QQQ':'Invesco QQQ Trust'}[code])
-    if code=='QQQ' or offline:
-        manager.get_fundamental_context=lambda *a,**k:manager.build_not_supported_fundamental_context(code,'ETF企业财务不适用' if code=='QQQ' else '离线夹具不请求财务；字段缺失')
+    manager._cache_stock_name(code,(meta.get('longName') or meta.get('shortName')) if not offline else code)
+    if code in ETFS or offline:
+        manager.get_fundamental_context=lambda *a,**k:manager.build_not_supported_fundamental_context(code,'ETF企业财务不适用' if code in ETFS else '离线夹具不请求财务；字段缺失')
     else:
         # Reuse the native Yahoo adapter and native block format; no realtime
         # valuation providers or paid search are needed for this narrow MVP.
@@ -188,9 +193,9 @@ def run_symbol(source,out,code,offline=None,inject=False):
             direct=_latest_value(row);value=report.get(name)
             valid=row.dropna() if row is not None else None
             period=str(valid.index[0]) if valid is not None and not valid.empty else None
-            mode='not_applicable_ETF' if code=='QQQ' else 'missing' if value is None else 'quarterly_Yahoo_not_officially_verified' if direct is not None else 'estimated_revenue_times_margin' if name=='net_profit_parent' else 'TTM_or_unknown_info_fallback'
+            mode='not_applicable_ETF' if code in ETFS else 'missing' if value is None else 'quarterly_Yahoo_not_officially_verified' if direct is not None else 'estimated_revenue_times_margin' if name=='net_profit_parent' else 'TTM_or_unknown_info_fallback'
             fields[name]={'value':value,'classification':mode,'direct_statement_value':direct,'actual_series_period':period,'adapter_report_date':report.get('report_date'),'currency':report.get('currency'),'source_url':f'https://finance.yahoo.com/quote/{code}/'+('cash-flow/' if table=='quarterly_cashflow' else 'financials/'),'publication_timestamp':None}
-        save(out/'FINANCIAL_AUDIT.json',{'fetched_at':dt.datetime.now(dt.timezone.utc).isoformat(),'source':'Yahoo native adapter','official_GAAP_verified':False,'publication_time_verified':False,'enterprise_applicable':code!='QQQ','fields':fields,'raw_fields':raw_fin,'notes':'季度列见CSV；info回退可能TTM，净利润回退可能推算；不能作为官方当期数字','context':contexts[-1].get('fundamental_context') if contexts else None})
+        save(out/'FINANCIAL_AUDIT.json',{'fetched_at':dt.datetime.now(dt.timezone.utc).isoformat(),'source':'Yahoo native adapter','official_GAAP_verified':False,'publication_time_verified':False,'enterprise_applicable':code not in ETFS,'fields':fields,'raw_fields':raw_fin,'notes':'季度列见CSV；info回退可能TTM，净利润回退可能推算；不能作为官方当期数字','context':contexts[-1].get('fundamental_context') if contexts else None})
     assert result and result.success,'native_pipeline_or_parser_failed'
     valid,missing=analyzer._check_content_integrity(result,require_phase_decision=True)
     assert valid,str(missing)
@@ -211,7 +216,8 @@ def run_symbol(source,out,code,offline=None,inject=False):
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--source',required=True,type=pathlib.Path);p.add_argument('--out',required=True,type=pathlib.Path)
-    p.add_argument('--child',choices=SYMBOLS);p.add_argument('--offline-data',type=pathlib.Path);p.add_argument('--inject-failure',choices=SYMBOLS)
+    p.add_argument('--child',choices=WATCHLIST);p.add_argument('--offline-data',type=pathlib.Path);p.add_argument('--inject-failure',choices=WATCHLIST)
+    p.add_argument('--universe',choices=('three','watchlist35'),default='three');p.add_argument('--only',help='Free recovery subset; use a NEW output directory')
     a=p.parse_args();source=a.source.resolve();out=a.out.resolve();offline=a.offline_data.resolve() if a.offline_data else None
     if a.child:
         status=None
@@ -220,8 +226,12 @@ def main():
             out.mkdir(parents=True,exist_ok=True);status={'symbol':a.child,'status':'failed','error':type(e).__name__+':'+str(e),'real_POSTs':0}
             import traceback;(out/'ERROR.txt').write_text(traceback.format_exc(),encoding='utf-8')
         save(out/'STATUS.json',status);return
-    out.mkdir(parents=True,exist_ok=False);rows=[]
-    for code in SYMBOLS:
+    out.mkdir(parents=True,exist_ok=False);rows=[];rate_limited=False
+    symbols=a.only.split(',') if a.only else WATCHLIST if a.universe=='watchlist35' else SYMBOLS
+    assert len(symbols)==len(set(symbols)) and all(c in WATCHLIST for c in symbols)
+    for code in symbols:
+        if rate_limited:
+            (out/code).mkdir();row={'symbol':code,'status':'failed','error':'Yahoo_429_batch_circuit_open_no_more_requests','real_POSTs':0};save(out/code/'STATUS.json',row);rows.append(row);continue
         env={k:v for k,v in os.environ.items() if not any(x in k for x in ('API_KEY','PASSWORD','ACCESS_TOKEN','WEBHOOK')) and k not in ('GH_TOKEN','GITHUB_TOKEN','PYTHONPATH')}
         cmd=[sys.executable,'-I',str(pathlib.Path(__file__).resolve()),'--source',str(source),'--out',str(out/code),'--child',code]
         if offline:cmd+=['--offline-data',str(offline)]
@@ -232,8 +242,10 @@ def main():
         except Exception as e:
             (out/code).mkdir(exist_ok=True);row={'symbol':code,'status':'failed','error':type(e).__name__,'real_POSTs':0};save(out/code/'STATUS.json',row)
         rows.append(row)
+        trace=out/code/'HTTP_TRACE.json'
+        if trace.exists():rate_limited=any(r.get('status')==429 for r in json.loads(trace.read_text('utf-8')))
     save(out/'RESULTS.json',{'run_id':os.getenv('GITHUB_RUN_ID'),'commit':os.getenv('GITHUB_SHA'),'mode':'OFFLINE_saved' if offline else 'LIVE_FREE_DATA_MOCK_MODEL','symbols':rows,'real_POSTs':0,'new_model_cost_USD':'0','mail_sent':0})
-    text='<h1>DSA 三标的MVP</h1><p>'+NOTICE+'</p><ul>'
+    text=f'<h1>DSA {len(rows)}标的MVP</h1><p>'+NOTICE+'</p><ul>'
     for row in rows:
         code=row['symbol'];link=f'<a href="{code}/REPORT.html">{code}</a>' if row['status'].startswith('success') else code
         text+='<li>'+link+' '+html.escape(str(row.get('session',''))+' '+row['status']+' '+row.get('error',''))+'</li>'

@@ -6,8 +6,13 @@ on:
       execute_live:
         type: boolean
         default: false
+      mvp_universe:
+        description: 'Free simulation universe'
+        type: choice
+        options: [three, watchlist35]
+        default: three
       mvp_three:
-        description: 'Free latest data plus simulated model for NVDA MU QQQ; never live API'
+        description: 'Free native MVP simulation; never live API'
         type: boolean
         default: false
       allow_peak_test:
@@ -90,7 +95,7 @@ jobs:
   mvp:
     if: ${{ !inputs.execute_live && inputs.mvp_three && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     env:
       PYTHONIOENCODING: utf-8
       PYTHONDONTWRITEBYTECODE: '1'
@@ -115,15 +120,20 @@ jobs:
         run: |
           python -m pip install -r upstream-fixed/requirements.txt litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6 markdown2
           python preparation/.github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR"
-      - name: Three independent native pipelines, fresh free data and fake model only
+      - name: Independent native pipelines, fresh free data and fake model only
+        env:
+          MVP_UNIVERSE: ${{ inputs.mvp_universe }}
         run: |
           test "$GITHUB_RUN_ATTEMPT" = 1
           test "$(git -C upstream-fixed rev-parse HEAD)" = a1daaa302b3a72fb5694c9872ceecf2c4dc0b6e4
-          python preparation/.github/scripts/mvp_three.py --source upstream-fixed --out mvp-output
+          python preparation/.github/scripts/mvp_three.py --source upstream-fixed --out mvp-output --universe "$MVP_UNIVERSE"
+      - name: Freeze three real-analysis candidates only, no authorization or POST
+        if: always()
+        run: python preparation/.github/scripts/mvp_request_set.py --source upstream-fixed --data mvp-output --out mvp-candidates
       - uses: actions/upload-artifact@v6
         if: always()
         with:
-          name: mvp-three-free-${{ github.run_id }}
+          name: mvp-free-${{ github.run_id }}
           retention-days: 14
           path: |
             mvp-output/**/*.json
@@ -132,12 +142,15 @@ jobs:
             mvp-output/**/*.html
             mvp-output/**/*.txt
             mvp-output/**/*.log
+            mvp-candidates/
       - name: State success independently of preserved failure artifacts
+        env:
+          MVP_UNIVERSE: ${{ inputs.mvp_universe }}
         run: |
           python - <<'PY'
-          import json,pathlib
+          import json,pathlib,os
           rows=json.loads(pathlib.Path('mvp-output/RESULTS.json').read_text())['symbols']
-          assert len(rows)==3 and all(x['status']=='success_simulated_model' for x in rows), 'Partial failure: inspect per-symbol evidence; do not retry automatically'
+          assert len(rows)==(35 if os.environ['MVP_UNIVERSE']=='watchlist35' else 3) and all(x['status']=='success_simulated_model' for x in rows), 'Partial failure: inspect per-symbol evidence; do not retry automatically'
           PY
   once:
     if: ${{ inputs.execute_live && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}

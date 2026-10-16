@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [测试] Reuse the existing 35-symbol watchlist for free native MVP reports, ETF/ADR identity notes, partial-failure isolation and fresh three-request candidate freezing without paid execution.
+
 - [测试] Add a manual three-symbol MVP using native DSA pipelines, fresh Yahoo data and clearly labeled simulated SDK responses; preserve per-symbol reports and failures without model credentials or notifications.
 
 - [修复] Register the fixed native source before live-session material checks; cover actual controller startup in isolated processes with simulated success and sync/async failures, without model calls.
