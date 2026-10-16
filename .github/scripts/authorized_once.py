@@ -134,7 +134,10 @@ class LiveSession:
         from src.core.trading_calendar import get_effective_trading_date,_XCALS_AVAILABLE
         if not _XCALS_AVAILABLE or get_effective_trading_date('us',current_time=now).isoformat()!='2026-10-15':raise GuardStop('latest_completed_session_changed')
         # Conservative off-peak rule: block weekday peak windows even on holidays.
-        if now.weekday()<5 and (1<=now.hour<4 or 6<=now.hour<10):raise GuardStop('peak_window_no_POST')
+        # Test-only opt-in; production/default profiles keep the off-peak rule.
+        allow_peak_test=(self.auth.get('allow_peak_test') is True and self.reviewed_16k
+                         and 'Phase2U' in str(self.auth.get('authorization_reference','')))
+        if now.weekday()<5 and (1<=now.hour<4 or 6<=now.hour<10) and not allow_peak_test:raise GuardStop('peak_window_no_POST')
     def on_error(self,category):
         self.stream_error=category;self.finish();raise GuardStop('POST_result_unknown_do_not_retry')
     def on_response(self,response,is_async):

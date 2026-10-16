@@ -111,6 +111,27 @@ def test_weekday_peak_rejected(controlled):
     with pytest.raises(GuardStop,match='peak_window_no_POST'):session(controlled)
 
 
+def test_phase2u_explicit_peak_test_allowed(controlled):
+    Clock.current=datetime(2026,10,16,7,tzinfo=timezone.utc)
+    controlled.auth.update(allow_peak_test=True,authorization_reference='Phase2U single test '+ao.REVIEWED_16K_SHA,
+                           expires_at='2026-10-16T07:05:00+00:00')
+    s=session(controlled);s.approve(BODY)
+    assert len(controlled.calls)==3 and s.reserve==__import__('decimal').Decimal('.03')
+
+
+@pytest.mark.parametrize('value,reference',[(False,'Phase2U'),('true','Phase2U'),(True,'Phase2P')])
+def test_peak_opt_in_is_strict_and_phase_scoped(controlled,value,reference):
+    Clock.current=datetime(2026,10,16,7,tzinfo=timezone.utc)
+    controlled.auth.update(allow_peak_test=value,authorization_reference=reference+' '+ao.REVIEWED_16K_SHA)
+    with pytest.raises(GuardStop,match='peak_window_no_POST'):session(controlled)
+
+
+def test_peak_opt_in_does_not_override_material_expiry(controlled):
+    controlled.auth.update(allow_peak_test=True,authorization_reference='Phase2U '+ao.REVIEWED_16K_SHA)
+    s=session(controlled);Clock.current=datetime(2026,10,16,20,tzinfo=timezone.utc)
+    with pytest.raises(GuardStop,match='material_EXPIRED_no_POST'):s.check_material()
+
+
 def test_expired_during_free_get_never_sends(controlled):
     def late_get(url,key=None):
         data=controlled.get(url,key)
