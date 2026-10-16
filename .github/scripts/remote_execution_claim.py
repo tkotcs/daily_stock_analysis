@@ -71,7 +71,7 @@ class RemoteExecutionClaim:
                 # Require the server's explicit decision for THIS token, never infer it.
                 or rule.get('current_user_can_bypass') != 'never'
                 or rule.get('bypass_actors', []) != [] or condition.get('exclude') != []
-                or 'refs/tags/' + self.namespace + '/**' not in condition.get('include', [])
+                or not {'refs/tags/' + self.namespace + '/' + kind + '/*' for kind in ('batch', 'request')}.issubset(set(condition.get('include', [])))
                 or not {'update', 'deletion'}.issubset({r['type'] for r in rule.get('rules', [])})):
             raise GuardStop('remote_claim_update_delete_protection_missing')
 

@@ -16,7 +16,7 @@ class DatabaseAPI:
         if path=='rulesets':return [{'id':1,'name':'dsa-mvp-execution-claims'}]
         if path=='rulesets/1':
             if self.fail=='protection_missing':return {}
-            return {'enforcement':'active','target':'tag','current_user_can_bypass':'never','bypass_actors':[], 'conditions':{'ref_name':{'exclude':[],'include':['refs/tags/dsa-mvp-consumed-v1/**','refs/tags/dsa-mvp-claim-test-v1/**']}},'rules':[{'type':'update'},{'type':'deletion'}]}
+            return {'enforcement':'active','target':'tag','current_user_can_bypass':'never','bypass_actors':[], 'conditions':{'ref_name':{'exclude':[],'include':['refs/tags/'+n+'/'+kind+'/*' for n in ('dsa-mvp-consumed-v1','dsa-mvp-claim-test-v1') for kind in ('batch','request')]}},'rules':[{'type':'update'},{'type':'deletion'}]}
         with closing(sqlite3.connect(self.path,timeout=10)) as db, db:
             if method=='POST' and path=='tags':
                 sha=hashlib.sha1(json.dumps(value,sort_keys=True).encode()).hexdigest();tag={**value,'sha':sha,'object':{'sha':value['object'],'type':'commit'}}
@@ -145,6 +145,13 @@ class ClaimTests(unittest.TestCase):
                 if path=='rulesets/1':result['current_user_can_bypass']=decision
                 return result
             with self.assertRaises(GuardStop):RemoteExecutionClaim(unsafe,BATCH,'1',COMMIT).reserve(MEMBERS)
+    def test_recursive_pattern_does_not_substitute_exact_claim_patterns(self):
+        base=self.api
+        def wrong(method,path,value=None):
+            result=base(method,path,value)
+            if path=='rulesets/1':result['conditions']['ref_name']['include']=['refs/tags/dsa-mvp-consumed-v1/**']
+            return result
+        with self.assertRaises(GuardStop):RemoteExecutionClaim(wrong,BATCH,'1',COMMIT).reserve(MEMBERS)
     def test_remote_API_timeout_is_not_retried_and_no_secret_in_error(self):
         from unittest.mock import Mock
         api=GitHubAPI('owner/repository','do-not-log-token')
@@ -180,8 +187,9 @@ def github_smoke(out):
         try:
             with urllib.request.build_opener(NoRedirect).open(req,timeout=20) as response:status=response.status
         except urllib.error.HTTPError as error:status=error.code
-        assert status in (403,422),'test marker update/delete protection not enforced'
         negative.append({'method':method,'HTTP':status,'namespace':'FREE_TEST_ONLY'})
+        (out/'IMMUTABILITY_CHECK.json').write_text(json.dumps(negative,indent=2),'utf-8')
+        assert status in (403,422),f'test marker protection not enforced HTTP={status}'
     (out/'IMMUTABILITY_CHECK.json').write_text(json.dumps(negative,indent=2),'utf-8')
     worker(None,out/'fresh-replay.json',os.environ['GITHUB_RUN_ID']+'3',batch,os.environ['GITHUB_SHA'],github=True)
     assert json.loads((out/'fresh-replay.json').read_text())['model_POSTs']==0
