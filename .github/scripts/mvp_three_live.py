@@ -8,6 +8,7 @@ sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
 from authorized_once import LiveSession,SafeWriter,canonical_sha,free_get
 from deepseek_post_guard import OnePostGuard,GuardStop,ENDPOINT
 from nvda_frozen_once import dispatch_frozen,render_native_report
+from remote_execution_claim import GitHubAPI,RemoteExecutionClaim
 
 SYMBOLS=('NVDA','MU','QQQ');BUSINESS='a1daaa302b3a72fb5694c9872ceecf2c4dc0b6e4'
 
@@ -42,12 +43,22 @@ def main():
     if subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True).strip()!=BUSINESS or (source/'.env').exists():raise GuardStop('business_or_env_mismatch')
     sys.path.insert(0,str(source))  # Before LiveSession calendar/material checks.
     lock,packets,contexts=load_set(bundle,a.batch_sha)
+    claim=None
     if a.execute_authorized:
         if os.getenv('GITHUB_ACTIONS')!='true' or os.getenv('GITHUB_RUN_ATTEMPT')!='1' or not a.authorization:raise GuardStop('protected_first_manual_run_required')
         approval=json.loads(a.authorization.read_text('utf-8'))
         if approval.get('authorize_paid_posts') is not True or approval.get('batch_sha256')!=a.batch_sha or approval.get('run_id')!=os.getenv('GITHUB_RUN_ID') or approval.get('max_total_POSTs')!=3 or approval.get('reservation_USD')!='0.09' or a.batch_sha not in approval.get('authorization_reference',''):raise GuardStop('new_explicit_batch_authorization_required')
         key=os.getenv('DEEPSEEK_API_KEY','').strip()
         if not key:raise GuardStop('missing_key_no_POST')
+        claim=RemoteExecutionClaim(GitHubAPI(os.getenv('GITHUB_REPOSITORY',''),os.getenv('GITHUB_TOKEN','')),
+                                   a.batch_sha,approval['run_id'],os.getenv('GITHUB_SHA',''))
+        # Validate expiry/calendar BEFORE consuming remote reservations.
+        now=dt.datetime.now(dt.timezone.utc)
+        from src.core.trading_calendar import get_effective_trading_date,_XCALS_AVAILABLE
+        if not _XCALS_AVAILABLE:raise GuardStop('calendar_unavailable_no_claim')
+        for member in lock['members']:
+            if now>=dt.datetime.fromisoformat(member['material_expires_at']) or get_effective_trading_date('us',current_time=now).isoformat()!=member['target_session']:
+                raise GuardStop('material_EXPIRED_no_claim_no_POST')
     else:
         approval={'run_id':'OFFLINE-MVP','authorization_reference':'OFFLINE ONLY '+a.batch_sha,'secret_upload_approval_reference':'OFFLINE placeholder'};key='offline-three-placeholder'
     for name in list(os.environ):
@@ -55,6 +66,14 @@ def main():
             os.environ.pop(name,None)
     os.environ.update(DEEPSEEK_API_BASE='https://api.deepseek.com',LITELLM_LOCAL_MODEL_COST_MAP='True',DEEPSEEK_API_KEY=key)
     out.mkdir(parents=True,exist_ok=False);rows=[];total=0
+    if claim:
+        try:
+            records=claim.reserve(lock['members'])
+            (out/'REMOTE_CLAIM.json').write_text(json.dumps(records,indent=2),encoding='utf-8')
+        except GuardStop:
+            (out/'CLAIM_BLOCKED.json').write_text(json.dumps({'reason':'remote_reservation_failed_or_unknown_no_retry',
+                'actual_paid_POSTs':0,'partial_reservations_never_released':True}),encoding='utf-8')
+            raise
     os.environ.update(DATABASE_PATH=str(out/'native.sqlite'),LOG_DIR=str(out/'logs'),REPORTS_DIR=str(out/'reports'),
                       SCHEDULE_ENABLED='false',MARKET_REVIEW_ENABLED='false',DAILY_MARKET_CONTEXT_ENABLED='false',
                       AGENT_MODE='false',SINGLE_STOCK_NOTIFY='false',SEARXNG_PUBLIC_INSTANCES_ENABLED='false')
@@ -100,7 +119,12 @@ def main():
                       'material_expires_at':member['material_expires_at'],'expires_at':expiry.isoformat(),'pricing_sha256':lock['pricing_sha256'],'reservation_usd':'.03','allow_peak_test':True}
                 session=LiveSession(dest,auth,key,approval['run_id'],get=get)
                 session.save('AUTHORIZATION_USED.json',auth)
-                guard=OnePostGuard(preflight=False,before_send=session.approve,on_response=session.on_response,on_error=session.on_error);guard.install()
+                def approve(body):
+                    session.approve(body)
+                    if claim:claim.before_send(code,canonical_sha(body))
+                    session.check_material()
+                    if dt.datetime.now(dt.timezone.utc)>=expiry:raise GuardStop('authorization_expired_during_remote_check')
+                guard=OnePostGuard(preflight=False,before_send=approve,on_response=session.on_response,on_error=session.on_error);guard.install()
                 text,usage=dispatch_frozen(analyzer,packets[code],config)
                 session.finish();response=json.loads((dest/'RESPONSE_RESULT.json').read_text('utf-8'))
                 if response['result_unknown'] or response['truncated'] or response['finish_reason']!='stop':raise GuardStop('response_unknown_or_truncated_do_not_retry')
