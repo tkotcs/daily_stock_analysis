@@ -1,4 +1,4 @@
-name: Manual authorized frozen NVDA Phase 2N one POST
+name: Manual authorized frozen NVDA Phase 2S 16384 one POST
 on:
   workflow_dispatch:
     inputs:
@@ -41,12 +41,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: adeb8cc9759217b306e1b0ea74369790c5684025
+          ref: 994d81a68d070dfa59d938f5818f3155904544e9
           persist-credentials: false
           path: controller
       - uses: actions/checkout@v5
         with:
-          ref: f93a7609e569e3b6c6372e652a3d36a27225d783
+          ref: a1daaa302b3a72fb5694c9872ceecf2c4dc0b6e4
           persist-credentials: false
           path: upstream-fixed
       - uses: actions/setup-python@v6
@@ -62,14 +62,9 @@ jobs:
           python -m pip install pytest
           python -m pip check
           python controller/.github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR"
-          python controller/.github/scripts/phase2g_offline_tests.py
-          python controller/.github/scripts/phase2g_upstream_regression.py
-      - uses: actions/download-artifact@v5
-        with:
-          name: phase2m-request-38748119384
-          run-id: 38748119384
-          github-token: ${{ github.token }}
-          path: locked-evidence
+          python -m pytest controller/.github/scripts/test_phase2s_once.py controller/.github/scripts/test_authorized_once.py controller/.github/scripts/test_nvda_frozen_once.py -q
+      - name: Read committed frozen Phase 2R files without regenerating
+        run: cp -R controller/.github/frozen/phase2r locked-evidence
       - name: Bind the separately approved request to this run
         env:
           REQUEST_SHA: ${{ inputs.request_sha256 }}
@@ -83,39 +78,43 @@ jobs:
           import datetime,json,os,pathlib
           if os.environ['GITHUB_RUN_ATTEMPT']!='1':raise SystemExit('rerun_forbidden')
           import hashlib,subprocess
-          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd='controller',text=True).strip()=='adeb8cc9759217b306e1b0ea74369790c5684025'
-          assert os.environ['REQUEST_SHA']=='13c38395630faeef2a638e10dcf5966396c7cbf40d26110045f3b47712a06ccd'
-          assert os.environ['SNAPSHOT_ASOF']=='2026-10-15T14:05:23.935154+00:00'
-          assert os.environ['TARGET_SESSION']=='2026-10-14'
+          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd='controller',text=True).strip()=='994d81a68d070dfa59d938f5818f3155904544e9'
+          assert os.environ['REQUEST_SHA']=='08b09a31d1d08c4b1fa33bc92f850feb63709ace5c6f8fd43a63aa9bee82cdee'
+          assert os.environ['SNAPSHOT_ASOF']=='2026-10-16T06:04:29.560325+00:00'
+          assert os.environ['TARGET_SESSION']=='2026-10-15'
           assert os.environ['PRICING_SHA']=='210f102275ccf1a6542f08a3bc9e4b4c7c83278cb74b35217bffa112df6363b2'
-          assert os.environ['APPROVAL_REF'].strip() and os.environ['SECRET_APPROVAL_REF'].strip()
-          # Verify immutable Runner files before reading the request; no fetch/prompt rebuild.
+          assert os.environ['REQUEST_SHA'] in os.environ['APPROVAL_REF'] and os.environ['SECRET_APPROVAL_REF'].strip()
+          # Verify committed frozen files and metadata; no fetch/prompt rebuild.
           base=pathlib.Path('locked-evidence').resolve()
-          assert hashlib.sha256((base/'MANIFEST.json').read_bytes()).hexdigest()=='d6c2e8cb1f14d79bd676d68843e9831f657feb2cf6815522254088afb7af68fe'
+          assert hashlib.sha256((base/'MANIFEST.json').read_bytes()).hexdigest()=='ff2c035bcabe0bd347f5f7cc5885737039481d42fa30028a43e11c8916b366d7'
           for entry in json.loads((base/'MANIFEST.json').read_text(encoding='utf-8')):
               path=(base/entry['path']).resolve()
               assert path.is_relative_to(base)
               raw=path.read_bytes()
               assert len(raw)==entry['bytes'] and hashlib.sha256(raw).hexdigest()==entry['sha256']
-          packet=json.loads(pathlib.Path('locked-evidence/nvda-inputs/ORIGINAL_REQUEST_PACKET.json').read_text(encoding='utf-8'))
+          packet=json.loads(pathlib.Path('locked-evidence/ORIGINAL_REQUEST_PACKET.json').read_text(encoding='utf-8'))
           assert hashlib.sha256(json.dumps(packet,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()==os.environ['REQUEST_SHA']
           assert packet['model']=='deepseek-flash' and packet['thinking']=={'type':'disabled'}
-          assert packet['max_tokens']==8192 and packet['stream'] is True
+          assert packet['max_tokens']==16384 and packet['stream'] is True
           assert packet['stream_options']=={'include_usage':True}
-          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd='upstream-fixed',text=True).strip()=='f93a7609e569e3b6c6372e652a3d36a27225d783'
+          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd='upstream-fixed',text=True).strip()=='a1daaa302b3a72fb5694c9872ceecf2c4dc0b6e4'
           sys_path=pathlib.Path('upstream-fixed').resolve()
           import sys
           sys.path.insert(0,str(sys_path))
           from src.core.trading_calendar import get_effective_trading_date,_XCALS_AVAILABLE
           now=datetime.datetime.now(datetime.timezone.utc)
           snapshot=datetime.datetime.fromisoformat(os.environ['SNAPSHOT_ASOF'])
-          material_expiry=min(snapshot+datetime.timedelta(hours=24),datetime.datetime.fromisoformat('2026-10-15T20:00:00+00:00'))
+          material_expiry=min(snapshot+datetime.timedelta(hours=24),datetime.datetime.fromisoformat('2026-10-16T20:00:00+00:00'))
+          lock=json.loads((base/'REQUEST_LOCK.json').read_text(encoding='utf-8'))
+          assert lock['request_sha256']==os.environ['REQUEST_SHA'] and lock['authorize_paid_POST'] is False
+          assert datetime.datetime.fromisoformat(lock['expires_at'])==material_expiry
           if now>=material_expiry:raise SystemExit('EXPIRED_no_POST_no_refresh')
+          if now.weekday()<5 and (1<=now.hour<4 or 6<=now.hour<10):raise SystemExit('peak_window_no_POST')
           assert _XCALS_AVAILABLE and get_effective_trading_date('us',current_time=now).isoformat()==os.environ['TARGET_SESSION']
           # Shorter per-run authorization; never extend the frozen material window.
           execution_expiry=min(now+datetime.timedelta(minutes=15),material_expiry-datetime.timedelta(seconds=30))
           if now>=execution_expiry:raise SystemExit('too_close_to_material_expiry_no_POST')
-          data={'authorize_paid_post':True,'authorization_reference':os.environ['APPROVAL_REF'],'secret_upload_approval_reference':os.environ['SECRET_APPROVAL_REF'],'run_id':os.environ['GITHUB_RUN_ID'],'fixed_commit':'f93a7609e569e3b6c6372e652a3d36a27225d783','target_session':os.environ['TARGET_SESSION'],'request_sha256':os.environ['REQUEST_SHA'],'analysis_asof':os.environ['SNAPSHOT_ASOF'],'pricing_sha256':os.environ['PRICING_SHA'],'reservation_usd':'0.03','expires_at':execution_expiry.isoformat()}
+          data={'authorize_paid_post':True,'authorization_reference':os.environ['APPROVAL_REF'],'secret_upload_approval_reference':os.environ['SECRET_APPROVAL_REF'],'run_id':os.environ['GITHUB_RUN_ID'],'fixed_commit':'a1daaa302b3a72fb5694c9872ceecf2c4dc0b6e4','target_session':os.environ['TARGET_SESSION'],'request_sha256':os.environ['REQUEST_SHA'],'analysis_asof':os.environ['SNAPSHOT_ASOF'],'pricing_sha256':os.environ['PRICING_SHA'],'reservation_usd':'0.03','expires_at':execution_expiry.isoformat()}
           pathlib.Path('approved-request.json').write_text(json.dumps(data),encoding='utf-8')
           PY
       - name: One authorized native call, no retry
@@ -123,7 +122,7 @@ jobs:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           LITELLM_LOCAL_MODEL_COST_MAP: 'True'
           PYTHONIOENCODING: utf-8
-        run: python controller/.github/scripts/nvda_frozen_once.py --source upstream-fixed --bundle locked-evidence/nvda-inputs --out authorized-evidence --execute-authorized --authorization approved-request.json --run-id "$GITHUB_RUN_ID"
+        run: python controller/.github/scripts/nvda_frozen_once.py --source upstream-fixed --bundle locked-evidence --out authorized-evidence --execute-authorized --authorization approved-request.json --run-id "$GITHUB_RUN_ID"
       - name: Block artifact upload if credential is found
         if: always()
         id: scan
