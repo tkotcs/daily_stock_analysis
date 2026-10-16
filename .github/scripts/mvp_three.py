@@ -107,6 +107,13 @@ def run_symbol(source,out,code,offline=None,inject=False):
         assert all(math.isfinite(float(r[k])) for k in ('open','high','low','close','volume'))
         assert 0<float(r['low'])<=min(r['open'],r['close'])<=max(r['open'],r['close'])<=r['high'] and r['volume']>=0
     frame.to_csv(out/'DAILY.csv',index=False);db.save_daily_data(frame,code,provider)
+    # The MVP is completed-session only, including when the Runner starts
+    # during the next session. Any native refill must retain the same cutoff.
+    daily=manager.get_daily_data
+    def completed_daily(symbol,*a,**k):
+        k['end_date']=end
+        return daily(symbol,*a,**k)
+    manager.get_daily_data=completed_daily
     if not offline:
         from history_identity_validation import match_source
         charts=[]
