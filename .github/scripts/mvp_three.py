@@ -205,7 +205,7 @@ def run_symbol(source,out,code,offline=None,inject=False):
     (out/'REPORT.md').write_text(md,encoding='utf-8')
     import markdown2
     body=markdown2.markdown(md,safe_mode='escape',extras=['tables'])
-    (out/'REPORT.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:16px/1.7 system-ui;max-width:960px;margin:auto;padding:16px;overflow-wrap:anywhere}table{display:block;overflow:auto}td,th{padding:6px;border:1px solid #ccc}</style><body>'+body+'</body></html>',encoding='utf-8')
+    (out/'REPORT.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{overflow-x:hidden}body{font:16px/1.7 system-ui;width:100%;max-width:960px;box-sizing:border-box;margin:auto;padding:16px;overflow-wrap:anywhere}blockquote{margin:12px 0;padding:12px;background:#fff3cd}pre{white-space:pre-wrap;word-break:break-word;max-width:100%}table{display:block;max-width:100%;overflow-x:auto}td,th{padding:6px;border:1px solid #ccc;min-width:55px}</style><body>'+body+'</body></html>',encoding='utf-8')
     return {'symbol':code,'status':'success_simulated_model','session':target,'rows':len(frame),'technical_rows':tech[-1]['rows_read'],'real_POSTs':0,'news':'not_configured','financial_limitations':True,'seconds':round(time.monotonic()-start,2),'data_mode':'offline_saved' if offline else 'fresh_Yahoo_this_run'}
 
 
