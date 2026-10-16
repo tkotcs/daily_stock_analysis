@@ -1,0 +1,332 @@
+{
+  "code": "MU",
+  "date": "2026-10-15",
+  "today": {
+    "code": "MU",
+    "date": "2026-10-15",
+    "open": 871.5800170898438,
+    "high": 931.6500244140625,
+    "low": 858.0,
+    "close": 931.239990234375,
+    "volume": 38912200.0,
+    "amount": 36236596747.99805,
+    "pct_chg": 1.87,
+    "ma5": 963.23,
+    "ma10": 1012.35,
+    "ma20": 1039.7,
+    "volume_ratio": 1.49,
+    "data_source": "YfinanceFetcher",
+    "canonical_id": "MU",
+    "ma60": 963.8941416422526
+  },
+  "yesterday": {
+    "code": "MU",
+    "date": "2026-10-14",
+    "open": 934.5599975585938,
+    "high": 949.4199829101562,
+    "low": 913.5599975585938,
+    "close": 914.1300048828125,
+    "volume": 27843700.0,
+    "amount": 25452761616.955566,
+    "pct_chg": -4.08,
+    "ma5": 984.11,
+    "ma10": 1028.95,
+    "ma20": 1042.01,
+    "volume_ratio": 1.04,
+    "data_source": "YfinanceFetcher",
+    "canonical_id": "MU"
+  },
+  "volume_change_ratio": 1.4,
+  "price_change_ratio": 1.87,
+  "ma_status": "空头排列 📉",
+  "report_language": "zh",
+  "stock_name": "Micron Technology, Inc.",
+  "news_window_days": 3,
+  "trend_analysis": {
+    "trend_status": "强势空头",
+    "ma_alignment": "强势空头排列，均线发散下行",
+    "trend_strength": 10,
+    "bias_ma5": -3.3207673565692692,
+    "bias_ma10": -8.012480836958439,
+    "volume_status": "量能正常",
+    "volume_trend": "量能正常",
+    "buy_signal": "强烈卖出",
+    "signal_score": 37,
+    "signal_reasons": [
+      "✅ 价格回踩MA5(-3.3%)，观察支撑",
+      " MACD 中性区域",
+      "⚡ RSI弱势(36.9)，关注反弹"
+    ],
+    "risk_factors": [
+      "⚠️ 强势空头，不宜做多"
+    ]
+  },
+  "is_index_etf": false,
+  "fundamental_context": {
+    "market": "us",
+    "status": "not_supported",
+    "coverage": {
+      "valuation": "not_supported",
+      "growth": "not_supported",
+      "earnings": "not_supported",
+      "institution": "not_supported",
+      "capital_flow": "not_supported",
+      "dragon_tiger": "not_supported",
+      "boards": "not_supported"
+    },
+    "source_chain": [
+      {
+        "provider": "fundamental_pipeline",
+        "result": "not_supported",
+        "duration_ms": 0
+      }
+    ],
+    "errors": [
+      "MVP仅启用Yahoo财务；其他模块未配置"
+    ],
+    "valuation": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "MVP仅启用Yahoo财务；其他模块未配置"
+      ],
+      "data": {}
+    },
+    "growth": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "MVP仅启用Yahoo财务；其他模块未配置"
+      ],
+      "data": {}
+    },
+    "earnings": {
+      "status": "partial",
+      "coverage": {
+        "status": "partial"
+      },
+      "source_chain": [
+        "growth:yfinance.info",
+        "earnings.financial_report:yfinance",
+        "earnings.dividend:yfinance",
+        "belong_boards:yfinance.info"
+      ],
+      "errors": [],
+      "data": {
+        "financial_report": {
+          "report_date": "2026-05-31",
+          "revenue": 41456000000.0,
+          "net_profit_parent": 28243000000.0,
+          "operating_cash_flow": 25388000000.0,
+          "roe": 88.26,
+          "currency": "USD"
+        },
+        "dividend": {
+          "events": [
+            {
+              "event_date": "2026-10-14",
+              "ex_dividend_date": "2026-10-14",
+              "record_date": null,
+              "announcement_date": null,
+              "cash_dividend_per_share": 0.15,
+              "is_pre_tax": true
+            },
+            {
+              "event_date": "2026-07-06",
+              "ex_dividend_date": "2026-07-06",
+              "record_date": null,
+              "announcement_date": null,
+              "cash_dividend_per_share": 0.15,
+              "is_pre_tax": true
+            },
+            {
+              "event_date": "2026-03-30",
+              "ex_dividend_date": "2026-03-30",
+              "record_date": null,
+              "announcement_date": null,
+              "cash_dividend_per_share": 0.15,
+              "is_pre_tax": true
+            },
+            {
+              "event_date": "2025-12-29",
+              "ex_dividend_date": "2025-12-29",
+              "record_date": null,
+              "announcement_date": null,
+              "cash_dividend_per_share": 0.115,
+              "is_pre_tax": true
+            },
+            {
+              "event_date": "2025-10-03",
+              "ex_dividend_date": "2025-10-03",
+              "record_date": null,
+              "announcement_date": null,
+              "cash_dividend_per_share": 0.115,
+              "is_pre_tax": true
+            }
+          ],
+          "ttm_event_count": 4,
+          "ttm_cash_dividend_per_share": 0.565,
+          "coverage": "cash_dividend_pre_tax",
+          "currency": "USD",
+          "as_of": "2026-10-16",
+          "ttm_dividend_yield_pct": 0.0626
+        }
+      }
+    },
+    "institution": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "MVP仅启用Yahoo财务；其他模块未配置"
+      ],
+      "data": {}
+    },
+    "capital_flow": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "MVP仅启用Yahoo财务；其他模块未配置"
+      ],
+      "data": {}
+    },
+    "dragon_tiger": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "MVP仅启用Yahoo财务；其他模块未配置"
+      ],
+      "data": {}
+    },
+    "boards": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "MVP仅启用Yahoo财务；其他模块未配置"
+      ],
+      "data": {}
+    },
+    "belong_boards": []
+  },
+  "market_phase_context": {
+    "market": "us",
+    "phase": "intraday",
+    "market_local_time": "2026-10-16T11:34:32.449396-04:00",
+    "session_date": "2026-10-16",
+    "effective_daily_bar_date": "2026-10-15",
+    "is_trading_day": true,
+    "is_market_open_now": true,
+    "is_partial_bar": true,
+    "minutes_to_open": null,
+    "minutes_to_close": 265,
+    "trigger_source": "system",
+    "analysis_intent": "auto",
+    "warnings": []
+  },
+  "market_structure_context": {
+    "schema_version": "market-structure-v1",
+    "status": "not_supported",
+    "market": "us",
+    "trade_date": "2026-10-15",
+    "market_theme_context": {
+      "schema_version": "market-theme-v1",
+      "status": "not_supported",
+      "market": "us",
+      "trade_date": "2026-10-15",
+      "active_themes": [],
+      "leading_industries": [],
+      "leading_concepts": [],
+      "lagging_themes": [],
+      "hotspot_constituents": [],
+      "leader_stocks": [],
+      "theme_breadth": {
+        "active_count": 0,
+        "leading_industry_count": 0,
+        "leading_concept_count": 0,
+        "lagging_count": 0
+      },
+      "data_quality": {
+        "status": "not_supported",
+        "missing_fields": [
+          "a_share_theme_context"
+        ],
+        "sources": [
+          {
+            "provider": "dsa",
+            "dataset": "market_structure",
+            "status": "not_supported",
+            "message": "stock market structure is only supported for A-share first version"
+          }
+        ],
+        "errors": []
+      }
+    },
+    "stock_market_position": {
+      "schema_version": "stock-market-position-v1",
+      "status": "not_supported",
+      "stock_code": "MU",
+      "stock_name": "Micron Technology, Inc.",
+      "market": "us",
+      "related_boards": [],
+      "stock_role": "unknown",
+      "theme_phase": "unknown",
+      "risk_tags": [],
+      "missing_fields": [
+        "a_share_theme_context"
+      ]
+    }
+  }
+}

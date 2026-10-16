@@ -1,0 +1,274 @@
+{
+  "code": "QQQ",
+  "date": "2026-10-15",
+  "today": {
+    "code": "QQQ",
+    "date": "2026-10-15",
+    "open": 718.5499877929688,
+    "high": 729.4299926757812,
+    "low": 715.4400024414062,
+    "close": 728.0,
+    "volume": 49610000.0,
+    "amount": 36116080000.0,
+    "pct_chg": -0.13,
+    "ma5": 739.57,
+    "ma10": 746.86,
+    "ma20": 743.06,
+    "volume_ratio": 1.4,
+    "data_source": "YfinanceFetcher",
+    "canonical_id": "QQQ",
+    "ma60": 720.3584543863932
+  },
+  "yesterday": {
+    "code": "QQQ",
+    "date": "2026-10-14",
+    "open": 737.97998046875,
+    "high": 740.530029296875,
+    "low": 726.3900146484375,
+    "close": 728.9500122070312,
+    "volume": 52383600.0,
+    "amount": 38185025859.44824,
+    "pct_chg": -1.97,
+    "ma5": 743.48,
+    "ma10": 748.26,
+    "ma20": 742.47,
+    "volume_ratio": 1.74,
+    "data_source": "YfinanceFetcher",
+    "canonical_id": "QQQ"
+  },
+  "volume_change_ratio": 0.95,
+  "price_change_ratio": -0.13,
+  "ma_status": "短期走弱 🔽",
+  "report_language": "zh",
+  "stock_name": "Invesco QQQ Trust",
+  "news_window_days": 3,
+  "trend_analysis": {
+    "trend_status": "弱势空头",
+    "ma_alignment": "弱势空头，MA5<MA10 但 MA10≥MA20",
+    "trend_strength": 40,
+    "bias_ma5": -1.5638906283571012,
+    "bias_ma10": -2.5249781974395256,
+    "volume_status": "量能正常",
+    "volume_trend": "量能正常",
+    "buy_signal": "观望",
+    "signal_score": 51,
+    "signal_reasons": [
+      "✅ 价格略低于MA5(-1.6%)，回踩买点",
+      "✓ 多头排列，持续上涨",
+      " RSI中性(41.8)，震荡整理中"
+    ],
+    "risk_factors": []
+  },
+  "is_index_etf": true,
+  "fundamental_context": {
+    "market": "us",
+    "status": "not_supported",
+    "coverage": {
+      "valuation": "not_supported",
+      "growth": "not_supported",
+      "earnings": "not_supported",
+      "institution": "not_supported",
+      "capital_flow": "not_supported",
+      "dragon_tiger": "not_supported",
+      "boards": "not_supported"
+    },
+    "source_chain": [
+      {
+        "provider": "fundamental_pipeline",
+        "result": "not_supported",
+        "duration_ms": 0
+      }
+    ],
+    "errors": [
+      "ETF企业财务不适用"
+    ],
+    "valuation": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "ETF企业财务不适用"
+      ],
+      "data": {}
+    },
+    "growth": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "ETF企业财务不适用"
+      ],
+      "data": {}
+    },
+    "earnings": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "ETF企业财务不适用"
+      ],
+      "data": {}
+    },
+    "institution": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "ETF企业财务不适用"
+      ],
+      "data": {}
+    },
+    "capital_flow": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "ETF企业财务不适用"
+      ],
+      "data": {}
+    },
+    "dragon_tiger": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "ETF企业财务不适用"
+      ],
+      "data": {}
+    },
+    "boards": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "ETF企业财务不适用"
+      ],
+      "data": {}
+    },
+    "belong_boards": []
+  },
+  "market_phase_context": {
+    "market": "us",
+    "phase": "intraday",
+    "market_local_time": "2026-10-16T11:34:50.970475-04:00",
+    "session_date": "2026-10-16",
+    "effective_daily_bar_date": "2026-10-15",
+    "is_trading_day": true,
+    "is_market_open_now": true,
+    "is_partial_bar": true,
+    "minutes_to_open": null,
+    "minutes_to_close": 265,
+    "trigger_source": "system",
+    "analysis_intent": "auto",
+    "warnings": []
+  },
+  "market_structure_context": {
+    "schema_version": "market-structure-v1",
+    "status": "not_supported",
+    "market": "us",
+    "trade_date": "2026-10-15",
+    "market_theme_context": {
+      "schema_version": "market-theme-v1",
+      "status": "not_supported",
+      "market": "us",
+      "trade_date": "2026-10-15",
+      "active_themes": [],
+      "leading_industries": [],
+      "leading_concepts": [],
+      "lagging_themes": [],
+      "hotspot_constituents": [],
+      "leader_stocks": [],
+      "theme_breadth": {
+        "active_count": 0,
+        "leading_industry_count": 0,
+        "leading_concept_count": 0,
+        "lagging_count": 0
+      },
+      "data_quality": {
+        "status": "not_supported",
+        "missing_fields": [
+          "a_share_theme_context"
+        ],
+        "sources": [
+          {
+            "provider": "dsa",
+            "dataset": "market_structure",
+            "status": "not_supported",
+            "message": "stock market structure is only supported for A-share first version"
+          }
+        ],
+        "errors": []
+      }
+    },
+    "stock_market_position": {
+      "schema_version": "stock-market-position-v1",
+      "status": "not_supported",
+      "stock_code": "QQQ",
+      "stock_name": "Invesco QQQ Trust",
+      "market": "us",
+      "related_boards": [],
+      "stock_role": "unknown",
+      "theme_phase": "unknown",
+      "risk_tags": [],
+      "missing_fields": [
+        "a_share_theme_context"
+      ]
+    }
+  }
+}

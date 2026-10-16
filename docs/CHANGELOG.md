@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [测试] Prepare an explicitly approved three-request manual test using the existing session/client/POST guard, per-symbol raw response and usage capture, with no dispatch or automatic publication.
+
 - [测试] Reuse the existing 35-symbol watchlist for free native MVP reports, ETF/ADR identity notes, partial-failure isolation and fresh three-request candidate freezing without paid execution.
 
 - [测试] Add a manual three-symbol MVP using native DSA pipelines, fresh Yahoo data and clearly labeled simulated SDK responses; preserve per-symbol reports and failures without model credentials or notifications.

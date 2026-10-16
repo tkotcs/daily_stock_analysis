@@ -1,6 +1,6 @@
 """Manual test safety and raw response capture; no research or budget framework."""
 import gzip,hashlib,json,os,re,time,urllib.request,zlib
-from datetime import datetime,timezone
+from datetime import datetime,timezone,timedelta
 from decimal import Decimal
 from html.parser import HTMLParser
 import httpx
@@ -14,7 +14,7 @@ REVIEWED_16K_ASOF='2026-10-16T06:04:29.560325+00:00'
 REVIEWED_16K_DEADLINE='2026-10-16T20:00:00+00:00'
 
 def authorized_business(authorization):
-    return REVIEWED_16K_FIXED if authorization.get('request_sha256')==REVIEWED_16K_SHA else FIXED
+    return REVIEWED_16K_FIXED if authorization.get('request_sha256')==REVIEWED_16K_SHA or authorization.get('test_profile')=='mvp_three_v1' else FIXED
 BASE='https://api.deepseek.com'
 PRICING='https://api-docs.deepseek.com/quick_start/pricing/'
 def canonical_sha(body):return hashlib.sha256(json.dumps(body,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
@@ -79,11 +79,16 @@ class LiveSession:
         if not key or not run_id or os.getenv('GITHUB_RUN_ATTEMPT','1')!='1':raise GuardStop('key_run_id_or_attempt_invalid')
         if authorization.get('authorize_paid_post') is not True or not authorization.get('authorization_reference') or not authorization.get('secret_upload_approval_reference'):raise GuardStop('separate_explicit_approvals_required')
         self.reviewed_16k=authorization.get('request_sha256')==REVIEWED_16K_SHA
-        self.max_tokens=16384 if self.reviewed_16k else 8192
+        self.mvp_test=authorization.get('test_profile')=='mvp_three_v1'
+        self.max_tokens=16384 if self.reviewed_16k or self.mvp_test else 8192
         if authorization.get('run_id')!=run_id or authorization.get('fixed_commit')!=authorized_business(authorization):raise GuardStop('authorization_identity_mismatch')
         try:expires=datetime.fromisoformat(authorization['expires_at'])
         except Exception:raise GuardStop('authorization_expiry_required') from None
         if expires.tzinfo is None or datetime.now(timezone.utc)>=expires:raise GuardStop('authorization_expired')
+        if self.mvp_test:
+            if authorization.get('symbol') not in ('NVDA','MU','QQQ') or any(not re.fullmatch('[a-f0-9]{64}',str(authorization.get(k,''))) for k in ('batch_sha256','request_sha256')):raise GuardStop('mvp_batch_identity_invalid')
+            if any(str(authorization.get(k)) not in authorization['authorization_reference'] for k in ('batch_sha256','request_sha256')):raise GuardStop('mvp_hash_scoped_approval_required')
+            self.check_material()
         if self.reviewed_16k:
             if REVIEWED_16K_SHA not in str(authorization.get('authorization_reference','')):raise GuardStop('new_hash_scoped_approval_required')
             if authorization.get('analysis_asof')!=REVIEWED_16K_ASOF or authorization.get('target_session')!='2026-10-15':raise GuardStop('frozen_material_identity_mismatch')
@@ -103,7 +108,7 @@ class LiveSession:
         if body.get('stream_options')!={'include_usage':True}:raise GuardStop('stream_usage_option_required')
         if set(body)-{'model','max_tokens','stream','stream_options','temperature','messages','thinking'}:raise GuardStop('unreviewed_request_parameters')
         if 'thinking' in body and body['thinking']!={'type':'disabled'}:raise GuardStop('unreviewed_thinking_mode')
-        if self.reviewed_16k and body.get('thinking')!={'type':'disabled'}:raise GuardStop('thinking_disabled_required')
+        if (self.reviewed_16k or self.mvp_test) and body.get('thinking')!={'type':'disabled'}:raise GuardStop('thinking_disabled_required')
         content=json.dumps(body,ensure_ascii=False,separators=(',',':')).encode()
         if self.key.encode() in content:raise GuardStop('credential_in_request_body')
         allowance=len(content)+1024
@@ -128,6 +133,22 @@ class LiveSession:
         self.save('LIVE_PREFLIGHT.json',{'checked_at':utc(),'model_available':True,'balance':infos,'pricing_sha256':hashlib.sha256(pricing).hexdigest(),'rates':rates,'input_byte_allowance_not_formal_token_bound':allowance,'peak_estimate_usd':str(estimate),'reservation_usd':str(self.reserve)})
         self.started=time.monotonic()
     def check_material(self):
+        if self.mvp_test:
+            now=datetime.now(timezone.utc)
+            try:
+                asof=datetime.fromisoformat(self.auth['analysis_asof'])
+                material_expiry=datetime.fromisoformat(self.auth['material_expires_at'])
+                execution_expiry=datetime.fromisoformat(self.auth['expires_at'])
+                if any(x.tzinfo is None for x in (asof,material_expiry,execution_expiry)):raise ValueError()
+            except Exception:raise GuardStop('mvp_material_timestamps_invalid') from None
+            from src.core.trading_calendar import get_effective_trading_date,_XCALS_AVAILABLE
+            import exchange_calendars as xc,pandas as pd
+            calendar=xc.get_calendar('XNYS');target=self.auth['target_session']
+            deadline=min(asof+timedelta(hours=24),calendar.session_close(calendar.next_session(pd.Timestamp(target))).to_pydatetime())
+            if asof>now or material_expiry!=deadline or execution_expiry>deadline or now>=deadline:raise GuardStop('mvp_material_EXPIRED_or_invalid_deadline')
+            if not _XCALS_AVAILABLE or get_effective_trading_date('us',current_time=now).isoformat()!=target:raise GuardStop('latest_completed_session_changed')
+            if now.weekday()<5 and (1<=now.hour<4 or 6<=now.hour<10) and self.auth.get('allow_peak_test') is not True:raise GuardStop('peak_window_no_POST')
+            return
         if not self.reviewed_16k:return
         now=datetime.now(timezone.utc)
         if now>=datetime.fromisoformat(REVIEWED_16K_DEADLINE):raise GuardStop('material_EXPIRED_no_POST')

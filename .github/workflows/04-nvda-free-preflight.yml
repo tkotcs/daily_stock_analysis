@@ -93,7 +93,7 @@ jobs:
             startup-evidence/
           retention-days: 14
   mvp:
-    if: ${{ !inputs.execute_live && inputs.mvp_three && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    if: ${{ !inputs.execute_live && inputs.mvp_three && inputs.mvp_universe == 'three' && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -152,8 +152,85 @@ jobs:
           rows=json.loads(pathlib.Path('mvp-output/RESULTS.json').read_text())['symbols']
           assert len(rows)==(35 if os.environ['MVP_UNIVERSE']=='watchlist35' else 3) and all(x['status']=='success_simulated_model' for x in rows), 'Partial failure: inspect per-symbol evidence; do not retry automatically'
           PY
+  mvp_live:
+    if: ${{ inputs.execute_live && inputs.mvp_three && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    environment: nvda-one-call-approval
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONIOENCODING: utf-8
+      PYTHONDONTWRITEBYTECODE: '1'
+      LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+      CUSTOM_TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+      TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          path: preparation
+      - uses: actions/checkout@v5
+        with:
+          ref: a1daaa302b3a72fb5694c9872ceecf2c4dc0b6e4
+          persist-credentials: false
+          path: upstream-fixed
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Dependencies without model credentials
+        run: |
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          python -m pip install -r upstream-fixed/requirements.txt litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6 markdown2
+          python preparation/.github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR"
+      - name: Bind a separately approved frozen batch, never regenerate data
+        env:
+          BATCH_SHA: ${{ inputs.request_sha256 }}
+          APPROVAL_REF: ${{ inputs.authorization_reference }}
+          SECRET_APPROVAL_REF: ${{ inputs.secret_upload_approval_reference }}
+        run: |
+          python - <<'PY'
+          import hashlib,json,os,pathlib
+          if os.environ['GITHUB_RUN_ATTEMPT']!='1':raise SystemExit('rerun_forbidden')
+          expected=pathlib.Path('preparation/.github/frozen/mvp-three/REQUEST_SET_SHA256.txt').read_text().strip()
+          raw=pathlib.Path('preparation/.github/frozen/mvp-three/REQUEST_SET_LOCK.json').read_bytes()
+          assert hashlib.sha256(raw).hexdigest()==os.environ['BATCH_SHA']==expected
+          assert expected in os.environ['APPROVAL_REF'] and os.environ['SECRET_APPROVAL_REF'].strip()
+          auth={'authorize_paid_posts':True,'batch_sha256':expected,'run_id':os.environ['GITHUB_RUN_ID'],'max_total_POSTs':3,'reservation_USD':'0.09','authorization_reference':os.environ['APPROVAL_REF'],'secret_upload_approval_reference':os.environ['SECRET_APPROVAL_REF']}
+          pathlib.Path('approved-batch.json').write_text(json.dumps(auth))
+          PY
+      - name: At most three separately bound native calls, no retries
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          BATCH_SHA: ${{ inputs.request_sha256 }}
+        run: python preparation/.github/scripts/mvp_three_live.py --source upstream-fixed --bundle preparation/.github/frozen/mvp-three --out real-research --batch-sha "$BATCH_SHA" --execute-authorized --authorization approved-batch.json
+      - name: Credential scan before artifacts
+        if: always()
+        id: real_scan
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          python - <<'PY'
+          import os,pathlib
+          key=os.environ.get('DEEPSEEK_API_KEY','').encode();root=pathlib.Path('real-research')
+          if not key or not root.is_dir():raise SystemExit('no_safe_artifact')
+          for p in root.rglob('*'):
+              if p.is_file() and key in p.read_bytes():raise SystemExit('credential_found_do_not_upload')
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write('safe=true\n')
+          PY
+      - uses: actions/upload-artifact@v6
+        if: ${{ always() && steps.real_scan.outputs.safe == 'true' }}
+        with:
+          name: real-three-research-${{ github.run_id }}
+          path: |
+            real-research/**/*.json
+            real-research/**/*.md
+            real-research/**/*.html
+            real-research/**/*.bin
+            real-research/**/*.txt
+            real-research/**/*.log
+          retention-days: 14
   once:
-    if: ${{ inputs.execute_live && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    if: ${{ inputs.execute_live && !inputs.mvp_three && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
     environment: nvda-one-call-approval
     runs-on: ubuntu-latest
     env:
