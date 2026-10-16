@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [测试] Add a secret-free manual Runner preflight for the fixed 16K request, with full input/commit/expiry checks and first-POST interception; keep the paid job protected and disabled by default.
+
 - [修复] Bind the manual 16384 controller to the exact reviewed Phase 2R request and native business revision, require fresh scoped approval, and block research report rendering when risk_plan is invalid.
 
 - [改进] Make the native stock research output ceiling configurable at 16384 tokens, clarify scenario evidence, and display deterministic risk arithmetic and unabridged detailed research without changing paid controllers.

@@ -1,4 +1,5 @@
 name: Manual authorized frozen NVDA Phase 2S 16384 one POST
+run-name: ${{ inputs.execute_live && 'Authorized frozen NVDA 16K one POST' || 'FREE frozen NVDA 16K preflight - zero paid POST' }}
 on:
   workflow_dispatch:
     inputs:
@@ -30,6 +31,58 @@ concurrency:
   group: nvda-manual-preflight
   cancel-in-progress: false
 jobs:
+  preflight:
+    if: ${{ !inputs.execute_live && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONIOENCODING: utf-8
+      PYTHONDONTWRITEBYTECODE: '1'
+      LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+      CUSTOM_TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+      TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          path: preparation
+      - uses: actions/checkout@v5
+        with:
+          ref: 994d81a68d070dfa59d938f5818f3155904544e9
+          persist-credentials: false
+          path: controller
+      - uses: actions/checkout@v5
+        with:
+          ref: a1daaa302b3a72fb5694c9872ceecf2c4dc0b6e4
+          persist-credentials: false
+          path: upstream-fixed
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Dependencies and public tokenizer (no paid keys)
+        run: |
+          python -m pip install -r upstream-fixed/requirements.txt litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6 pytest
+          python -m pip check
+          python controller/.github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR"
+      - name: Only affected controller tests, simulated transports
+        run: |
+          python -m pytest controller/.github/scripts/test_phase2s_once.py controller/.github/scripts/test_authorized_once.py controller/.github/scripts/test_nvda_frozen_once.py -q --junitxml=targeted-tests.xml
+      - name: Verify frozen input and intercept first native SDK POST
+        env:
+          REQUEST_SHA: ${{ inputs.request_sha256 }}
+        run: |
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git -C preparation rev-parse HEAD)" = "$GITHUB_SHA"
+          python preparation/.github/scripts/phase2t_preflight.py --source upstream-fixed --controller controller --bundle controller/.github/frozen/phase2r --out free-evidence --expected-sha "$REQUEST_SHA"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: free-16k-preflight-${{ github.run_id }}
+          path: |
+            free-evidence/
+            targeted-tests.xml
+          retention-days: 14
   once:
     if: ${{ inputs.execute_live && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
     environment: nvda-one-call-approval
