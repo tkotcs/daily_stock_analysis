@@ -44,3 +44,4 @@ Makefile text eol=lf
 
 # Immutable real-call regression evidence: keep exact bytes across platforms.
 tests/fixtures/phase2p/* -text
+.github/frozen/phase2r/* -text

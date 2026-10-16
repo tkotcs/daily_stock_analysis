@@ -1,0 +1,32 @@
+[
+  {
+    "path": "CAPTURE_SUMMARY.json",
+    "bytes": 280,
+    "sha256": "9729a27a5c7b9660613b47532aa043fe07a1507801e96b2b5851a109b1d97422"
+  },
+  {
+    "path": "OFFICIAL_PRICING.html",
+    "bytes": 23982,
+    "sha256": "210f102275ccf1a6542f08a3bc9e4b4c7c83278cb74b35217bffa112df6363b2"
+  },
+  {
+    "path": "ORIGINAL_ENHANCED_CONTEXT.json",
+    "bytes": 13583,
+    "sha256": "d4fa880107ad987118f7324ec7384538f31a5577cd5e06edce075f5135343de1"
+  },
+  {
+    "path": "ORIGINAL_REQUEST_PACKET.json",
+    "bytes": 21785,
+    "sha256": "08b09a31d1d08c4b1fa33bc92f850feb63709ace5c6f8fd43a63aa9bee82cdee"
+  },
+  {
+    "path": "REQUEST_LOCK.json",
+    "bytes": 1431,
+    "sha256": "2ac12b7a66cf9ce69487abc223fa72d091c9814422824d3dba17cdf8c21f09f6"
+  },
+  {
+    "path": "RESEARCH_MATERIAL_AUDIT.json",
+    "bytes": 2368,
+    "sha256": "925faec00aa84cddd04c091583a5b6e3246e770bdf47a2fd6037a9c7395f161c"
+  }
+]

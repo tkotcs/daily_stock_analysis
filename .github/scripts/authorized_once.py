@@ -7,6 +7,14 @@ import httpx
 from deepseek_post_guard import GuardStop
 
 FIXED='f93a7609e569e3b6c6372e652a3d36a27225d783'
+# Exact reviewed profile; no arbitrary 16K payload or business revision is accepted.
+REVIEWED_16K_SHA='08b09a31d1d08c4b1fa33bc92f850feb63709ace5c6f8fd43a63aa9bee82cdee'
+REVIEWED_16K_FIXED='a1daaa302b3a72fb5694c9872ceecf2c4dc0b6e4'
+REVIEWED_16K_ASOF='2026-10-16T06:04:29.560325+00:00'
+REVIEWED_16K_DEADLINE='2026-10-16T20:00:00+00:00'
+
+def authorized_business(authorization):
+    return REVIEWED_16K_FIXED if authorization.get('request_sha256')==REVIEWED_16K_SHA else FIXED
 BASE='https://api.deepseek.com'
 PRICING='https://api-docs.deepseek.com/quick_start/pricing/'
 def canonical_sha(body):return hashlib.sha256(json.dumps(body,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
@@ -70,10 +78,17 @@ class LiveSession:
         self.out=out;self.auth=authorization;self.key=key;self.run_id=run_id;self.get=get;self.started=None;self.status=None;self.raw=bytearray();self.stream_complete=False;self.stream_error=None;self.content_encoding='identity'
         if not key or not run_id or os.getenv('GITHUB_RUN_ATTEMPT','1')!='1':raise GuardStop('key_run_id_or_attempt_invalid')
         if authorization.get('authorize_paid_post') is not True or not authorization.get('authorization_reference') or not authorization.get('secret_upload_approval_reference'):raise GuardStop('separate_explicit_approvals_required')
-        if authorization.get('run_id')!=run_id or authorization.get('fixed_commit')!=FIXED:raise GuardStop('authorization_identity_mismatch')
+        self.reviewed_16k=authorization.get('request_sha256')==REVIEWED_16K_SHA
+        self.max_tokens=16384 if self.reviewed_16k else 8192
+        if authorization.get('run_id')!=run_id or authorization.get('fixed_commit')!=authorized_business(authorization):raise GuardStop('authorization_identity_mismatch')
         try:expires=datetime.fromisoformat(authorization['expires_at'])
         except Exception:raise GuardStop('authorization_expiry_required') from None
         if expires.tzinfo is None or datetime.now(timezone.utc)>=expires:raise GuardStop('authorization_expired')
+        if self.reviewed_16k:
+            if REVIEWED_16K_SHA not in str(authorization.get('authorization_reference','')):raise GuardStop('new_hash_scoped_approval_required')
+            if authorization.get('analysis_asof')!=REVIEWED_16K_ASOF or authorization.get('target_session')!='2026-10-15':raise GuardStop('frozen_material_identity_mismatch')
+            if expires>datetime.fromisoformat(REVIEWED_16K_DEADLINE):raise GuardStop('authorization_extends_material_deadline')
+            self.check_material()
         try:self.reserve=Decimal(str(authorization['reservation_usd']))
         except Exception:raise GuardStop('invalid_reservation') from None
         if not self.reserve.is_finite() or not 0<self.reserve<=Decimal('.03'):raise GuardStop('reservation_outside_authorized_limit')
@@ -82,15 +97,17 @@ class LiveSession:
         (self.out/name).write_text(text.replace(self.key,'[REDACTED]'),encoding='utf-8')
     def approve(self,body):
         if datetime.now(timezone.utc)>=datetime.fromisoformat(self.auth['expires_at']):raise GuardStop('authorization_expired')
+        self.check_material()
         if canonical_sha(body)!=self.auth.get('request_sha256'):raise GuardStop('request_hash_mismatch')
-        if body.get('model')!='deepseek-flash' or body.get('max_tokens')!=8192 or body.get('stream') is not True:raise GuardStop('request_parameters_changed')
+        if body.get('model')!='deepseek-flash' or body.get('max_tokens')!=self.max_tokens or body.get('stream') is not True:raise GuardStop('request_parameters_changed')
         if body.get('stream_options')!={'include_usage':True}:raise GuardStop('stream_usage_option_required')
         if set(body)-{'model','max_tokens','stream','stream_options','temperature','messages','thinking'}:raise GuardStop('unreviewed_request_parameters')
         if 'thinking' in body and body['thinking']!={'type':'disabled'}:raise GuardStop('unreviewed_thinking_mode')
+        if self.reviewed_16k and body.get('thinking')!={'type':'disabled'}:raise GuardStop('thinking_disabled_required')
         content=json.dumps(body,ensure_ascii=False,separators=(',',':')).encode()
         if self.key.encode() in content:raise GuardStop('credential_in_request_body')
         allowance=len(content)+1024
-        estimate=(Decimal(allowance)*Decimal('.30')+Decimal(8192)*Decimal('1.20'))/1000000
+        estimate=(Decimal(allowance)*Decimal('.30')+Decimal(self.max_tokens)*Decimal('1.20'))/1000000
         if estimate>self.reserve:raise GuardStop('estimated_reservation_exceeded')
         # No model-generating request in these three read-only GETs, no retries.
         models=json.loads(self.get(BASE+'/models',self.key))
@@ -103,12 +120,21 @@ class LiveSession:
         if hashlib.sha256(pricing).hexdigest()!=self.auth.get('pricing_sha256'):raise GuardStop('pricing_snapshot_changed')
         rates=verify_prices(pricing)
         if datetime.now(timezone.utc)>=datetime.fromisoformat(self.auth['expires_at']):raise GuardStop('authorization_expired_during_preflight')
+        self.check_material()
         # Atomic exclusive local marker. A new Runner needs a different authorized run_id;
         # reruns of the same GitHub run are forbidden. This is not a budget ledger.
         with (self.out/'POST_ATTEMPT.json').open('x',encoding='utf-8') as f:
             json.dump({'run_id':self.run_id,'request_sha256':canonical_sha(body),'state':'reserved_before_transport_may_be_charged','at':utc(),'reservation_usd':str(self.reserve)},f)
         self.save('LIVE_PREFLIGHT.json',{'checked_at':utc(),'model_available':True,'balance':infos,'pricing_sha256':hashlib.sha256(pricing).hexdigest(),'rates':rates,'input_byte_allowance_not_formal_token_bound':allowance,'peak_estimate_usd':str(estimate),'reservation_usd':str(self.reserve)})
         self.started=time.monotonic()
+    def check_material(self):
+        if not self.reviewed_16k:return
+        now=datetime.now(timezone.utc)
+        if now>=datetime.fromisoformat(REVIEWED_16K_DEADLINE):raise GuardStop('material_EXPIRED_no_POST')
+        from src.core.trading_calendar import get_effective_trading_date,_XCALS_AVAILABLE
+        if not _XCALS_AVAILABLE or get_effective_trading_date('us',current_time=now).isoformat()!='2026-10-15':raise GuardStop('latest_completed_session_changed')
+        # Conservative off-peak rule: block weekday peak windows even on holidays.
+        if now.weekday()<5 and (1<=now.hour<4 or 6<=now.hour<10):raise GuardStop('peak_window_no_POST')
     def on_error(self,category):
         self.stream_error=category;self.finish();raise GuardStop('POST_result_unknown_do_not_retry')
     def on_response(self,response,is_async):

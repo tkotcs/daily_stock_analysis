@@ -1,0 +1,8 @@
+{
+  "request_sha256": "08b09a31d1d08c4b1fa33bc92f850feb63709ace5c6f8fd43a63aa9bee82cdee",
+  "analysis_snapshot_asof": "2026-10-16T06:04:29.560325+00:00",
+  "target_session": "2026-10-15",
+  "source_Run": 38859033440,
+  "derived_metadata_only": true,
+  "max_tokens": 16384
+}

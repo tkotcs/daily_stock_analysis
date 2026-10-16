@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [修复] Bind the manual 16384 controller to the exact reviewed Phase 2R request and native business revision, require fresh scoped approval, and block research report rendering when risk_plan is invalid.
+
 - [改进] Make the native stock research output ceiling configurable at 16384 tokens, clarify scenario evidence, and display deterministic risk arithmetic and unabridged detailed research without changing paid controllers.
 
 - [测试] Bind the disabled one-call NVDA workflow to the verified Phase 2M frozen request and controller, with expiry checks before any paid request.
