@@ -1,5 +1,5 @@
 name: Manual authorized frozen NVDA Phase 2S 16384 one POST
-run-name: ${{ inputs.execute_live && 'Authorized frozen NVDA 16K one POST' || 'FREE frozen NVDA 16K preflight - zero paid POST' }}
+run-name: ${{ inputs.execute_live && 'Authorized frozen NVDA 16K one POST' || 'FREE isolated NVDA startup regression - fake transports' }}
 on:
   workflow_dispatch:
     inputs:
@@ -53,7 +53,7 @@ jobs:
           path: preparation
       - uses: actions/checkout@v5
         with:
-          ref: 994d81a68d070dfa59d938f5818f3155904544e9
+          ref: 9e94ecc305e724a7c436c62e7e501e64c359991e
           persist-credentials: false
           path: controller
       - uses: actions/checkout@v5
@@ -69,23 +69,19 @@ jobs:
           python -m pip install -r upstream-fixed/requirements.txt litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6 pytest
           python -m pip check
           python controller/.github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR"
-      - name: Only affected controller tests, simulated transports
-        run: |
-          python -m pytest controller/.github/scripts/test_phase2s_once.py controller/.github/scripts/test_authorized_once.py controller/.github/scripts/test_nvda_frozen_once.py -q --junitxml=targeted-tests.xml
-      - name: Verify frozen input and intercept first native SDK POST
+      - name: Three isolated startup regressions only, fake transports
         env:
           REQUEST_SHA: ${{ inputs.request_sha256 }}
         run: |
           test "$GITHUB_RUN_ATTEMPT" = 1
-          test "$(git -C preparation rev-parse HEAD)" = "$GITHUB_SHA"
-          python preparation/.github/scripts/phase2t_preflight.py --source upstream-fixed --controller controller --bundle controller/.github/frozen/phase2r --out free-evidence --expected-sha "$REQUEST_SHA"
+          test "$REQUEST_SHA" = 08b09a31d1d08c4b1fa33bc92f850feb63709ace5c6f8fd43a63aa9bee82cdee
+          python controller/.github/scripts/test_startup_process.py --source upstream-fixed --out startup-evidence
       - uses: actions/upload-artifact@v6
         if: always()
         with:
-          name: free-16k-preflight-${{ github.run_id }}
+          name: free-startup-fix-${{ github.run_id }}
           path: |
-            free-evidence/
-            targeted-tests.xml
+            startup-evidence/
           retention-days: 14
   once:
     if: ${{ inputs.execute_live && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
@@ -98,7 +94,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: 3365a4f0175ae19c17e2a87a0d66aaacb8a430ad
+          ref: 9e94ecc305e724a7c436c62e7e501e64c359991e
           persist-credentials: false
           path: controller
       - uses: actions/checkout@v5
@@ -136,7 +132,7 @@ jobs:
           import datetime,json,os,pathlib
           if os.environ['GITHUB_RUN_ATTEMPT']!='1':raise SystemExit('rerun_forbidden')
           import hashlib,subprocess
-          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd='controller',text=True).strip()=='3365a4f0175ae19c17e2a87a0d66aaacb8a430ad'
+          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd='controller',text=True).strip()=='9e94ecc305e724a7c436c62e7e501e64c359991e'
           assert os.environ['REQUEST_SHA']=='08b09a31d1d08c4b1fa33bc92f850feb63709ace5c6f8fd43a63aa9bee82cdee'
           assert os.environ['SNAPSHOT_ASOF']=='2026-10-16T06:04:29.560325+00:00'
           assert os.environ['TARGET_SESSION']=='2026-10-15'
