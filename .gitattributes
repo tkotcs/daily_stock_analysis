@@ -46,3 +46,5 @@ Makefile text eol=lf
 tests/fixtures/phase2p/* -text
 .github/frozen/phase2r/* -text
 .github/frozen/mvp-three/** -text
+tests/fixtures/mvp_real_three/** -text
+.github/frozen/mvp-*-v2/** -text
