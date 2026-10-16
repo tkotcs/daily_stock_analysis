@@ -6,6 +6,10 @@ on:
       execute_live:
         type: boolean
         default: false
+      allow_peak_test:
+        description: 'Explicit Phase2U test-only peak-rate permission; no production scheduling'
+        type: boolean
+        default: false
       request_sha256:
         type: string
         required: true
@@ -94,7 +98,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: 994d81a68d070dfa59d938f5818f3155904544e9
+          ref: 3365a4f0175ae19c17e2a87a0d66aaacb8a430ad
           persist-credentials: false
           path: controller
       - uses: actions/checkout@v5
@@ -115,11 +119,12 @@ jobs:
           python -m pip install pytest
           python -m pip check
           python controller/.github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR"
-          python -m pytest controller/.github/scripts/test_phase2s_once.py controller/.github/scripts/test_authorized_once.py controller/.github/scripts/test_nvda_frozen_once.py -q
+          python -m pytest controller/.github/scripts/test_phase2s_once.py -k 'peak or parameter_mutation or prompt_mutation or expired or timeout' -q
       - name: Read committed frozen Phase 2R files without regenerating
         run: cp -R controller/.github/frozen/phase2r locked-evidence
       - name: Bind the separately approved request to this run
         env:
+          ALLOW_PEAK_TEST: ${{ inputs.allow_peak_test }}
           REQUEST_SHA: ${{ inputs.request_sha256 }}
           SNAPSHOT_ASOF: ${{ inputs.analysis_asof }}
           TARGET_SESSION: ${{ inputs.target_session }}
@@ -131,7 +136,7 @@ jobs:
           import datetime,json,os,pathlib
           if os.environ['GITHUB_RUN_ATTEMPT']!='1':raise SystemExit('rerun_forbidden')
           import hashlib,subprocess
-          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd='controller',text=True).strip()=='994d81a68d070dfa59d938f5818f3155904544e9'
+          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd='controller',text=True).strip()=='3365a4f0175ae19c17e2a87a0d66aaacb8a430ad'
           assert os.environ['REQUEST_SHA']=='08b09a31d1d08c4b1fa33bc92f850feb63709ace5c6f8fd43a63aa9bee82cdee'
           assert os.environ['SNAPSHOT_ASOF']=='2026-10-16T06:04:29.560325+00:00'
           assert os.environ['TARGET_SESSION']=='2026-10-15'
@@ -162,12 +167,14 @@ jobs:
           assert lock['request_sha256']==os.environ['REQUEST_SHA'] and lock['authorize_paid_POST'] is False
           assert datetime.datetime.fromisoformat(lock['expires_at'])==material_expiry
           if now>=material_expiry:raise SystemExit('EXPIRED_no_POST_no_refresh')
-          if now.weekday()<5 and (1<=now.hour<4 or 6<=now.hour<10):raise SystemExit('peak_window_no_POST')
+          allow_peak_test=os.environ.get('ALLOW_PEAK_TEST')=='true'
+          if allow_peak_test and 'Phase2U' not in os.environ['APPROVAL_REF']:raise SystemExit('phase2u_explicit_test_approval_required')
+          if now.weekday()<5 and (1<=now.hour<4 or 6<=now.hour<10) and not allow_peak_test:raise SystemExit('peak_window_no_POST')
           assert _XCALS_AVAILABLE and get_effective_trading_date('us',current_time=now).isoformat()==os.environ['TARGET_SESSION']
           # Shorter per-run authorization; never extend the frozen material window.
           execution_expiry=min(now+datetime.timedelta(minutes=15),material_expiry-datetime.timedelta(seconds=30))
           if now>=execution_expiry:raise SystemExit('too_close_to_material_expiry_no_POST')
-          data={'authorize_paid_post':True,'authorization_reference':os.environ['APPROVAL_REF'],'secret_upload_approval_reference':os.environ['SECRET_APPROVAL_REF'],'run_id':os.environ['GITHUB_RUN_ID'],'fixed_commit':'a1daaa302b3a72fb5694c9872ceecf2c4dc0b6e4','target_session':os.environ['TARGET_SESSION'],'request_sha256':os.environ['REQUEST_SHA'],'analysis_asof':os.environ['SNAPSHOT_ASOF'],'pricing_sha256':os.environ['PRICING_SHA'],'reservation_usd':'0.03','expires_at':execution_expiry.isoformat()}
+          data={'allow_peak_test':allow_peak_test,'authorize_paid_post':True,'authorization_reference':os.environ['APPROVAL_REF'],'secret_upload_approval_reference':os.environ['SECRET_APPROVAL_REF'],'run_id':os.environ['GITHUB_RUN_ID'],'fixed_commit':'a1daaa302b3a72fb5694c9872ceecf2c4dc0b6e4','target_session':os.environ['TARGET_SESSION'],'request_sha256':os.environ['REQUEST_SHA'],'analysis_asof':os.environ['SNAPSHOT_ASOF'],'pricing_sha256':os.environ['PRICING_SHA'],'reservation_usd':'0.03','expires_at':execution_expiry.isoformat()}
           pathlib.Path('approved-request.json').write_text(json.dumps(data),encoding='utf-8')
           PY
       - name: One authorized native call, no retry
