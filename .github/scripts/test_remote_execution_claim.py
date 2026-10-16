@@ -16,7 +16,7 @@ class DatabaseAPI:
         if path=='rulesets':return [{'id':1,'name':'dsa-mvp-execution-claims'}]
         if path=='rulesets/1':
             if self.fail=='protection_missing':return {}
-            return {'enforcement':'active','target':'tag','bypass_actors':[], 'conditions':{'ref_name':{'exclude':[],'include':['refs/tags/dsa-mvp-consumed-v1/**','refs/tags/dsa-mvp-claim-test-v1/**']}},'rules':[{'type':'update'},{'type':'deletion'}]}
+            return {'enforcement':'active','target':'tag','current_user_can_bypass':'never','bypass_actors':[], 'conditions':{'ref_name':{'exclude':[],'include':['refs/tags/dsa-mvp-consumed-v1/**','refs/tags/dsa-mvp-claim-test-v1/**']}},'rules':[{'type':'update'},{'type':'deletion'}]}
         with closing(sqlite3.connect(self.path,timeout=10)) as db, db:
             if method=='POST' and path=='tags':
                 sha=hashlib.sha1(json.dumps(value,sort_keys=True).encode()).hexdigest();tag={**value,'sha':sha,'object':{'sha':value['object'],'type':'commit'}}
@@ -129,6 +129,22 @@ class ClaimTests(unittest.TestCase):
     def test_protection_disabled_after_reserve_blocks(self):
         c=self.claim();c.reserve(MEMBERS);self.api.fail='protection_missing'
         with self.assertRaises(GuardStop):c.before_send('NVDA',MEMBERS[0]['request_sha256'])
+    def test_hidden_admin_list_requires_explicit_current_token_denial(self):
+        base=self.api
+        def hidden(method,path,value=None):
+            result=base(method,path,value)
+            if path=='rulesets/1':result.pop('bypass_actors')
+            return result
+        c=RemoteExecutionClaim(hidden,BATCH,'1',COMMIT);c.reserve(MEMBERS)
+        c.before_send('NVDA',MEMBERS[0]['request_sha256'])
+    def test_missing_or_bypassable_token_decision_blocks(self):
+        base=self.api
+        for decision in (None,'always','pull_request'):
+            def unsafe(method,path,value=None):
+                result=base(method,path,value)
+                if path=='rulesets/1':result['current_user_can_bypass']=decision
+                return result
+            with self.assertRaises(GuardStop):RemoteExecutionClaim(unsafe,BATCH,'1',COMMIT).reserve(MEMBERS)
     def test_remote_API_timeout_is_not_retried_and_no_secret_in_error(self):
         from unittest.mock import Mock
         api=GitHubAPI('owner/repository','do-not-log-token')

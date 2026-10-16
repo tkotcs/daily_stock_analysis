@@ -67,7 +67,10 @@ class RemoteExecutionClaim:
         rule = self.api('GET', 'rulesets/' + str(ids[0]))
         condition = rule.get('conditions', {}).get('ref_name', {})
         if (rule.get('enforcement') != 'active' or rule.get('target') != 'tag'
-                or rule.get('bypass_actors') != [] or condition.get('exclude') != []
+                # GitHub hides bypass_actors from non-admin installation tokens.
+                # Require the server's explicit decision for THIS token, never infer it.
+                or rule.get('current_user_can_bypass') != 'never'
+                or rule.get('bypass_actors', []) != [] or condition.get('exclude') != []
                 or 'refs/tags/' + self.namespace + '/**' not in condition.get('include', [])
                 or not {'update', 'deletion'}.issubset({r['type'] for r in rule.get('rules', [])})):
             raise GuardStop('remote_claim_update_delete_protection_missing')
