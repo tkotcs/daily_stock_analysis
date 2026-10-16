@@ -206,6 +206,12 @@ def _phase_aware_quote_labels_zh(context: Dict[str, Any]) -> Tuple[str, str]:
         return "今日行情", "收盘价"
 
     phase = str(phase_context.get("phase") or "").strip()
+    if (phase in {"intraday", "lunch_break", "closing_auction"}
+            and phase_context.get('session_date')
+            and (context.get('today') or {}).get('date')
+            and str((context.get('today') or {}).get('date')) != str(phase_context['session_date'])
+            and _today_looks_complete_daily_bar(context, phase_context)):
+        return "上一完整交易日行情", "上一完整交易日收盘价"
     if phase in {"premarket", "non_trading"}:
         today = context.get("today")
         if _today_looks_complete_daily_bar(context, phase_context):
@@ -4363,6 +4369,9 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
                        previous.get('is_partial_bar') or previous.get('is_estimated') or phase_partial)
         lines.append(('Daily bar date (not the current intraday session): ' if english else
                       '以下“本日”指所用日线日期，非当前盘中交易日：') + str(today.get('date', 'N/A')))
+        if not partial:
+            lines.append('The supplied close is a completed daily close, NOT a live estimate.' if english else
+                         '此close是已完成日线收盘价，不是运行时的盘中估算价；执行阶段不能改变数据时点。')
         for period in (5, 10, 20, 60):
             key = f'ma{period}'
             current_ma, prior_ma = number(today, key), number(previous, key)
@@ -4376,6 +4385,29 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
                 up = prior_close <= prior_ma and close > current_ma
                 event = ('new downward close crossing' if down else 'new upward close crossing' if up else 'no new close crossing') if english else ('本日收盘新下穿' if down else '本日收盘新上穿' if up else '本日无新收盘穿越')
             lines.append(f'close {state} MA{period}={current_ma:g}; {event}')
+        for left, right in ((5, 10), (5, 20), (5, 60), (10, 20), (10, 60), (20, 60)):
+            a, b = number(today, f'ma{left}'), number(today, f'ma{right}')
+            if a is not None and b is not None:
+                relation = '>' if a > b else '<' if a < b else '='
+                lines.append(f'MA{left}={a:g} {relation} MA{right}={b:g}')
+        previous_volume = number(previous, 'volume')
+        volume = number(today, 'volume')
+        if comparable and volume is not None and previous_volume is not None:
+            lines.append(f'volume / previous_session_volume = {volume / previous_volume:.4f}; '
+                         + ('previous-day multiple, NOT the multi-day ratio' if english else '仅相对前一交易日倍数，不是多日均量比'))
+        native_ratio = number(today, 'volume_ratio')
+        if native_ratio is not None:
+            lines.append(f'daily volume_ratio = {native_ratio:g}; '
+                         + ('daily volume / PREVIOUS five-session mean; not intraday relative volume' if english else
+                            '本日成交量/此前5个交易日均量（shift 1），不是前日倍数或分时量比'))
+        earnings = (context.get('fundamental_context') or {}).get('earnings') or {}
+        report = (earnings.get('data') or {}).get('financial_report') or {}
+        if report:
+            lines.append(f"Financial report period={report.get('report_date', 'N/A')}; "
+                         f"financial currency={report.get('currency', 'N/A')}; "
+                         f"source={earnings.get('source_chain', [])}; "
+                         + ('provided aggregation, not independently issuer-verified here' if english else
+                            '所给聚合字段，本步骤未逐项核验公司原始披露'))
         lines.append('Position is not an event. Crossings do not establish a volume-confirmed breakout; specify closing confirmation and volume benchmark.' if english else '位置状态不等于新发生事件。均线穿越不等于有效放量突破；有效突破须说明收盘确认与成交量比较基准。')
         return '\n'.join(lines) + '\n'
 
@@ -4495,10 +4527,15 @@ Add dashboard.battle_plan.risk_plan with numeric max_position_pct (0-100) and
 scenarios: [{"entry":100,"stop":95,"target":110,"position_pct":10,
 "trigger":"hypothetical closing and volume confirmation",
 "invalidation":"hypothesis invalidation"}]. Example numbers are NOT this stock's
-levels. Use null for risk_plan when no justified entry/stop exists, and null for
-an unsupported target. Python computes loss_pct=(entry-stop)/entry*100 and
+levels. If no justified entry exists, use
+{"mode":"watch","max_position_pct":0,"existing_position_cap_pct":null,"scenarios":[]}.
+max_position_pct caps NEW exposure only; existing_position_cap_pct separately caps
+existing holdings (null means unknown). Never invent a watch-only entry or stop.
+For trade mode, use numeric scenarios, null for an unsupported target, and refer
+to scenario numbers in legacy prose instead of duplicating stop/target/cap values.
+Python computes loss_pct=(entry-stop)/entry*100 and
 reward_risk=(target-entry)/(entry-stop); never invent arithmetic percentages.
-Scenarios are alternatives, not simultaneous allocations. All scenarios and position narratives must respect the same maximum position;
+Scenarios are alternatives, not simultaneous allocations. All NEW exposure scenarios must respect the same cap; existing holdings use their separately supplied cap.
 do not repeat numeric position or loss percentages in legacy prose fields.
 """
         else:
@@ -4510,12 +4547,23 @@ do not repeat numeric position or loss percentages in legacy prose fields.
 按资料丰富程度分配篇幅，正常5000–6000输出Token仅为规划区间，不是最低字数要求；不重复堆指标。
 在dashboard.battle_plan增加risk_plan对象，含数值max_position_pct（0–100）与scenarios数组：
 {"entry":100,"stop":95,"target":110,"position_pct":10,"trigger":"假设的收盘与量能确认","invalidation":"判断失效条件"}。
-以上仅演示结构，不是本股价位。没有依据的入场/止损时risk_plan=null；无依据目标target=null。
+以上仅演示结构，不是本股价位。没有入场依据时使用
+{"mode":"watch","max_position_pct":0,"existing_position_cap_pct":null,"scenarios":[]}，不虚构价格。
+max_position_pct仅指新增仓位；existing_position_cap_pct单列既有持仓上限，未知为null；不得相互替代。
+有交易计划时mode="trade"，scenarios填真实假设数值；无依据目标target=null。
+旧sniper_points及position_strategy只引用情景编号和条件，不另写相冲突的止损、目标或仓位数字。
 名义损失率=(entry-stop)/entry*100，收益风险比=(target-entry)/(entry-stop)，由Python计算，模型不得自行填写算术百分比。
 各情景互为备选，不同时叠加；所有情景仓位不得超过唯一max_position_pct；原有仓位/入场文案仅写条件，不重复数字仓位、损失率或收益风险比。
 """
         if context.get('news_source_note'):
             prompt += '\n' + str(context['news_source_note']) + '\n'
+        prompt += ('\nUse each supplied financial field with its own source, report period and currency. '
+                   'A partial earnings sub-block is not erased by an unsupported parent block. '
+                   'Yahoo aggregates are not issuer-verified GAAP; missing news/fund/financial data '
+                   'never proves absence of risks. Do not assert unprovided tracking error or market share.\n'
+                   if english else '\n财务逐字段使用已给来源、报告期和币种；上层not_supported不抹去earnings子块partial数据。'
+                   'Yahoo聚合不是公司逐项核验GAAP。未提供新闻、基金或财务资料不能证明风险不存在；'
+                   '不得断言未给出的跟踪误差、市场份额或“无基金管理人风险”。\n')
         if english:
             prompt += "\nEvidence limits: supplied news is not a comprehensive search. Titles/metadata do not establish article details or absence of adverse news; mark no-adverse-news checklist items unverified when coverage is incomplete. For each hypothetical entry E and stop S, give nominal price loss (E-S)/E*100%; do not guarantee realized or portfolio drawdown. Yahoo financial ratios may be TTM/aggregated and are not individually issuer-verified unless explicitly stated. Revenue/profit amounts alone do not establish earnings quality; examine comparable-period cash flows and working capital, otherwise state uncertainty.\n"
         else:

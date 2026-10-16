@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [修复] Clarify completed daily closes, pairwise MA facts and separate volume benchmarks; allow explicit watch plans and distinguish new exposure from existing holdings without changing saved model text.
+
 - [修复] Reserve three-stock paid batches and request hashes with protected create-only GitHub refs; reject cross-Runner reuse and unknown reservation outcomes before model transport.
 
 - [测试] Prepare an explicitly approved three-request manual test using the existing session/client/POST guard, per-symbol raw response and usage capture, with no dispatch or automatic publication.

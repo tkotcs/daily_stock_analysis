@@ -6,6 +6,21 @@ The original model narrative remains unchanged. Invalid plans fail closed.
 import math
 
 
+def is_watch_plan(plan):
+    """Explicit no-new-trade plans, including the saved zero/null legacy response."""
+    if not isinstance(plan, dict) or type(plan.get('max_position_pct')) not in (int, float) or plan['max_position_pct'] != 0:
+        return False
+    scenarios = plan.get('scenarios')
+    if plan.get('mode') == 'watch' and scenarios == []:
+        return True
+    return (plan.get('mode') in (None, 'watch') and isinstance(scenarios, list)
+            and 0 < len(scenarios) <= 4 and all(isinstance(s, dict)
+            and all(s.get(k) is None for k in ('entry', 'stop', 'target'))
+            and type(s.get('position_pct')) in (int, float) and s['position_pct'] == 0
+            and all(isinstance(s.get(k), str) and s[k].strip() for k in ('trigger', 'invalidation'))
+            for s in scenarios))
+
+
 def calculate_risk_plan(plan):
     """Return (calculated rows, maximum position, errors), without mutating plan."""
     if not isinstance(plan, dict):
@@ -21,10 +36,17 @@ def calculate_risk_plan(plan):
     rows, errors = [], []
     try:
         cap = number(plan.get('max_position_pct'), zero=True)
+        existing = plan.get('existing_position_cap_pct')
+        if existing is not None and number(existing, zero=True) > 100:
+            raise ValueError('invalid_existing_position_cap')
         if cap > 100:
             raise ValueError('position_over_100')
     except ValueError as exc:
         return [], None, [str(exc)]
+    if is_watch_plan(plan):
+        return [], 0, []
+    if plan.get('mode') not in (None, 'trade'):
+        return [], cap, ['invalid_trade_mode']
     scenarios = plan.get('scenarios')
     if not isinstance(scenarios, list) or not scenarios or len(scenarios) > 4:
         return [], cap, ['one_to_four_scenarios_required']
@@ -55,14 +77,24 @@ def calculate_risk_plan(plan):
 
 def format_risk_plan(plan, *, english=False):
     """A single position source and computed arithmetic; no legacy prose parsing."""
+    if plan is None:
+        return ('No new trade plan supplied; watch only. Existing exposure is unknown.' if english else
+                '未提供新增交易计划：按观望展示，不虚构入场/止损；现有持仓建议未核验。')
     rows, cap, errors = calculate_risk_plan(plan)
     if errors:
         return ('Risk plan unverified; do not use model arithmetic/position prose. ' if english else
                 '风险计划未核验，不采用模型算术或仓位文案：') + ', '.join(errors)
+    existing = plan.get('existing_position_cap_pct')
+    holdings = (f'Existing-position cap: {existing:g}%.' if english else f'现有持仓上限：{existing:g}%。') if existing is not None else (
+        'Existing-position cap not supplied; do not infer it from the new-exposure cap.' if english else
+        '现有持仓上限未提供，不能由新增仓位上限推断；模型原文另行审阅。')
+    if is_watch_plan(plan):
+        return ('Watch only; new-position cap 0%; no invented entry/stop/target. ' if english else
+                '观望：新增仓位上限0%，无新增交易情景，不虚构入场/止损/目标。') + holdings
     def cell(value):
         return str(value).replace('|', '\\|').replace('\n', ' ')
     lines = [f'Python-calculated hypothetical long plan; shared position cap {cap:g}%.' if english else
-             f'Python确定性计算的假设做多情景；统一仓位上限{cap:g}%。',
+             f'Python确定性计算的假设做多情景；统一仓位上限{cap:g}%（仅新增仓位）。',
              '| Entry | Stop | Target | Loss % | Reward/risk | Position % | Trigger | Invalidation |' if english else
              '| 入场 | 止损 | 目标 | 名义损失% | 收益风险比 | 仓位% | 触发 | 失效 |',
              '|---|---|---|---|---|---|---|---|']
@@ -72,4 +104,5 @@ def format_risk_plan(plan, *, english=False):
         lines.append(f"| {row['entry']:g} | {row['stop']:g} | {target} | {row['loss_pct']:.3f} | {rr} | {row['position_pct']:g} | {cell(row['trigger'])} | {cell(row['invalidation'])} |")
     lines.append('Assumptions, not verified target forecasts; excludes fees, gaps and slippage.' if english else
                  '情景参数来自模型假设，不是已证实的目标价；未计费用、跳空和滑点，不保证实际损失。')
+    lines.append(holdings)
     return '\n'.join(lines)
