@@ -206,14 +206,14 @@
   "market_phase_context": {
     "market": "us",
     "phase": "intraday",
-    "market_local_time": "2026-10-16T11:34:50.970475-04:00",
+    "market_local_time": "2026-10-16T12:07:15.235083-04:00",
     "session_date": "2026-10-16",
     "effective_daily_bar_date": "2026-10-15",
     "is_trading_day": true,
     "is_market_open_now": true,
     "is_partial_bar": true,
     "minutes_to_open": null,
-    "minutes_to_close": 265,
+    "minutes_to_close": 232,
     "trigger_source": "system",
     "analysis_intent": "auto",
     "warnings": []
