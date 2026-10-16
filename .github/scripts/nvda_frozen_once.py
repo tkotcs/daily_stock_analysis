@@ -74,12 +74,13 @@ def main():
     key=os.getenv('DEEPSEEK_API_KEY','').strip()
     if not key:raise SystemExit('missing_key_no_POST')
     log=SafeWriter(out/'REDACTED_PROCESS.log',key);sys.stdout=log;sys.stderr=log;atexit.register(log.close)
+    # Material checks in LiveSession need the pinned native trading calendar.
+    sys.path.insert(0,str(source))
     session=LiveSession(out,auth,key,args.run_id)
     session.save('AUTHORIZATION_USED.json',auth)
     for name in list(os.environ):
         if name.endswith(('_API_KEY','_API_KEYS','_PASSWORD','_ACCESS_TOKEN','_APP_SECRET','_WEBHOOK_URL')) or name in ('TUSHARE_TOKEN','MODELFLARE_KEY','AIHUBMIX_KEY','TELEGRAM_BOT_TOKEN','GH_TOKEN','GITHUB_TOKEN','LITELLM_CONFIG','LLM_CHANNELS','DEEPSEEK_API_BASE','DEEPSEEK_BASE_URL','OPENAI_BASE_URL','OPENAI_API_BASE') or name.startswith('LLM_'):os.environ.pop(name,None)
     os.environ.update(DEEPSEEK_API_KEY=key,DEEPSEEK_API_BASE='https://api.deepseek.com',LITELLM_MODEL='deepseek/deepseek-flash',LITELLM_FALLBACK_MODELS='',LITELLM_LOCAL_MODEL_COST_MAP='True',REPORT_INTEGRITY_RETRY='0',ENABLE_FUNDAMENTAL_PIPELINE='false',ENABLE_REALTIME_QUOTE='false',AGENT_MODE='false',SCHEDULE_ENABLED='false',MARKET_REVIEW_ENABLED='false',DAILY_MARKET_CONTEXT_ENABLED='false',SINGLE_STOCK_NOTIFY='false',REPORT_LANGUAGE='zh',DATABASE_PATH=str(out/'native.sqlite'))
-    sys.path.insert(0,str(source))
     guard=OnePostGuard(preflight=False,before_send=session.approve,on_response=session.on_response,on_error=session.on_error);guard.install()
     blocked={'notification':0,'other_network':0}
     def deny(kind):
