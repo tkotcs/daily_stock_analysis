@@ -24,3 +24,5 @@ An offline prompt test cannot prove improved model accuracy. Compare a separatel
 authorized new output using the same six dimensions. Do not count repeated
 mentions as independent errors or report a whole-document accuracy percentage
 from this tiny, selected baseline. Keep raw text and editorial notes separate.
+
+The manual preparation and execution adapters now pin candidate `15a93504f909d1af118d95f6108af8bf4c7d10db`. The free three-symbol capture uses this same native code; it does not authorize a model request.

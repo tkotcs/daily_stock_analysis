@@ -140,7 +140,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v5
         with:
-          ref: 6ebdf627d9becd24f4db1290c19996175e5e0df8
+          ref: 15a93504f909d1af118d95f6108af8bf4c7d10db
           path: upstream-fixed
           persist-credentials: false
       - uses: actions/setup-python@v6
@@ -155,7 +155,7 @@ jobs:
           MVP_UNIVERSE: ${{ inputs.mvp_universe }}
         run: |
           test "$GITHUB_RUN_ATTEMPT" = 1
-          test "$(git -C upstream-fixed rev-parse HEAD)" = 6ebdf627d9becd24f4db1290c19996175e5e0df8
+          test "$(git -C upstream-fixed rev-parse HEAD)" = 15a93504f909d1af118d95f6108af8bf4c7d10db
           python preparation/.github/scripts/mvp_three.py --source upstream-fixed --out mvp-output --universe "$MVP_UNIVERSE"
       - name: Freeze fresh manual candidates only, no authorization or POST
         if: always()
@@ -208,7 +208,7 @@ jobs:
           path: preparation
       - uses: actions/checkout@v5
         with:
-          ref: 6ebdf627d9becd24f4db1290c19996175e5e0df8
+          ref: 15a93504f909d1af118d95f6108af8bf4c7d10db
           persist-credentials: false
           path: upstream-fixed
       - uses: actions/setup-python@v6
