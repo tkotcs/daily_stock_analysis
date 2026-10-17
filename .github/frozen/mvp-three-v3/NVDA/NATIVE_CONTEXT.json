@@ -1,0 +1,445 @@
+{
+  "code": "NVDA",
+  "date": "2026-10-16",
+  "today": {
+    "code": "NVDA",
+    "date": "2026-10-16",
+    "open": 216.55999755859375,
+    "high": 218.67999267578125,
+    "low": 213.32000732421875,
+    "close": 214.1300048828125,
+    "volume": 120855100.0,
+    "amount": 25878703153.112793,
+    "pct_chg": -1.43,
+    "ma5": 221.5,
+    "ma10": 228.29,
+    "ma20": 228.18,
+    "volume_ratio": 1.25,
+    "data_source": "YfinanceFetcher",
+    "canonical_id": "NVDA",
+    "ma60": 219.81373697916666
+  },
+  "yesterday": {
+    "code": "NVDA",
+    "date": "2026-10-15",
+    "open": 215.3000030517578,
+    "high": 218.47000122070312,
+    "low": 212.85000610351562,
+    "close": 217.22999572753906,
+    "volume": 127087900.0,
+    "amount": 27607303974.02191,
+    "pct_chg": -1.84,
+    "ma5": 224.53,
+    "ma10": 230.27,
+    "ma20": 228.58,
+    "volume_ratio": 1.33,
+    "data_source": "YfinanceFetcher",
+    "canonical_id": "NVDA",
+    "ma60": 219.720347849528
+  },
+  "volume_change_ratio": 0.95,
+  "price_change_ratio": -1.43,
+  "ma_status": "短期走弱 🔽",
+  "report_language": "zh",
+  "stock_name": "NVIDIA Corporation",
+  "news_window_days": 3,
+  "trend_analysis": {
+    "trend_status": "弱势空头",
+    "ma_alignment": "弱势空头，MA5<MA10 但 MA10≥MA20",
+    "trend_strength": 40,
+    "bias_ma5": -3.327312897247752,
+    "bias_ma10": -6.201402660002345,
+    "rsi_12": 34.64511636131462,
+    "volume_status": "量能正常",
+    "volume_trend": "量能正常",
+    "buy_signal": "卖出",
+    "signal_score": 37,
+    "signal_reasons": [
+      "✅ 价格回踩MA5(-3.3%)，观察支撑",
+      "⚡ RSI弱势(34.6)，关注反弹"
+    ],
+    "risk_factors": [
+      "⚠️ ⚠️ DIF下穿零轴，趋势转弱"
+    ]
+  },
+  "is_index_etf": false,
+  "fundamental_context": {
+    "market": "us",
+    "status": "not_supported",
+    "coverage": {
+      "valuation": "not_supported",
+      "growth": "not_supported",
+      "earnings": "not_supported",
+      "institution": "not_supported",
+      "capital_flow": "not_supported",
+      "dragon_tiger": "not_supported",
+      "boards": "not_supported"
+    },
+    "source_chain": [
+      {
+        "provider": "fundamental_pipeline",
+        "result": "not_supported",
+        "duration_ms": 0
+      }
+    ],
+    "errors": [
+      "MVP仅启用Yahoo财务；其他模块未配置"
+    ],
+    "valuation": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "MVP仅启用Yahoo财务；其他模块未配置"
+      ],
+      "data": {}
+    },
+    "growth": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "MVP仅启用Yahoo财务；其他模块未配置"
+      ],
+      "data": {}
+    },
+    "earnings": {
+      "status": "partial",
+      "coverage": {
+        "status": "partial"
+      },
+      "source_chain": [
+        "growth:yfinance.info",
+        "earnings.financial_report:yfinance",
+        "earnings.dividend:yfinance",
+        "belong_boards:yfinance.info",
+        {
+          "provider": "reviewed_official_release",
+          "source": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/",
+          "period": "2026-07-26"
+        }
+      ],
+      "errors": [],
+      "data": {
+        "financial_report": {
+          "revenue": 96221000000.0,
+          "net_profit_parent": 59688000000.0,
+          "operating_cash_flow": 24077000000.0,
+          "report_date": "2026-07-26",
+          "currency": "USD",
+          "source": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/"
+        },
+        "dividend": {
+          "events": [
+            {
+              "event_date": "2026-09-10",
+              "ex_dividend_date": "2026-09-10",
+              "record_date": null,
+              "announcement_date": null,
+              "cash_dividend_per_share": 0.25,
+              "is_pre_tax": true
+            },
+            {
+              "event_date": "2026-06-04",
+              "ex_dividend_date": "2026-06-04",
+              "record_date": null,
+              "announcement_date": null,
+              "cash_dividend_per_share": 0.25,
+              "is_pre_tax": true
+            },
+            {
+              "event_date": "2026-03-11",
+              "ex_dividend_date": "2026-03-11",
+              "record_date": null,
+              "announcement_date": null,
+              "cash_dividend_per_share": 0.01,
+              "is_pre_tax": true
+            },
+            {
+              "event_date": "2025-12-04",
+              "ex_dividend_date": "2025-12-04",
+              "record_date": null,
+              "announcement_date": null,
+              "cash_dividend_per_share": 0.01,
+              "is_pre_tax": true
+            },
+            {
+              "event_date": "2025-09-11",
+              "ex_dividend_date": "2025-09-11",
+              "record_date": null,
+              "announcement_date": null,
+              "cash_dividend_per_share": 0.01,
+              "is_pre_tax": true
+            }
+          ],
+          "ttm_event_count": 4,
+          "ttm_cash_dividend_per_share": 0.52,
+          "coverage": "cash_dividend_pre_tax",
+          "currency": "USD",
+          "as_of": "2026-10-17",
+          "ttm_dividend_yield_pct": 0.2428
+        }
+      }
+    },
+    "institution": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "MVP仅启用Yahoo财务；其他模块未配置"
+      ],
+      "data": {}
+    },
+    "capital_flow": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "MVP仅启用Yahoo财务；其他模块未配置"
+      ],
+      "data": {}
+    },
+    "dragon_tiger": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "MVP仅启用Yahoo财务；其他模块未配置"
+      ],
+      "data": {}
+    },
+    "boards": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "MVP仅启用Yahoo财务；其他模块未配置"
+      ],
+      "data": {}
+    },
+    "belong_boards": []
+  },
+  "market_phase_context": {
+    "market": "us",
+    "phase": "non_trading",
+    "market_local_time": "2026-10-17T04:17:35.606532-04:00",
+    "session_date": "2026-10-17",
+    "effective_daily_bar_date": "2026-10-16",
+    "is_trading_day": false,
+    "is_market_open_now": false,
+    "is_partial_bar": false,
+    "minutes_to_open": null,
+    "minutes_to_close": null,
+    "trigger_source": "system",
+    "analysis_intent": "auto",
+    "warnings": []
+  },
+  "market_structure_context": {
+    "schema_version": "market-structure-v1",
+    "status": "not_supported",
+    "market": "us",
+    "trade_date": "2026-10-16",
+    "market_theme_context": {
+      "schema_version": "market-theme-v1",
+      "status": "not_supported",
+      "market": "us",
+      "trade_date": "2026-10-16",
+      "active_themes": [],
+      "leading_industries": [],
+      "leading_concepts": [],
+      "lagging_themes": [],
+      "hotspot_constituents": [],
+      "leader_stocks": [],
+      "theme_breadth": {
+        "active_count": 0,
+        "leading_industry_count": 0,
+        "leading_concept_count": 0,
+        "lagging_count": 0
+      },
+      "data_quality": {
+        "status": "not_supported",
+        "missing_fields": [
+          "a_share_theme_context"
+        ],
+        "sources": [
+          {
+            "provider": "dsa",
+            "dataset": "market_structure",
+            "status": "not_supported",
+            "message": "stock market structure is only supported for A-share first version"
+          }
+        ],
+        "errors": []
+      }
+    },
+    "stock_market_position": {
+      "schema_version": "stock-market-position-v1",
+      "status": "not_supported",
+      "stock_code": "NVDA",
+      "stock_name": "NVIDIA Corporation",
+      "market": "us",
+      "related_boards": [],
+      "stock_role": "unknown",
+      "theme_phase": "unknown",
+      "risk_tags": [],
+      "missing_fields": [
+        "a_share_theme_context"
+      ]
+    }
+  },
+  "official_research": {
+    "period_end": "2026-07-26",
+    "period_label": "FY2027 Q2",
+    "published_date": "2026-08-26",
+    "publication_time_exact": null,
+    "available_after": "2026-08-28T00:00:00+00:00",
+    "currency": "USD",
+    "values": {
+      "revenue": 96221000000.0,
+      "net_profit_parent": 59688000000.0,
+      "operating_cash_flow": 24077000000.0
+    },
+    "source_url": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/",
+    "source_sha256": "a77c1c8a0a27e3c16664561d446778d3a4c089c717fa7bc1b3084825baeac527",
+    "fetched_at": "2026-10-17T08:04:55.988252+00:00",
+    "extras": {
+      "receivables": {
+        "current_USD": 63059000000.0,
+        "comparison_USD": 38466000000.0,
+        "asof": "2026-07-26",
+        "comparison_asof": "2026-01-25"
+      },
+      "inventories": {
+        "current_USD": 31575000000.0,
+        "comparison_USD": 21403000000.0,
+        "asof": "2026-07-26",
+        "comparison_asof": "2026-01-25"
+      },
+      "data_center_revenue_rounded_USD": 89000000000
+    },
+    "row_proof": {
+      "revenue": {
+        "table": 0,
+        "row": [
+          "Revenue",
+          "$96,221",
+          "$81,615",
+          "$46,743",
+          "18 %",
+          "106 %"
+        ],
+        "column": "first current quarter, USD millions"
+      },
+      "net_profit_parent": {
+        "table": 0,
+        "row": [
+          "Net income",
+          "$59,688",
+          "$58,321",
+          "$26,422",
+          "2 %",
+          "126 %"
+        ],
+        "column": "first current quarter, USD millions"
+      },
+      "operating_cash_flow": {
+        "table": 4,
+        "row": [
+          "Net cash provided by operating activities",
+          "",
+          "24,077",
+          "",
+          "",
+          "",
+          "15,365",
+          "",
+          "",
+          "",
+          "74,421",
+          "",
+          "",
+          "",
+          "42,779",
+          ""
+        ],
+        "column": "first current quarter, USD millions"
+      },
+      "receivables": {
+        "table": 3,
+        "row": [
+          "",
+          "Accounts receivable, net",
+          "",
+          "",
+          "63,059",
+          "",
+          "",
+          "38,466"
+        ]
+      },
+      "inventories": {
+        "table": 3,
+        "row": [
+          "",
+          "Inventories",
+          "",
+          "",
+          "31,575",
+          "",
+          "",
+          "21,403"
+        ]
+      }
+    },
+    "text": "官方已披露经营与财务资料：NVDA FY2027 Q2；单季度截止2026-07-26，USD；公告日期2026-08-26，精确首次公开时间未独立证明；保守可用代理2026-08-28T00:00:00+00:00（不是披露时间）。\n来源：https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/；采集2026-10-17T08:04:55.988252+00:00；正式公告的未审计GAAP表，不等于审计意见。\n单季度金额USD：{\"revenue\":96221000000.0,\"net_profit_parent\":59688000000.0,\"operating_cash_flow\":24077000000.0}\n经营背景：公司公告按市场平台披露Data Center收入约890亿美元，主要为AI计算与网络平台；该数字为收入，不是利润贡献。\n附加字段（资产负债表是时点存量，不等于季度现金流；分部收入不证明分部利润）：{\"receivables\":{\"current_USD\":63059000000.0,\"comparison_USD\":38466000000.0,\"asof\":\"2026-07-26\",\"comparison_asof\":\"2026-01-25\"},\"inventories\":{\"current_USD\":31575000000.0,\"comparison_USD\":21403000000.0,\"asof\":\"2026-07-26\",\"comparison_asof\":\"2026-01-25\"},\"data_center_revenue_rounded_USD\":89000000000}\n旧Yahoo季度列日期2026-07-31与公司真实期末2026-07-26不同；三个金额核对一致。不得把现金流量表半年数744.21亿美元误作单季度240.77亿美元。\n其余Yahoo ROE、分红和估值仍为各自聚合/TTM口径，不把官方金额核验扩展到这些指标。上述是财报证据，不是近3日综合新闻搜索；不能据此排除其他风险事件。"
+  },
+  "news_source_note": "官方已披露财报资料已提供；未执行综合新闻搜索，近3日新闻覆盖仍不完整，不排除其他事件。"
+}
