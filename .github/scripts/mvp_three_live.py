@@ -6,7 +6,7 @@ import argparse,atexit,datetime as dt,hashlib,html,json,os,pathlib,smtplib,subpr
 from decimal import Decimal
 
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
-from authorized_once import LiveSession,SafeWriter,canonical_sha,free_get,MANUAL_BUSINESS
+from authorized_once import LiveSession,SafeWriter,canonical_sha,free_get,MANUAL_BUSINESS,pricing_text_sha
 from free_market_validation import WATCHLIST
 from deepseek_post_guard import OnePostGuard,GuardStop,ENDPOINT
 from nvda_frozen_once import dispatch_frozen,render_native_report
@@ -144,7 +144,7 @@ def main():
                 auth={'test_profile':lock['profile'],'authorize_paid_post':True,'authorization_reference':approval['authorization_reference']+' '+member['request_sha256'],
                       'secret_upload_approval_reference':approval.get('secret_upload_approval_reference','existing approved repository Secret'),'run_id':approval['run_id'],'fixed_commit':business,
                       'batch_sha256':a.batch_sha,'request_sha256':member['request_sha256'],'symbol':code,'analysis_asof':member['analysis_asof'],'target_session':member['target_session'],
-                      'material_expires_at':member['material_expires_at'],'expires_at':expiry.isoformat(),'pricing_sha256':lock['pricing_sha256'],'reservation_usd':'.03','allow_peak_test':True}
+                      'material_expires_at':member['material_expires_at'],'expires_at':expiry.isoformat(),'pricing_sha256':lock['pricing_sha256'],'reservation_usd':'.03','allow_peak_test':True,'pricing_text_sha256':pricing_text_sha((bundle/'OFFICIAL_PRICING.html').read_bytes())}
                 session=LiveSession(dest,auth,key,approval['run_id'],get=get)
                 session.save('AUTHORIZATION_USED.json',auth)
                 def approve(body):

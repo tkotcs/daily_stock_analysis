@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > For user-friendly release highlights, see the [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) page.
 
 ## [Unreleased]
+- [修复] 手动研究费率核验允许官方页面仅静态资源URL变化；仍验证冻结快照、完整页面文字及全部费率。
 - [改进] 研究候选复用原版MA60上下文补齐前日均线、明确RSI原生阈值及数值排序；情景摘要从risk_plan确定性生成，免费准备可附带带期间与来源的官方财报证据。
 - [修复] 根据三股真实研究对照，消除旧JSON示例强制填写交易数字的提示冲突，明确MA60观察线相对位置及无法核实的穿越范围；保留原模型正文作为回归样本。
 - [chore] 将三股手动材料准备和执行入口固定到已验收的研究质量候选，不改变调用保护或自动调度。

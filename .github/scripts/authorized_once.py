@@ -44,6 +44,18 @@ def verify_prices(raw):
     patterns=[r'1M INPUT TOKENS \(CACHE HIT\) OFF-PEAK \$0\.003 \$0\.022 PEAK \$0\.006 \$0\.044',r'1M INPUT TOKENS \(CACHE MISS\) OFF-PEAK \$0\.15 \$0\.66 PEAK \$0\.3 \$1\.32',r'1M OUTPUT TOKENS OFF-PEAK \$0\.6 \$1\.98 PEAK \$1\.2 \$3\.96']
     if 'DeepSeek-V4.1-Flash' not in text or not all(re.search(x,text) for x in patterns):raise GuardStop('pricing_changed_or_unparseable')
     return {'peak':{'cache_hit':'.006','cache_miss':'.30','output':'1.20'},'off_peak':{'cache_hit':'.003','cache_miss':'.15','output':'.60'}}
+def pricing_text_sha(raw):
+    """Fingerprint every HTML text node; asset URL attributes are not tariff text."""
+    parser=Text();parser.feed(raw.decode('utf-8'))
+    return canonical_sha(parser.parts)
+
+def verify_pricing_snapshot(raw,expected_html_sha,expected_text_sha=None):
+    rates=verify_prices(raw)
+    if hashlib.sha256(raw).hexdigest()!=expected_html_sha:
+        if not expected_text_sha or pricing_text_sha(raw)!=expected_text_sha:
+            raise GuardStop('pricing_snapshot_changed')
+    return rates
+
 def usage_cost(usage):
     """Peak/off-peak range; never turn missing supplier usage into zero."""
     if not isinstance(usage,dict):return {'status':'unknown_missing_usage'}
@@ -126,15 +138,14 @@ class LiveSession:
         infos=[{k:b.get(k) for k in ('currency','total_balance')} for b in balance.get('balance_infos',[])]
         if not infos or not any(Decimal(str(b['total_balance']))>0 for b in infos):raise GuardStop('balance_not_positive')
         pricing=self.get(PRICING)
-        if hashlib.sha256(pricing).hexdigest()!=self.auth.get('pricing_sha256'):raise GuardStop('pricing_snapshot_changed')
-        rates=verify_prices(pricing)
+        rates=verify_pricing_snapshot(pricing,self.auth.get('pricing_sha256'),self.auth.get('pricing_text_sha256') if self.auth.get('test_profile')=='mvp_manual_v2' else None)
         if datetime.now(timezone.utc)>=datetime.fromisoformat(self.auth['expires_at']):raise GuardStop('authorization_expired_during_preflight')
         self.check_material()
         # Atomic exclusive local marker. A new Runner needs a different authorized run_id;
         # reruns of the same GitHub run are forbidden. This is not a budget ledger.
         with (self.out/'POST_ATTEMPT.json').open('x',encoding='utf-8') as f:
             json.dump({'run_id':self.run_id,'request_sha256':canonical_sha(body),'state':'reserved_before_transport_may_be_charged','at':utc(),'reservation_usd':str(self.reserve)},f)
-        self.save('LIVE_PREFLIGHT.json',{'checked_at':utc(),'model_available':True,'balance':infos,'pricing_sha256':hashlib.sha256(pricing).hexdigest(),'rates':rates,'input_byte_allowance_not_formal_token_bound':allowance,'peak_estimate_usd':str(estimate),'reservation_usd':str(self.reserve)})
+        self.save('LIVE_PREFLIGHT.json',{'checked_at':utc(),'model_available':True,'balance':infos,'pricing_sha256':hashlib.sha256(pricing).hexdigest(),'frozen_pricing_sha256':self.auth.get('pricing_sha256'),'pricing_text_sha256':pricing_text_sha(pricing),'rates':rates,'input_byte_allowance_not_formal_token_bound':allowance,'peak_estimate_usd':str(estimate),'reservation_usd':str(self.reserve)})
         self.started=time.monotonic()
     def check_material(self):
         if self.mvp_test:
