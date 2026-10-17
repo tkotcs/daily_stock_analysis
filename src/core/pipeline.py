@@ -1090,6 +1090,7 @@ class StockAnalysisPipeline:
                 'trend_strength': trend_result.trend_strength,
                 'bias_ma5': trend_result.bias_ma5,
                 'bias_ma10': trend_result.bias_ma10,
+                'rsi_12': trend_result.rsi_12 if trend_result.data_points >= 13 and type(getattr(trend_result, 'rsi_12', None)) in (int, float) and math.isfinite(trend_result.rsi_12) else None,
                 'volume_status': trend_result.volume_status.value,
                 'volume_trend': trend_result.volume_trend,
                 'buy_signal': trend_result.buy_signal.value,

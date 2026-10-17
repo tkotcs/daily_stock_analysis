@@ -5,6 +5,31 @@ from dataclasses import replace
 IR='https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/'
 RSS='https://nvidianews.nvidia.com/releases.xml'
 
+
+def attach_reviewed_release(context, packet, asof, out):
+    """Reuse a human-checked public release; retain the original Yahoo block."""
+    item = packet.get(context.get('code'))
+    if not item or context.get('is_index_etf'):
+        return context, None
+    if asof.tzinfo is None or datetime.fromisoformat(item['available_after']) > asof or datetime.fromisoformat(item['fetched_at']) > asof:
+        raise ValueError('official_release_not_available_at_cutoff')
+    if not item['period_end'] <= item['published_date'] <= asof.date().isoformat():
+        raise ValueError('official_release_period_or_date_invalid')
+    result = copy.deepcopy(context)
+    fundamental = result.get('fundamental_context') or {}
+    (out/'ORIGINAL_YAHOO_FUNDAMENTAL_CONTEXT.json').write_text(json.dumps(fundamental,ensure_ascii=False,indent=2),encoding='utf-8')
+    earnings = fundamental.setdefault('earnings', {})
+    data = earnings.setdefault('data', {})
+    # Replace the quarter as one block: never mix a new-quarter income with an old CFO.
+    data['financial_report'] = dict(item['values'], report_date=item['period_end'], currency=item['currency'], source=item['source_url'])
+    earnings['status'] = 'partial'
+    earnings.setdefault('source_chain', []).append({'provider':'reviewed_official_release','source':item['source_url'],'period':item['period_end']})
+    result['fundamental_context'] = fundamental
+    result['official_research'] = item
+    result['news_source_note'] = '官方已披露财报资料已提供；未执行综合新闻搜索，近3日新闻覆盖仍不完整，不排除其他事件。'
+    (out/'OFFICIAL_RESEARCH_USED.json').write_text(json.dumps(item,ensure_ascii=False,indent=2),encoding='utf-8')
+    return result, item['text']
+
 class ResearchMaterials:
     def __init__(self,out,asof):
         self.out=out;self.asof=asof;self.news=[];self.official={};self.audit={'asof':asof.isoformat(),'official_source':IR,'provided_fields':[],'selected_news':[],'errors':[]}

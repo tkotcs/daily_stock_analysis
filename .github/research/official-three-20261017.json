@@ -1,0 +1,301 @@
+{
+  "NVDA": {
+    "period_end": "2026-07-26",
+    "period_label": "FY2027 Q2",
+    "published_date": "2026-08-26",
+    "publication_time_exact": null,
+    "available_after": "2026-08-28T00:00:00+00:00",
+    "currency": "USD",
+    "values": {
+      "revenue": 96221000000.0,
+      "net_profit_parent": 59688000000.0,
+      "operating_cash_flow": 24077000000.0
+    },
+    "source_url": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/",
+    "source_sha256": "a77c1c8a0a27e3c16664561d446778d3a4c089c717fa7bc1b3084825baeac527",
+    "fetched_at": "2026-10-17T08:04:55.988252+00:00",
+    "extras": {
+      "receivables": {
+        "current_USD": 63059000000.0,
+        "comparison_USD": 38466000000.0,
+        "asof": "2026-07-26",
+        "comparison_asof": "2026-01-25"
+      },
+      "inventories": {
+        "current_USD": 31575000000.0,
+        "comparison_USD": 21403000000.0,
+        "asof": "2026-07-26",
+        "comparison_asof": "2026-01-25"
+      },
+      "data_center_revenue_rounded_USD": 89000000000
+    },
+    "row_proof": {
+      "revenue": {
+        "table": 0,
+        "row": [
+          "Revenue",
+          "$96,221",
+          "$81,615",
+          "$46,743",
+          "18 %",
+          "106 %"
+        ],
+        "column": "first current quarter, USD millions"
+      },
+      "net_profit_parent": {
+        "table": 0,
+        "row": [
+          "Net income",
+          "$59,688",
+          "$58,321",
+          "$26,422",
+          "2 %",
+          "126 %"
+        ],
+        "column": "first current quarter, USD millions"
+      },
+      "operating_cash_flow": {
+        "table": 4,
+        "row": [
+          "Net cash provided by operating activities",
+          "",
+          "24,077",
+          "",
+          "",
+          "",
+          "15,365",
+          "",
+          "",
+          "",
+          "74,421",
+          "",
+          "",
+          "",
+          "42,779",
+          ""
+        ],
+        "column": "first current quarter, USD millions"
+      },
+      "receivables": {
+        "table": 3,
+        "row": [
+          "",
+          "Accounts receivable, net",
+          "",
+          "",
+          "63,059",
+          "",
+          "",
+          "38,466"
+        ]
+      },
+      "inventories": {
+        "table": 3,
+        "row": [
+          "",
+          "Inventories",
+          "",
+          "",
+          "31,575",
+          "",
+          "",
+          "21,403"
+        ]
+      }
+    },
+    "text": "官方已披露经营与财务资料：NVDA FY2027 Q2；单季度截止2026-07-26，USD；公告日期2026-08-26，精确首次公开时间未独立证明；保守可用代理2026-08-28T00:00:00+00:00（不是披露时间）。\n来源：https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/；采集2026-10-17T08:04:55.988252+00:00；正式公告的未审计GAAP表，不等于审计意见。\n单季度金额USD：{\"revenue\":96221000000.0,\"net_profit_parent\":59688000000.0,\"operating_cash_flow\":24077000000.0}\n经营背景：公司公告按市场平台披露Data Center收入约890亿美元，主要为AI计算与网络平台；该数字为收入，不是利润贡献。\n附加字段（资产负债表是时点存量，不等于季度现金流；分部收入不证明分部利润）：{\"receivables\":{\"current_USD\":63059000000.0,\"comparison_USD\":38466000000.0,\"asof\":\"2026-07-26\",\"comparison_asof\":\"2026-01-25\"},\"inventories\":{\"current_USD\":31575000000.0,\"comparison_USD\":21403000000.0,\"asof\":\"2026-07-26\",\"comparison_asof\":\"2026-01-25\"},\"data_center_revenue_rounded_USD\":89000000000}\n旧Yahoo季度列日期2026-07-31与公司真实期末2026-07-26不同；三个金额核对一致。不得把现金流量表半年数744.21亿美元误作单季度240.77亿美元。\n其余Yahoo ROE、分红和估值仍为各自聚合/TTM口径，不把官方金额核验扩展到这些指标。上述是财报证据，不是近3日综合新闻搜索；不能据此排除其他风险事件。"
+  },
+  "MU": {
+    "period_end": "2026-09-03",
+    "period_label": "FY2026 Q4",
+    "published_date": "2026-09-30",
+    "publication_time_exact": null,
+    "available_after": "2026-10-02T00:00:00+00:00",
+    "currency": "USD",
+    "values": {
+      "revenue": 54229000000.0,
+      "net_profit_parent": 37701000000.0,
+      "operating_cash_flow": 43973000000.0
+    },
+    "source_url": "https://www.sec.gov/Archives/edgar/data/723125/000072312526000018/a2026q4ex991-pressrelease.htm",
+    "source_sha256": "72cd681a81ed33240e810c42cdf1c848f07feba1c4230e80f119c0b2c1892068",
+    "fetched_at": "2026-10-17T08:04:56.993080+00:00",
+    "extras": {
+      "receivables": {
+        "current_USD": 36197000000.0,
+        "comparison_USD": 31025000000.0,
+        "asof": "2026-09-03",
+        "comparison_asof": "2026-05-28"
+      },
+      "inventories": {
+        "current_USD": 10372000000.0,
+        "comparison_USD": 8567000000.0,
+        "asof": "2026-09-03",
+        "comparison_asof": "2026-05-28"
+      },
+      "Cloud Memory_revenue_USD": 16283000000.0,
+      "Core Data Center_revenue_USD": 18002000000.0,
+      "Mobile and Client_revenue_USD": 13114000000.0,
+      "Automotive and Embedded_revenue_USD": 6824000000.0
+    },
+    "row_proof": {
+      "revenue": {
+        "table": 1,
+        "row": [
+          "Revenue",
+          "$",
+          "54,229",
+          "",
+          "$",
+          "41,456",
+          "",
+          "$",
+          "11,315",
+          "",
+          "",
+          "$",
+          "54,229",
+          "",
+          "$",
+          "41,456",
+          "",
+          "$",
+          "11,315",
+          ""
+        ],
+        "column": "first current quarter, USD millions"
+      },
+      "net_profit_parent": {
+        "table": 1,
+        "row": [
+          "Net income",
+          "37,701",
+          "",
+          "28,243",
+          "",
+          "3,201",
+          "",
+          "",
+          "38,398",
+          "",
+          "28,857",
+          "",
+          "3,469",
+          ""
+        ],
+        "column": "first current quarter, USD millions"
+      },
+      "operating_cash_flow": {
+        "table": 9,
+        "row": [
+          "GAAP net cash provided by operating activities",
+          "$",
+          "43,973",
+          "",
+          "$",
+          "25,388",
+          "",
+          "$",
+          "5,730",
+          "",
+          "$",
+          "89,675",
+          "",
+          "$",
+          "17,525",
+          ""
+        ],
+        "column": "first current quarter, USD millions"
+      },
+      "receivables": {
+        "table": 6,
+        "row": [
+          "Receivables",
+          "36,197",
+          "",
+          "31,025",
+          "",
+          "9,265",
+          ""
+        ]
+      },
+      "inventories": {
+        "table": 6,
+        "row": [
+          "Inventories",
+          "10,372",
+          "",
+          "8,567",
+          "",
+          "8,355",
+          ""
+        ]
+      },
+      "Cloud Memory": {
+        "table": 3,
+        "row": [
+          "Revenue",
+          "$",
+          "16,283",
+          "",
+          "$",
+          "13,769",
+          "",
+          "$",
+          "4,543",
+          ""
+        ],
+        "scope": "business-unit revenue, not profit contribution"
+      },
+      "Core Data Center": {
+        "table": 3,
+        "row": [
+          "Revenue",
+          "$",
+          "18,002",
+          "",
+          "$",
+          "11,524",
+          "",
+          "$",
+          "1,577",
+          ""
+        ],
+        "scope": "business-unit revenue, not profit contribution"
+      },
+      "Mobile and Client": {
+        "table": 3,
+        "row": [
+          "Revenue",
+          "$",
+          "13,114",
+          "",
+          "$",
+          "11,521",
+          "",
+          "$",
+          "3,760",
+          ""
+        ],
+        "scope": "business-unit revenue, not profit contribution"
+      },
+      "Automotive and Embedded": {
+        "table": 3,
+        "row": [
+          "Revenue",
+          "$",
+          "6,824",
+          "",
+          "$",
+          "4,634",
+          "",
+          "$",
+          "1,434",
+          ""
+        ],
+        "scope": "business-unit revenue, not profit contribution"
+      }
+    },
+    "text": "官方已披露经营与财务资料：MU FY2026 Q4；单季度截止2026-09-03，USD；公告日期2026-09-30，精确首次公开时间未独立证明；保守可用代理2026-10-02T00:00:00+00:00（不是披露时间）。\n来源：https://www.sec.gov/Archives/edgar/data/723125/000072312526000018/a2026q4ex991-pressrelease.htm；采集2026-10-17T08:04:56.993080+00:00；正式公告的未审计GAAP表，不等于审计意见。\n单季度金额USD：{\"revenue\":54229000000.0,\"net_profit_parent\":37701000000.0,\"operating_cash_flow\":43973000000.0}\n经营背景：公司按Cloud Memory、Core Data Center、Mobile and Client、Automotive and Embedded披露业务收入；存储需求与客户资本开支的因果联系只能在这些证据上作条件推断，未提供市场份额或竞争排名。\n附加字段（资产负债表是时点存量，不等于季度现金流；分部收入不证明分部利润）：{\"receivables\":{\"current_USD\":36197000000.0,\"comparison_USD\":31025000000.0,\"asof\":\"2026-09-03\",\"comparison_asof\":\"2026-05-28\"},\"inventories\":{\"current_USD\":10372000000.0,\"comparison_USD\":8567000000.0,\"asof\":\"2026-09-03\",\"comparison_asof\":\"2026-05-28\"},\"Cloud Memory_revenue_USD\":16283000000.0,\"Core Data Center_revenue_USD\":18002000000.0,\"Mobile and Client_revenue_USD\":13114000000.0,\"Automotive and Embedded_revenue_USD\":6824000000.0}\n旧Yahoo仍可能为上一季度2026-05-31聚合列；本次采用公司新季度，禁止混用。公告分部收入相加为5.4223e+10USD，与总收入差6e+06USD，差异未解释，不推导精确占比。全年经营现金流896.75亿美元不是本季439.73亿美元。\n其余Yahoo ROE、分红和估值仍为各自聚合/TTM口径，不把官方金额核验扩展到这些指标。上述是财报证据，不是近3日综合新闻搜索；不能据此排除其他风险事件。"
+  }
+}

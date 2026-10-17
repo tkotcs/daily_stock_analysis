@@ -4398,6 +4398,21 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
             if a is not None and b is not None:
                 relation = '>' if a > b else '<' if a < b else '='
                 lines.append(f'MA{left}={a:g} {relation} MA{right}={b:g}')
+        valid_mas = sorted((number(today, f'ma{period}'), period)
+                           for period in (5, 10, 20, 60) if number(today, f'ma{period}') is not None)
+        if valid_mas:
+            ordered = f'MA{valid_mas[0][1]}={valid_mas[0][0]:g}'
+            for (previous_value, _), (value, period) in zip(valid_mas, valid_mas[1:]):
+                ordered += (' = ' if value == previous_value else ' < ') + f'MA{period}={value:g}'
+            lines.append(('MA ascending order (available values only): ' if english else '均线按数值升序（仅有效数据）：') + ordered)
+        rsi = (context.get('trend_analysis') or {}).get('rsi_12')
+        if type(rsi) in (int, float) and math.isfinite(rsi) and 0 <= rsi <= 100:
+            from src.stock_analyzer import StockTrendAnalyzer
+            lower, upper = StockTrendAnalyzer.RSI_OVERSOLD, StockTrendAnalyzer.RSI_OVERBOUGHT
+            state = ('oversold' if rsi < lower else 'overbought' if rsi > upper else 'not oversold or overbought') if english else (
+                     '超卖' if rsi < lower else '超买' if rsi > upper else '未达到超卖或超买阈值')
+            lines.append(f'RSI(12)={rsi:g}; RSI<{lower} / RSI>{upper}; {state}; ' + (
+                'reference thresholds, not a trade or reversal guarantee' if english else '参考阈值，不是买卖或反转保证'))
         previous_volume = number(previous, 'volume')
         volume = number(today, 'volume')
         if comparable and volume is not None and previous_volume is not None:
@@ -4414,8 +4429,10 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
             lines.append(f"Financial report period={report.get('report_date', 'N/A')}; "
                          f"financial currency={report.get('currency', 'N/A')}; "
                          f"source={earnings.get('source_chain', [])}; "
-                         + ('provided aggregation, not independently issuer-verified here' if english else
-                            '所给聚合字段，本步骤未逐项核验公司原始披露'))
+                         + (('issuer release evidence supplied; verification scope is in the attached material' if english else
+                             '已附公司公告证据，核验范围以附表为准') if context.get('official_research') else
+                            ('provided aggregation, not independently issuer-verified here' if english else
+                             '所给聚合字段，本步骤未逐项核验公司原始披露')))
         lines.append('Position is not an event. Crossings do not establish a volume-confirmed breakout; specify closing confirmation and volume benchmark. State crossings per verified MA; unverified does not mean no crossing.' if english else '位置状态不等于新发生事件。均线穿越不等于有效放量突破；有效突破须说明收盘确认与成交量比较基准。穿越必须逐条对应已核实均线；无法核实不等于本日无穿越。')
         return '\n'.join(lines) + '\n'
 

@@ -33,3 +33,18 @@ changes remove price-forcing legacy examples, label the MA60 reference relative
 to the close, and keep unverified crossings distinct from verified non-events.
 Run `tests/test_quality_live_followup.py` plus the small baseline tests. These are
 offline compatibility checks; the follow-up prompt has not had another paid test.
+
+The next candidate reuses native MA60 context construction for the preceding
+daily bar and passes the native RSI(12) value with strict native thresholds
+(below 30 oversold, above 70 overbought). MA ordering uses available numeric
+values only. Risk prose in rendered reports is generated from the same validated
+`risk_plan` rows as the calculation table, clearly labeled as program output.
+Raw model prose remains unchanged.
+
+The optional free preparation `--research-data` packet provides reviewed issuer
+financial releases using the existing evidence input. It preserves the original
+Yahoo block, replaces the selected quarter as a whole, and clears the earlier
+Yahoo summary to avoid mixed-quarter prompts. Report date is not publication
+time; date-only disclosures use a conservative availability proxy. The checked
+packet is a dated evidence snapshot, not an evergreen financial provider or a
+comprehensive news search. ETF company-finance fields remain not applicable.

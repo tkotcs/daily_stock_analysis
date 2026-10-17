@@ -36,7 +36,7 @@ def fixture(code,context):
           'confidence_reason':note,'data_limitations':['无实时行情','无新闻检索','财务公开时间未核验']}}}
 
 
-def run_symbol(source,out,code,offline=None,inject=False):
+def run_symbol(source,out,code,offline=None,inject=False,research_data=None):
     out.mkdir(parents=True,exist_ok=False);start=time.monotonic();trace=[];restricted=False
     def persist():save(out/'HTTP_TRACE.json',trace)
     import atexit;atexit.register(persist)
@@ -160,6 +160,18 @@ def run_symbol(source,out,code,offline=None,inject=False):
     native_analyze=analyzer.analyze
     def analyze(context,*a,**k):
         assert tech and context['date']==target
+        # Existing native helper evaluates the full MA60 window BEFORE tail(2).
+        previous = pipeline._build_analysis_context_from_daily_df(code, frame).get('yesterday') or {}
+        if context.get('yesterday',{}).get('date') == previous.get('date') and previous.get('ma60'):
+            context['yesterday']['ma60'] = previous['ma60']
+        if research_data:
+            from nvda_research_materials import attach_reviewed_release
+            context, supplied = attach_reviewed_release(context,json.loads(research_data.read_text('utf-8')),now,out)
+            if supplied:
+                k['news_context'] = supplied
+                # The pipeline's earlier pack summarized the unmodified Yahoo quarter.
+                # Native formatting below uses the now-updated fields and source note.
+                k['analysis_context_pack_summary'] = None
         contexts.append(context);save(out/'NATIVE_CONTEXT.json',context)
         f=fixture(code,context);fixtures.append(f);save(out/'SIMULATED_MODEL.json',f)
         return native_analyze(context,*a,**k)
@@ -195,7 +207,7 @@ def run_symbol(source,out,code,offline=None,inject=False):
             period=str(valid.index[0]) if valid is not None and not valid.empty else None
             mode='not_applicable_ETF' if code in ETFS else 'missing' if value is None else 'quarterly_Yahoo_not_officially_verified' if direct is not None else 'estimated_revenue_times_margin' if name=='net_profit_parent' else 'TTM_or_unknown_info_fallback'
             fields[name]={'value':value,'classification':mode,'direct_statement_value':direct,'actual_series_period':period,'adapter_report_date':report.get('report_date'),'currency':report.get('currency'),'source_url':f'https://finance.yahoo.com/quote/{code}/'+('cash-flow/' if table=='quarterly_cashflow' else 'financials/'),'publication_timestamp':None}
-        save(out/'FINANCIAL_AUDIT.json',{'fetched_at':dt.datetime.now(dt.timezone.utc).isoformat(),'source':'Yahoo native adapter','official_GAAP_verified':False,'publication_time_verified':False,'enterprise_applicable':code not in ETFS,'fields':fields,'raw_fields':raw_fin,'notes':'季度列见CSV；info回退可能TTM，净利润回退可能推算；不能作为官方当期数字','context':contexts[-1].get('fundamental_context') if contexts else None})
+        save(out/'FINANCIAL_AUDIT.json',{'fetched_at':dt.datetime.now(dt.timezone.utc).isoformat(),'source':'Yahoo native adapter','official_GAAP_verified':False,'provided_report_source':((contexts[-1].get('official_research') or {}).get('source_url') if contexts else None),'publication_time_verified':False,'enterprise_applicable':code not in ETFS,'fields':fields,'raw_fields':raw_fin,'notes':'季度列见CSV；info回退可能TTM，净利润回退可能推算；不能作为官方当期数字','context':contexts[-1].get('fundamental_context') if contexts else None})
     assert result and result.success,'native_pipeline_or_parser_failed'
     valid,missing=analyzer._check_content_integrity(result,require_phase_decision=True)
     assert valid,str(missing)
@@ -217,11 +229,12 @@ def run_symbol(source,out,code,offline=None,inject=False):
 def main():
     p=argparse.ArgumentParser();p.add_argument('--source',required=True,type=pathlib.Path);p.add_argument('--out',required=True,type=pathlib.Path)
     p.add_argument('--child',choices=WATCHLIST);p.add_argument('--offline-data',type=pathlib.Path);p.add_argument('--inject-failure',choices=WATCHLIST)
+    p.add_argument('--research-data',type=pathlib.Path,help='Optional reviewed public release packet; no model call')
     p.add_argument('--universe',choices=('three','watchlist35'),default='three');p.add_argument('--only',help='Free recovery subset; use a NEW output directory')
     a=p.parse_args();source=a.source.resolve();out=a.out.resolve();offline=a.offline_data.resolve() if a.offline_data else None
     if a.child:
         status=None
-        try:status=run_symbol(source,out,a.child,offline,a.inject_failure==a.child)
+        try:status=run_symbol(source,out,a.child,offline,a.inject_failure==a.child,a.research_data.resolve() if a.research_data else None)
         except BaseException as e:
             out.mkdir(parents=True,exist_ok=True);status={'symbol':a.child,'status':'failed','error':type(e).__name__+':'+str(e),'real_POSTs':0}
             import traceback;(out/'ERROR.txt').write_text(traceback.format_exc(),encoding='utf-8')
@@ -235,6 +248,7 @@ def main():
         env={k:v for k,v in os.environ.items() if not any(x in k for x in ('API_KEY','PASSWORD','ACCESS_TOKEN','WEBHOOK')) and k not in ('GH_TOKEN','GITHUB_TOKEN','PYTHONPATH')}
         cmd=[sys.executable,'-I',str(pathlib.Path(__file__).resolve()),'--source',str(source),'--out',str(out/code),'--child',code]
         if offline:cmd+=['--offline-data',str(offline)]
+        if a.research_data:cmd+=['--research-data',str(a.research_data.resolve())]
         if a.inject_failure:cmd+=['--inject-failure',a.inject_failure]
         try:
             run=subprocess.run(cmd,env=env,capture_output=True,timeout=240);(out/(code+'-process.log')).write_bytes(run.stdout+run.stderr)

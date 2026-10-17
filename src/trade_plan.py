@@ -102,6 +102,15 @@ def format_risk_plan(plan, *, english=False):
         target = f"{row['target']:g}" if row['target'] is not None else 'N/A'
         rr = f"{row['reward_risk']:.3f}" if row['reward_risk'] is not None else 'N/A'
         lines.append(f"| {row['entry']:g} | {row['stop']:g} | {target} | {row['loss_pct']:.3f} | {rr} | {row['position_pct']:g} | {cell(row['trigger'])} | {cell(row['invalidation'])} |")
+    lines.append('Program-generated scenario summary from risk_plan (not model prose):' if english else
+                 '程序依据risk_plan生成的情景摘要（非模型原文）：')
+    for index, row in enumerate(rows, 1):
+        target = f"{row['target']:g}" if row['target'] is not None else 'N/A'
+        rr = f"{row['reward_risk']:.3f}" if row['reward_risk'] is not None else 'N/A'
+        lines.append((f"S{index}: hypothetical entry {row['entry']:g}, stop {row['stop']:g}, target {target}; "
+                      f"nominal loss {row['loss_pct']:.3f}%, reward/risk {rr}." if english else
+                      f"S{index}：假设入场{row['entry']:g}，止损{row['stop']:g}，目标{target}；"
+                      f"名义损失{row['loss_pct']:.3f}%，收益风险比{rr}。"))
     lines.append('Assumptions, not verified target forecasts; excludes fees, gaps and slippage.' if english else
                  '情景参数来自模型假设，不是已证实的目标价；未计费用、跳空和滑点，不保证实际损失。')
     lines.append(holdings)
