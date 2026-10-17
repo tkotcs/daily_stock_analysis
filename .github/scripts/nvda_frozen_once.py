@@ -12,6 +12,10 @@ def load_packet(bundle,expected):
 def dispatch_frozen(analyzer,packet,config):
     """No analyze()/prompt builder, data fetcher, recovery helper, or retry loop."""
     kwargs=dict(packet);kwargs['model']=config.litellm_model
+    # LiteLLM's current Flash mapping drops reasoning_effort unless forwarded as extra_body.
+    # Preserve the frozen HTTP JSON; the final transport hash remains authoritative.
+    if packet.get('thinking')=={'type':'enabled'} and 'reasoning_effort' in kwargs:
+        kwargs['extra_body']={'reasoning_effort':kwargs.pop('reasoning_effort')}
     kwargs['num_retries']=0  # LiteLLM/OpenAI control, excluded from the HTTP body.
     stream=analyzer._dispatch_litellm_completion(config.litellm_model,kwargs,config=config,use_channel_router=False,router_model_names=set())
     return analyzer._consume_litellm_stream(stream,model=config.litellm_model,usage_model='deepseek-flash',provider='deepseek')

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > For user-friendly release highlights, see the [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) page.
 
 ## [Unreleased]
+- [测试] 准备同材料Flash非思考/思考配对请求并验证实际HTTP参数；仅适配reasoning_effort转发，不启用收费入口。
 - [改进] 按真实三股对照补充均线互穿事件、各均线相对收盘角色及原生量能分类阈值；不改写历史报告。
 - [修复] 手动研究费率核验允许官方页面仅静态资源URL变化；仍验证冻结快照、完整页面文字及全部费率。
 - [改进] 研究候选复用原版MA60上下文补齐前日均线、明确RSI原生阈值及数值排序；情景摘要从risk_plan确定性生成，免费准备可附带带期间与来源的官方财报证据。
