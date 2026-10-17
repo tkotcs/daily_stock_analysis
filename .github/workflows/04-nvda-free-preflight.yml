@@ -199,7 +199,7 @@ jobs:
       CUSTOM_TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
       TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
       MVP_UNIVERSE: ${{ inputs.mvp_universe }}
-      MVP_BUNDLE: ${{ inputs.mvp_universe == 'watchlist35' && 'preparation/.github/frozen/mvp-watchlist-v2' || 'preparation/.github/frozen/mvp-three-v2' }}
+      MVP_BUNDLE: ${{ inputs.mvp_universe == 'watchlist35' && 'preparation/.github/frozen/mvp-watchlist-v2' || 'preparation/.github/frozen/mvp-three-v3' }}
     steps:
       - uses: actions/checkout@v5
         with:
