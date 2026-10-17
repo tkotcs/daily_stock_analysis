@@ -3,6 +3,7 @@ import copy
 import datetime as dt
 import importlib.util
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -58,6 +59,24 @@ def test_native_builder_can_supply_previous_ma60_without_ma20_substitution():
     context = StockAnalysisPipeline._build_analysis_context_from_daily_df(pipeline,'QQQ',df)
     assert context['today']['ma60'] == pytest.approx(df.close.iloc[-60:].mean())
     assert context['yesterday']['ma60'] == pytest.approx(df.close.iloc[-61:-1].mean())
+
+
+@pytest.mark.parametrize('date_value', ['2026-10-15', dt.date(2026,10,15), pd.Timestamp('2026-10-15')])
+def test_preparation_accepts_native_date_objects_for_previous_ma60(date_value):
+    sys.path.insert(0,str(ROOT/'.github/scripts'))
+    from mvp_three import attach_previous_ma60
+    c = ctx('QQQ'); c['yesterday']['date'] = date_value
+    attach_previous_ma60(c,{'yesterday':{'date':'2026-10-15','ma60':720.35}})
+    assert c['yesterday']['ma60'] == 720.35
+
+
+@pytest.mark.parametrize('computed', [{'date':'2026-10-14','ma60':720.35},{'date':None,'ma60':720.35},{'date':'2026-10-15','ma60':float('nan')}])
+def test_previous_ma60_rejects_nonmatching_or_invalid_computation(computed):
+    sys.path.insert(0,str(ROOT/'.github/scripts'))
+    from mvp_three import attach_previous_ma60
+    c = ctx('QQQ')
+    attach_previous_ma60(c,{'yesterday':computed})
+    assert 'ma60' not in c['yesterday']
 
 
 def test_pipeline_passes_actual_rsi_to_native_prompt():

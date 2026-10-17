@@ -12,6 +12,16 @@ def save(path,value):
     path.write_text(json.dumps(value,ensure_ascii=False,indent=2,default=str),encoding='utf-8')
 
 
+def attach_previous_ma60(context, computed_daily):
+    previous = context.get('yesterday') or {}
+    computed = computed_daily.get('yesterday') or {}
+    value = computed.get('ma60')
+    if (previous.get('date') and computed.get('date')
+            and str(previous['date'])[:10] == str(computed['date'])[:10]
+            and type(value) in (int,float) and math.isfinite(value) and value > 0):
+        previous['ma60'] = value
+
+
 def fixture(code,context):
     t=context['today'];p=t['close'];note=NOTICE
     return {'stock_name':context.get('stock_name',code),'sentiment_score':50,'trend_prediction':'模拟观望',
@@ -161,9 +171,7 @@ def run_symbol(source,out,code,offline=None,inject=False,research_data=None):
     def analyze(context,*a,**k):
         assert tech and context['date']==target
         # Existing native helper evaluates the full MA60 window BEFORE tail(2).
-        previous = pipeline._build_analysis_context_from_daily_df(code, frame).get('yesterday') or {}
-        if context.get('yesterday',{}).get('date') == previous.get('date') and previous.get('ma60'):
-            context['yesterday']['ma60'] = previous['ma60']
+        attach_previous_ma60(context, pipeline._build_analysis_context_from_daily_df(code, frame))
         if research_data:
             from nvda_research_materials import attach_reviewed_release
             context, supplied = attach_reviewed_release(context,json.loads(research_data.read_text('utf-8')),now,out)
