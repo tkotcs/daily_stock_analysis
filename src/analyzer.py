@@ -2028,13 +2028,13 @@ class GeminiAnalyzer:
 
         "battle_plan": {
             "sniper_points": {
-                "ideal_buy": "理想买入点：XX（报价币种，在MA5附近）",
-                "secondary_buy": "次优买入点：XX（报价币种，在MA10附近）",
-                "stop_loss": "止损位：XX（报价币种，跌破MA20或X%）",
-                "take_profit": "目标位：XX（报价币种，前高/整数关口）"
+                "ideal_buy": "交易模式引用risk_plan情景编号及触发条件；观望填不适用（无新增交易）",
+                "secondary_buy": "交易模式引用备选情景编号；观望填不适用（无新增交易）",
+                "stop_loss": "仅引用对应risk_plan情景止损；观望填不适用（无新增交易）",
+                "take_profit": "仅引用对应risk_plan情景目标；观望填不适用（无新增交易）"
             },
             "position_strategy": {
-                "suggested_position": "建议仓位：X成",
+                "suggested_position": "区分新增与已有仓位；新增上限引用risk_plan，未知已有上限不编造",
                 "entry_plan": "分批建仓策略描述",
                 "risk_control": "风控策略描述"
             },
@@ -2216,13 +2216,13 @@ class GeminiAnalyzer:
 
         "battle_plan": {
             "sniper_points": {
-                "ideal_buy": "理想入场位：XX（报价币种，满足主要技能触发条件）",
-                "secondary_buy": "次优入场位：XX（报价币种，更保守或确认后执行）",
-                "stop_loss": "止损位：XX（报价币种，失效条件或X%风险）",
-                "take_profit": "目标位：XX（报价币种，按阻力位/风险回报比制定）"
+                "ideal_buy": "交易模式引用risk_plan情景编号及触发条件；观望填不适用（无新增交易）",
+                "secondary_buy": "交易模式引用备选情景编号；观望填不适用（无新增交易）",
+                "stop_loss": "仅引用对应risk_plan情景止损；观望填不适用（无新增交易）",
+                "take_profit": "仅引用对应risk_plan情景目标；观望填不适用（无新增交易）"
             },
             "position_strategy": {
-                "suggested_position": "建议仓位：X成",
+                "suggested_position": "区分新增与已有仓位；新增上限引用risk_plan，未知已有上限不编造",
                 "entry_plan": "分批建仓策略描述",
                 "risk_control": "风控策略描述"
             },
@@ -2471,13 +2471,13 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 
 """ + CANONICAL_DECISION_SCALE_PROMPT_EN + """
 
-""" + _DASHBOARD_JSON_HEAD_EN + """                "ideal_buy": "Ideal buy point: XX (near MA5)",
-                "secondary_buy": "Secondary buy point: XX (near MA10)",
-                "stop_loss": "Stop-loss: XX (break below MA20 or X%)",
-                "take_profit": "Target: XX (previous high/round-number level)"
+""" + _DASHBOARD_JSON_HEAD_EN + """                "ideal_buy": "Trade: reference risk_plan scenario and trigger; watch: not applicable (no new trade)",
+                "secondary_buy": "Trade: reference alternative scenario; watch: not applicable (no new trade)",
+                "stop_loss": "Reference the corresponding risk_plan stop; watch: not applicable (no new trade)",
+                "take_profit": "Reference the corresponding risk_plan target; watch: not applicable (no new trade)"
             },
             "position_strategy": {
-                "suggested_position": "Suggested position: X/10",
+                "suggested_position": "Distinguish new and existing exposure; reference risk_plan; do not invent existing cap",
                 "entry_plan": "Description of the staged entry plan",
                 "risk_control": "Description of the risk-control strategy"
             },
@@ -2534,13 +2534,13 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 
 """ + CANONICAL_DECISION_SCALE_PROMPT_EN + """
 
-""" + _DASHBOARD_JSON_HEAD_EN + """                "ideal_buy": "Ideal entry: XX (main skill trigger conditions met)",
-                "secondary_buy": "Secondary entry: XX (more conservative or after confirmation)",
-                "stop_loss": "Stop-loss: XX (invalidation condition or X% risk)",
-                "take_profit": "Target: XX (based on resistance/risk-reward ratio)"
+""" + _DASHBOARD_JSON_HEAD_EN + """                "ideal_buy": "Trade: reference risk_plan scenario and trigger; watch: not applicable (no new trade)",
+                "secondary_buy": "Trade: reference alternative scenario; watch: not applicable (no new trade)",
+                "stop_loss": "Reference the corresponding risk_plan stop; watch: not applicable (no new trade)",
+                "take_profit": "Reference the corresponding risk_plan target; watch: not applicable (no new trade)"
             },
             "position_strategy": {
-                "suggested_position": "Suggested position: X/10",
+                "suggested_position": "Distinguish new and existing exposure; reference risk_plan; do not invent existing cap",
                 "entry_plan": "Description of the staged entry plan",
                 "risk_control": "Description of the risk-control strategy"
             },
@@ -4385,6 +4385,14 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
                 up = prior_close <= prior_ma and close > current_ma
                 event = ('new downward close crossing' if down else 'new upward close crossing' if up else 'no new close crossing') if english else ('本日收盘新下穿' if down else '本日收盘新上穿' if up else '本日无新收盘穿越')
             lines.append(f'close {state} MA{period}={current_ma:g}; {event}')
+            if period == 60:
+                role = ('above-close reference; resistance unconfirmed' if current_ma > close else
+                        'below-close reference; support unconfirmed' if current_ma < close else
+                        'at-close reference; support/resistance unconfirmed') if english else (
+                        '收盘上方观察线，阻力有效性待确认' if current_ma > close else
+                        '收盘下方观察线，支撑有效性待确认' if current_ma < close else
+                        '收盘同价观察线，支撑/阻力有效性待确认')
+                lines.append(f'MA60: {role}')
         for left, right in ((5, 10), (5, 20), (5, 60), (10, 20), (10, 60), (20, 60)):
             a, b = number(today, f'ma{left}'), number(today, f'ma{right}')
             if a is not None and b is not None:
@@ -4408,7 +4416,7 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
                          f"source={earnings.get('source_chain', [])}; "
                          + ('provided aggregation, not independently issuer-verified here' if english else
                             '所给聚合字段，本步骤未逐项核验公司原始披露'))
-        lines.append('Position is not an event. Crossings do not establish a volume-confirmed breakout; specify closing confirmation and volume benchmark.' if english else '位置状态不等于新发生事件。均线穿越不等于有效放量突破；有效突破须说明收盘确认与成交量比较基准。')
+        lines.append('Position is not an event. Crossings do not establish a volume-confirmed breakout; specify closing confirmation and volume benchmark. State crossings per verified MA; unverified does not mean no crossing.' if english else '位置状态不等于新发生事件。均线穿越不等于有效放量突破；有效突破须说明收盘确认与成交量比较基准。穿越必须逐条对应已核实均线；无法核实不等于本日无穿越。')
         return '\n'.join(lines) + '\n'
 
     def _format_prompt(

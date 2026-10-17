@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > For user-friendly release highlights, see the [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) page.
 
 ## [Unreleased]
+- [修复] 根据三股真实研究对照，消除旧JSON示例强制填写交易数字的提示冲突，明确MA60观察线相对位置及无法核实的穿越范围；保留原模型正文作为回归样本。
 - [chore] 将三股手动材料准备和执行入口固定到已验收的研究质量候选，不改变调用保护或自动调度。
 - [改进] 收敛研究提示词的均线比较、观望仓位与情景止损口径，移除要求模型重复计算风险比例的冲突指令；增加三股历史真实报告的小样本质量回归。
 

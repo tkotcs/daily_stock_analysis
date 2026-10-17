@@ -26,3 +26,10 @@ mentions as independent errors or report a whole-document accuracy percentage
 from this tiny, selected baseline. Keep raw text and editorial notes separate.
 
 The manual preparation and execution adapters now pin candidate `15a93504f909d1af118d95f6108af8bf4c7d10db`. The free three-symbol capture uses this same native code; it does not authorize a model request.
+
+Run 39014776142 returned three complete real reports. Fixed follow-up samples live
+in `tests/fixtures/quality_live_20261017`; raw prose errors remain intact. Follow-up
+changes remove price-forcing legacy examples, label the MA60 reference relative
+to the close, and keep unverified crossings distinct from verified non-events.
+Run `tests/test_quality_live_followup.py` plus the small baseline tests. These are
+offline compatibility checks; the follow-up prompt has not had another paid test.
