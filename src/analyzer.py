@@ -4385,19 +4385,25 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
                 up = prior_close <= prior_ma and close > current_ma
                 event = ('new downward close crossing' if down else 'new upward close crossing' if up else 'no new close crossing') if english else ('本日收盘新下穿' if down else '本日收盘新上穿' if up else '本日无新收盘穿越')
             lines.append(f'close {state} MA{period}={current_ma:g}; {event}')
-            if period == 60:
+            if period in (5, 10, 20, 60):
                 role = ('above-close reference; resistance unconfirmed' if current_ma > close else
                         'below-close reference; support unconfirmed' if current_ma < close else
                         'at-close reference; support/resistance unconfirmed') if english else (
                         '收盘上方观察线，阻力有效性待确认' if current_ma > close else
                         '收盘下方观察线，支撑有效性待确认' if current_ma < close else
                         '收盘同价观察线，支撑/阻力有效性待确认')
-                lines.append(f'MA60: {role}')
+                lines.append(f'MA{period}: {role}')
         for left, right in ((5, 10), (5, 20), (5, 60), (10, 20), (10, 60), (20, 60)):
             a, b = number(today, f'ma{left}'), number(today, f'ma{right}')
             if a is not None and b is not None:
                 relation = '>' if a > b else '<' if a < b else '='
                 lines.append(f'MA{left}={a:g} {relation} MA{right}={b:g}')
+                pa, pb = number(previous, f'ma{left}'), number(previous, f'ma{right}')
+                event = 'MA-pair crossing unverified' if english else '均线互穿事件无法核实'
+                if comparable and pa is not None and pb is not None and not partial:
+                    down, up = pa >= pb and a < b, pa <= pb and a > b
+                    event = ('new downward MA crossing' if down else 'new upward MA crossing' if up else 'no new MA crossing') if english else ('本日均线新下穿' if down else '本日均线新上穿' if up else '本日无新均线互穿')
+                lines.append(f'MA{left}/MA{right}: {event}')
         valid_mas = sorted((number(today, f'ma{period}'), period)
                            for period in (5, 10, 20, 60) if number(today, f'ma{period}') is not None)
         if valid_mas:
@@ -4423,6 +4429,13 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
             lines.append(f'daily volume_ratio = {native_ratio:g}; '
                          + ('daily volume / PREVIOUS five-session mean; not intraday relative volume' if english else
                             '本日成交量/此前5个交易日均量（shift 1），不是前日倍数或分时量比'))
+        if native_ratio is not None:
+            from src.stock_analyzer import StockTrendAnalyzer
+            heavy, shrink = StockTrendAnalyzer.VOLUME_HEAVY_RATIO, StockTrendAnalyzer.VOLUME_SHRINK_RATIO
+            label = ('heavy' if native_ratio >= heavy else 'shrink' if native_ratio <= shrink else 'normal') if english else ('放量' if native_ratio >= heavy else '缩量' if native_ratio <= shrink else '量能正常')
+            lines.append(f'volume_ratio classification={label}; heavy >= {heavy:g}; shrink <= {shrink:g}; ' + (
+                'slightly above average is not heavy volume; daily OHLCV does not prove aggressor flow' if english else
+                '略高于均量不等于达到放量阈值；日线OHLCV不能证明主动买卖盘方向'))
         earnings = (context.get('fundamental_context') or {}).get('earnings') or {}
         report = (earnings.get('data') or {}).get('financial_report') or {}
         if report:

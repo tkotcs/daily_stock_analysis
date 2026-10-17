@@ -136,3 +136,22 @@ def test_real_qqq_trade_prose_comes_from_same_structured_rows():
 def test_watch_does_not_invent_entry_for_summary():
     summary = format_risk_plan({'mode':'watch','max_position_pct':0,'existing_position_cap_pct':None,'scenarios':[]})
     assert '观望' in summary and '假设入场' not in summary and 'S1' not in summary
+
+
+@pytest.mark.parametrize('ratio,label', [(0.7,'缩量'),(0.71,'量能正常'),(1.08,'量能正常'),(1.25,'量能正常'),(1.5,'放量'),(1.88,'放量')])
+def test_native_volume_labels_match_thresholds(ratio,label):
+    c=ctx();c['today']['volume_ratio']=ratio
+    text=GeminiAnalyzer._format_computed_quote_facts(c)
+    assert f'volume_ratio classification={label}; heavy >= 1.5; shrink <= 0.7' in text
+
+
+def test_latest_real_context_has_no_new_ma_pair_cross():
+    c=json.loads((ROOT/'.github/frozen/mvp-three-v3/NVDA/NATIVE_CONTEXT.json').read_text('utf-8'))
+    text=GeminiAnalyzer._format_computed_quote_facts(c)
+    assert 'MA5/MA10: 本日无新均线互穿' in text
+    assert 'MA60: 收盘上方观察线，阻力有效性待确认' in text
+    assert 'MA5: 收盘上方观察线，阻力有效性待确认' in text
+    c['yesterday']['ma5']=c['yesterday']['ma10']+1
+    assert 'MA5/MA10: 本日均线新下穿' in GeminiAnalyzer._format_computed_quote_facts(c)
+    c['yesterday'].pop('ma5')
+    assert 'MA5/MA10: 均线互穿事件无法核实' in GeminiAnalyzer._format_computed_quote_facts(c)
