@@ -6,6 +6,7 @@ from html.parser import HTMLParser
 import httpx
 from deepseek_post_guard import GuardStop
 
+MANUAL_BUSINESS='6ebdf627d9becd24f4db1290c19996175e5e0df8'
 FIXED='f93a7609e569e3b6c6372e652a3d36a27225d783'
 # Exact reviewed profile; no arbitrary 16K payload or business revision is accepted.
 REVIEWED_16K_SHA='08b09a31d1d08c4b1fa33bc92f850feb63709ace5c6f8fd43a63aa9bee82cdee'
@@ -14,6 +15,7 @@ REVIEWED_16K_ASOF='2026-10-16T06:04:29.560325+00:00'
 REVIEWED_16K_DEADLINE='2026-10-16T20:00:00+00:00'
 
 def authorized_business(authorization):
+    if authorization.get('test_profile')=='mvp_manual_v2':return MANUAL_BUSINESS
     return REVIEWED_16K_FIXED if authorization.get('request_sha256')==REVIEWED_16K_SHA or authorization.get('test_profile')=='mvp_three_v1' else FIXED
 BASE='https://api.deepseek.com'
 PRICING='https://api-docs.deepseek.com/quick_start/pricing/'
@@ -79,14 +81,16 @@ class LiveSession:
         if not key or not run_id or os.getenv('GITHUB_RUN_ATTEMPT','1')!='1':raise GuardStop('key_run_id_or_attempt_invalid')
         if authorization.get('authorize_paid_post') is not True or not authorization.get('authorization_reference') or not authorization.get('secret_upload_approval_reference'):raise GuardStop('separate_explicit_approvals_required')
         self.reviewed_16k=authorization.get('request_sha256')==REVIEWED_16K_SHA
-        self.mvp_test=authorization.get('test_profile')=='mvp_three_v1'
+        self.mvp_test=authorization.get('test_profile') in ('mvp_three_v1','mvp_manual_v2')
         self.max_tokens=16384 if self.reviewed_16k or self.mvp_test else 8192
         if authorization.get('run_id')!=run_id or authorization.get('fixed_commit')!=authorized_business(authorization):raise GuardStop('authorization_identity_mismatch')
         try:expires=datetime.fromisoformat(authorization['expires_at'])
         except Exception:raise GuardStop('authorization_expiry_required') from None
         if expires.tzinfo is None or datetime.now(timezone.utc)>=expires:raise GuardStop('authorization_expired')
         if self.mvp_test:
-            if authorization.get('symbol') not in ('NVDA','MU','QQQ') or any(not re.fullmatch('[a-f0-9]{64}',str(authorization.get(k,''))) for k in ('batch_sha256','request_sha256')):raise GuardStop('mvp_batch_identity_invalid')
+            from free_market_validation import WATCHLIST
+            allowed=WATCHLIST if authorization.get('test_profile')=='mvp_manual_v2' else ('NVDA','MU','QQQ')
+            if authorization.get('symbol') not in allowed or any(not re.fullmatch('[a-f0-9]{64}',str(authorization.get(k,''))) for k in ('batch_sha256','request_sha256')):raise GuardStop('mvp_batch_identity_invalid')
             if any(str(authorization.get(k)) not in authorization['authorization_reference'] for k in ('batch_sha256','request_sha256')):raise GuardStop('mvp_hash_scoped_approval_required')
             self.check_material()
         if self.reviewed_16k:

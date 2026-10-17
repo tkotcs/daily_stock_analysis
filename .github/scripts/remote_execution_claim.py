@@ -46,7 +46,7 @@ class GitHubAPI:
 
 
 class RemoteExecutionClaim:
-    def __init__(self, api, batch_sha, run_id, commit, *, namespace='dsa-mvp-consumed-v1'):
+    def __init__(self, api, batch_sha, run_id, commit, *, namespace='dsa-mvp-consumed-v1', symbols=('NVDA','MU','QQQ')):
         if not re.fullmatch('[a-f0-9]{64}', batch_sha) or not re.fullmatch('[a-f0-9]{40}', commit):
             raise GuardStop('remote_claim_identity_invalid')
         if not re.fullmatch(r'[0-9]+', str(run_id)) or namespace not in (
@@ -55,6 +55,10 @@ class RemoteExecutionClaim:
             raise GuardStop('remote_claim_run_or_namespace_invalid')
         self.api, self.batch, self.run, self.commit = api, batch_sha, str(run_id), commit
         self.namespace = namespace
+        from free_market_validation import WATCHLIST
+        if not symbols or len(symbols)>len(WATCHLIST) or len(set(symbols))!=len(symbols) or any(c not in WATCHLIST for c in symbols):
+            raise GuardStop('remote_claim_watchlist_invalid')
+        self.symbols=tuple(symbols)
         self.records = {}
         self.sent = set()
         self.ready = False
@@ -95,10 +99,10 @@ class RemoteExecutionClaim:
         self.records[digest] = {'ref': ref, 'tag_sha': tag_sha, 'message': message}
 
     def reserve(self, members):
-        if self.records or [m.get('symbol') for m in members] != ['NVDA', 'MU', 'QQQ']:
+        if self.records or tuple(m.get('symbol') for m in members) != self.symbols:
             raise GuardStop('remote_claim_batch_members_or_repeat_invalid')
         hashes = [m['request_sha256'] for m in members]
-        if len(set(hashes)) != 3 or self.batch in hashes:
+        if len(set(hashes)) != len(self.symbols) or self.batch in hashes:
             raise GuardStop('remote_claim_duplicate_request_hash')
         self._protection()
         self._create('batch', self.batch)
@@ -128,7 +132,7 @@ class RemoteExecutionClaim:
             raise GuardStop('remote_claim_ownership_mismatch')
 
     def before_send(self, symbol, request_sha):
-        if not self.ready or symbol in self.sent or len(self.sent) >= 3:
+        if not self.ready or symbol in self.sent or len(self.sent) >= len(self.symbols):
             raise GuardStop('remote_claim_local_request_reuse')
         self._protection()
         self._verify(self.batch)

@@ -1,11 +1,13 @@
-"""Prepared manual three-request adapter using the existing client/session/guard.
+"""Prepared manual watchlist adapter using the existing client/session/guard.
 
 Default OFF. No collection, retries, fallback, notification or budget database.
 """
 import argparse,atexit,datetime as dt,hashlib,html,json,os,pathlib,smtplib,subprocess,sys
+from decimal import Decimal
 
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
-from authorized_once import LiveSession,SafeWriter,canonical_sha,free_get
+from authorized_once import LiveSession,SafeWriter,canonical_sha,free_get,MANUAL_BUSINESS
+from free_market_validation import WATCHLIST
 from deepseek_post_guard import OnePostGuard,GuardStop,ENDPOINT
 from nvda_frozen_once import dispatch_frozen,render_native_report
 from remote_execution_claim import GitHubAPI,RemoteExecutionClaim
@@ -13,14 +15,25 @@ from remote_execution_claim import GitHubAPI,RemoteExecutionClaim
 SYMBOLS=('NVDA','MU','QQQ');BUSINESS='a1daaa302b3a72fb5694c9872ceecf2c4dc0b6e4'
 
 
+def batch_spec(lock):
+    if lock.get('profile')=='mvp_three_v1':return BUSINESS,list(SYMBOLS),3,'0.09'
+    if lock.get('profile')!='mvp_manual_v2':raise GuardStop('batch_profile_invalid')
+    symbols=[m.get('symbol') for m in lock.get('members',[])]
+    if not symbols or len(symbols)>len(WATCHLIST) or len(set(symbols))!=len(symbols) or symbols!=[c for c in WATCHLIST if c in symbols]:
+        raise GuardStop('manual_batch_watchlist_or_order_invalid')
+    return MANUAL_BUSINESS,symbols,len(symbols),str(Decimal('.03')*len(symbols))
+
+
 def load_set(bundle,approved_sha):
     raw=(bundle/'REQUEST_SET_LOCK.json').read_bytes()
     if hashlib.sha256(raw).hexdigest()!=approved_sha:raise GuardStop('batch_hash_mismatch')
     lock=json.loads(raw)
-    if lock.get('profile')!='mvp_three_v1' or lock.get('business_commit')!=BUSINESS:raise GuardStop('batch_profile_invalid')
-    if lock.get('authorize_paid_POST') is not False or lock.get('max_total_POSTs')!=3 or lock.get('max_POSTs_per_symbol')!=1 or lock.get('total_reservation_USD')!='0.09':raise GuardStop('batch_call_limits_invalid')
+    business,symbols,cap,reserve=batch_spec(lock)
+    if lock.get('business_commit')!=business:raise GuardStop('batch_profile_invalid')
+    if lock.get('authorize_paid_POST') is not False or lock.get('max_total_POSTs')!=cap or lock.get('max_POSTs_per_symbol')!=1 or lock.get('total_reservation_USD')!=reserve:raise GuardStop('batch_call_limits_invalid')
+    if lock.get('automatic_retry') is not False or lock.get('fallback') is not False:raise GuardStop('retry_or_fallback_forbidden')
     members=lock['members']
-    if [m.get('symbol') for m in members]!=list(SYMBOLS):raise GuardStop('batch_symbols_or_duplicates_invalid')
+    if [m.get('symbol') for m in members]!=symbols:raise GuardStop('batch_symbols_or_duplicates_invalid')
     packets={};contexts={}
     for m in members:
         code=m['symbol'];body=(bundle/code/'FINAL_REQUEST.json').read_bytes();context=(bundle/code/'NATIVE_CONTEXT.json').read_bytes()
@@ -34,24 +47,39 @@ def load_set(bundle,approved_sha):
     return lock,packets,contexts
 
 
+def render_status_index(rows,mode):
+    text='<h1>手动研究报告目录</h1><p>模型完成不等于内容获准发布；全部待人工审阅。</p>'
+    for label,success in [('执行成功（仍未发布）',True),('执行失败',False)]:
+        text+='<h2>'+label+'</h2><ul>'
+        for row in rows:
+            if bool(row.get('execution_success'))!=success:continue
+            code=row['symbol'];link=f'<a href="{code}/REPORT.html">{code}</a>' if success else html.escape(code)
+            text+='<li>'+link+' '+html.escape(row['status']+' '+row.get('reason',''))+f'；未发布 <a href="{code}/STATUS.json">状态</a></li>'
+        text+='</ul>'
+    note='合成数据/模拟模型，不是真实行情或研究验收。' if mode=='SIMULATED' else '真实模型原文，待人工审阅。'
+    return '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body><p>'+html.escape(mode+' '+note)+'</p>'+text+'</body></html>'
+
+
 def main():
     p=argparse.ArgumentParser();p.add_argument('--source',type=pathlib.Path,required=True);p.add_argument('--bundle',type=pathlib.Path,required=True);p.add_argument('--out',type=pathlib.Path,required=True);p.add_argument('--batch-sha',required=True)
     group=p.add_mutually_exclusive_group(required=True);group.add_argument('--simulate',action='store_true');group.add_argument('--execute-authorized',action='store_true')
-    p.add_argument('--authorization',type=pathlib.Path);p.add_argument('--inject-failure',choices=SYMBOLS)
+    p.add_argument('--authorization',type=pathlib.Path);p.add_argument('--inject-failure',choices=WATCHLIST)
     a=p.parse_args();source=a.source.resolve();bundle=a.bundle.resolve();out=a.out.resolve()
     if a.inject_failure and not a.simulate:raise GuardStop('fault_injection_is_offline_only')
-    if subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True).strip()!=BUSINESS or (source/'.env').exists():raise GuardStop('business_or_env_mismatch')
-    sys.path.insert(0,str(source))  # Before LiveSession calendar/material checks.
     lock,packets,contexts=load_set(bundle,a.batch_sha)
+    business,symbols,cap,reserve=batch_spec(lock)
+    if subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True).strip()!=business or (source/'.env').exists():raise GuardStop('business_or_env_mismatch')
+    sys.path.insert(0,str(source))  # Before LiveSession calendar/material checks.
     claim=None
     if a.execute_authorized:
+        if lock.get('profile')!='mvp_manual_v2' or lock.get('offline_only'):raise GuardStop('legacy_or_offline_bundle_not_live_authorizable')
         if os.getenv('GITHUB_ACTIONS')!='true' or os.getenv('GITHUB_RUN_ATTEMPT')!='1' or not a.authorization:raise GuardStop('protected_first_manual_run_required')
         approval=json.loads(a.authorization.read_text('utf-8'))
-        if approval.get('authorize_paid_posts') is not True or approval.get('batch_sha256')!=a.batch_sha or approval.get('run_id')!=os.getenv('GITHUB_RUN_ID') or approval.get('max_total_POSTs')!=3 or approval.get('reservation_USD')!='0.09' or a.batch_sha not in approval.get('authorization_reference',''):raise GuardStop('new_explicit_batch_authorization_required')
+        if approval.get('authorize_paid_posts') is not True or approval.get('batch_sha256')!=a.batch_sha or approval.get('run_id')!=os.getenv('GITHUB_RUN_ID') or approval.get('max_total_POSTs')!=cap or approval.get('reservation_USD')!=reserve or a.batch_sha not in approval.get('authorization_reference',''):raise GuardStop('new_explicit_batch_authorization_required')
         key=os.getenv('DEEPSEEK_API_KEY','').strip()
         if not key:raise GuardStop('missing_key_no_POST')
         claim=RemoteExecutionClaim(GitHubAPI(os.getenv('GITHUB_REPOSITORY',''),os.getenv('GITHUB_TOKEN','')),
-                                   a.batch_sha,approval['run_id'],os.getenv('GITHUB_SHA',''))
+                                   a.batch_sha,approval['run_id'],os.getenv('GITHUB_SHA',''),symbols=symbols)
         # Validate expiry/calendar BEFORE consuming remote reservations.
         now=dt.datetime.now(dt.timezone.utc)
         from src.core.trading_calendar import get_effective_trading_date,_XCALS_AVAILABLE
@@ -111,10 +139,10 @@ def main():
             row={'symbol':code,'mode':'SIMULATED' if a.simulate else 'REAL_MODEL_PENDING_MANUAL_REVIEW','published':False,'request_sha256':member['request_sha256']}
             guard=None;session=None
             try:
-                if total>=3:raise GuardStop('batch_three_POST_cap')
+                if total>=cap:raise GuardStop('batch_POST_cap')
                 expiry=min(dt.datetime.now(dt.timezone.utc)+dt.timedelta(minutes=15),dt.datetime.fromisoformat(member['material_expires_at']))
-                auth={'test_profile':'mvp_three_v1','authorize_paid_post':True,'authorization_reference':approval['authorization_reference']+' '+member['request_sha256'],
-                      'secret_upload_approval_reference':approval.get('secret_upload_approval_reference','existing approved repository Secret'),'run_id':approval['run_id'],'fixed_commit':BUSINESS,
+                auth={'test_profile':lock['profile'],'authorize_paid_post':True,'authorization_reference':approval['authorization_reference']+' '+member['request_sha256'],
+                      'secret_upload_approval_reference':approval.get('secret_upload_approval_reference','existing approved repository Secret'),'run_id':approval['run_id'],'fixed_commit':business,
                       'batch_sha256':a.batch_sha,'request_sha256':member['request_sha256'],'symbol':code,'analysis_asof':member['analysis_asof'],'target_session':member['target_session'],
                       'material_expires_at':member['material_expires_at'],'expires_at':expiry.isoformat(),'pricing_sha256':lock['pricing_sha256'],'reservation_usd':'.03','allow_peak_test':True}
                 session=LiveSession(dest,auth,key,approval['run_id'],get=get)
@@ -141,7 +169,14 @@ def main():
                 import markdown2
                 body=markdown2.markdown(md,safe_mode='escape',extras=['tables'])
                 (dest/'REPORT.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:16px/1.7 system-ui;max-width:960px;padding:16px;overflow-wrap:anywhere}pre{white-space:pre-wrap}table{display:block;overflow:auto}</style><body>'+body.replace(key,'[REDACTED]')+'</body></html>',encoding='utf-8')
+                from src.trade_plan import calculate_risk_plan,is_watch_plan
+                plan=(model_json.get('dashboard') or {}).get('battle_plan',{}).get('risk_plan')
+                _,_,risk_errors=calculate_risk_plan(plan)
+                if plan is None:risk_errors=[]  # No proposed trade, not fabricated numeric levels.
+                session.save('RISK_PLAN_CHECK.json',{'errors':risk_errors,'watch_only':plan is None or is_watch_plan(plan),'manual_facts_review_required':True,'publish_accepted':False})
                 row['status']='parsed_preview_requires_manual_review'
+                row['risk_plan_errors']=risk_errors
+                row['execution_success']=True
             except BaseException as exc:row.update(status='failed_no_retry',error_category=type(exc).__name__,reason=str(exc) if isinstance(exc,GuardStop) else 'inspect_redacted_evidence')
             finally:
                 if session:session.finish()
@@ -150,9 +185,11 @@ def main():
                 row['automatic_retry']=False
                 (dest/'STATUS.json').write_text(json.dumps(row,ensure_ascii=False,indent=2).replace(key,'[REDACTED]'),encoding='utf-8');rows.append(row)
         summary={'mode':'SIMULATED' if a.simulate else 'REAL_MODEL_PENDING_MANUAL_REVIEW','batch_sha256':a.batch_sha,'symbols':rows,'transport_attempts':total,'actual_paid_POSTs':0 if a.simulate else total,'published':False,'fake_calls':fake_calls if a.simulate else None}
+        summary.update(successful=sum(r.get('execution_success',False) for r in rows),failed=sum(r['status']=='failed_no_retry' for r in rows),unpublished=len(rows))
+        (out/'index.html').write_text(render_status_index(rows,summary['mode']),encoding='utf-8')
         (out/'BATCH_RESULT.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding='utf-8')
     finally:log.close();sys.stdout,sys.stderr=stdout,stderr
-    print('Batch stopped after its three independent slots; no retry or notification.')
+    print('Batch stopped after its authorized independent slots; no retry or notification.')
 
 
 if __name__=='__main__':main()

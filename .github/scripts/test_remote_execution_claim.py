@@ -159,6 +159,17 @@ class ClaimTests(unittest.TestCase):
         with self.assertRaises(GuardStop) as raised:api('POST','refs',{'ref':'refs/tags/x','sha':COMMIT})
         self.assertEqual(api.opener.open.call_count,1)
         self.assertNotIn('do-not-log-token',str(raised.exception))
+    def test_35_symbol_limits_and_remote_reuse(self):
+        from free_market_validation import WATCHLIST
+        members=[{'symbol':c,'request_sha256':hashlib.sha256(c.encode()).hexdigest()} for c in WATCHLIST]
+        c=RemoteExecutionClaim(self.api,BATCH,'1',COMMIT,symbols=WATCHLIST);c.reserve(members)
+        for m in members:c.before_send(m['symbol'],m['request_sha256'])
+        self.assertEqual(len(c.sent),35)
+        with self.assertRaises(GuardStop):c.before_send('NVDA',members[0]['request_sha256'])
+        with self.assertRaises(GuardStop):RemoteExecutionClaim(self.api,BATCH,'2',COMMIT,symbols=WATCHLIST).reserve(members)
+    def test_nonwatchlist_or_duplicate_claim_scope_rejected(self):
+        for symbols in (['UNKNOWN'],['NVDA','NVDA'],[]):
+            with self.assertRaises(GuardStop):RemoteExecutionClaim(self.api,BATCH,'1',COMMIT,symbols=symbols)
     def test_production_integration_order(self):
         source=(pathlib.Path(__file__).parent/'mvp_three_live.py').read_text('utf-8')
         self.assertLess(source.index('claim.reserve('),source.index('dispatch_frozen(analyzer'))

@@ -1,5 +1,5 @@
-name: Manual authorized frozen NVDA Phase 2S 16384 one POST
-run-name: ${{ inputs.execute_live && 'Authorized frozen NVDA 16K one POST' || 'FREE isolated NVDA startup regression - fake transports' }}
+name: Manual DSA research and free preflight
+run-name: ${{ inputs.execute_live && 'Authorized frozen manual research batch' || 'FREE manual preflight' }}
 on:
   workflow_dispatch:
     inputs:
@@ -7,12 +7,12 @@ on:
         type: boolean
         default: false
       mvp_universe:
-        description: 'Free simulation universe'
+        description: 'Manual watchlist scope'
         type: choice
         options: [three, watchlist35]
         default: three
       mvp_three:
-        description: 'Free native MVP simulation; never live API'
+        description: 'Select native MVP; paid mode still requires a new frozen batch and user approval'
         type: boolean
         default: false
       allow_peak_test:
@@ -123,7 +123,7 @@ jobs:
             claim-evidence/
           retention-days: 14
   mvp:
-    if: ${{ !inputs.execute_live && inputs.mvp_three && inputs.mvp_universe == 'three' && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    if: ${{ !inputs.execute_live && inputs.mvp_three && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -140,7 +140,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v5
         with:
-          ref: a1daaa302b3a72fb5694c9872ceecf2c4dc0b6e4
+          ref: 6ebdf627d9becd24f4db1290c19996175e5e0df8
           path: upstream-fixed
           persist-credentials: false
       - uses: actions/setup-python@v6
@@ -155,11 +155,13 @@ jobs:
           MVP_UNIVERSE: ${{ inputs.mvp_universe }}
         run: |
           test "$GITHUB_RUN_ATTEMPT" = 1
-          test "$(git -C upstream-fixed rev-parse HEAD)" = a1daaa302b3a72fb5694c9872ceecf2c4dc0b6e4
+          test "$(git -C upstream-fixed rev-parse HEAD)" = 6ebdf627d9becd24f4db1290c19996175e5e0df8
           python preparation/.github/scripts/mvp_three.py --source upstream-fixed --out mvp-output --universe "$MVP_UNIVERSE"
-      - name: Freeze three real-analysis candidates only, no authorization or POST
+      - name: Freeze fresh manual candidates only, no authorization or POST
         if: always()
-        run: python preparation/.github/scripts/mvp_request_set.py --source upstream-fixed --data mvp-output --out mvp-candidates
+        env:
+          MVP_UNIVERSE: ${{ inputs.mvp_universe }}
+        run: python preparation/.github/scripts/mvp_request_set.py --source upstream-fixed --data mvp-output --out mvp-candidates --universe "$MVP_UNIVERSE"
       - uses: actions/upload-artifact@v6
         if: always()
         with:
@@ -189,13 +191,15 @@ jobs:
       actions: read
     environment: nvda-one-call-approval
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 90
     env:
       PYTHONIOENCODING: utf-8
       PYTHONDONTWRITEBYTECODE: '1'
       LITELLM_LOCAL_MODEL_COST_MAP: 'True'
       CUSTOM_TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
       TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+      MVP_UNIVERSE: ${{ inputs.mvp_universe }}
+      MVP_BUNDLE: ${{ inputs.mvp_universe == 'watchlist35' && 'preparation/.github/frozen/mvp-watchlist-v2' || 'preparation/.github/frozen/mvp-three-v2' }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -204,7 +208,7 @@ jobs:
           path: preparation
       - uses: actions/checkout@v5
         with:
-          ref: a1daaa302b3a72fb5694c9872ceecf2c4dc0b6e4
+          ref: 6ebdf627d9becd24f4db1290c19996175e5e0df8
           persist-credentials: false
           path: upstream-fixed
       - uses: actions/setup-python@v6
@@ -224,19 +228,26 @@ jobs:
           python - <<'PY'
           import hashlib,json,os,pathlib
           if os.environ['GITHUB_RUN_ATTEMPT']!='1':raise SystemExit('rerun_forbidden')
-          expected=pathlib.Path('preparation/.github/frozen/mvp-three/REQUEST_SET_SHA256.txt').read_text().strip()
-          raw=pathlib.Path('preparation/.github/frozen/mvp-three/REQUEST_SET_LOCK.json').read_bytes()
+          expected=(pathlib.Path(os.environ['MVP_BUNDLE'])/'REQUEST_SET_SHA256.txt').read_text().strip()
+          raw=(pathlib.Path(os.environ['MVP_BUNDLE'])/'REQUEST_SET_LOCK.json').read_bytes()
           assert hashlib.sha256(raw).hexdigest()==os.environ['BATCH_SHA']==expected
+          import sys
+          sys.path.insert(0,str(pathlib.Path('preparation/.github/scripts').resolve()))
+          from mvp_three_live import load_set,batch_spec
+          lock,_,_=load_set(pathlib.Path(os.environ['MVP_BUNDLE']),expected)
+          assert lock['profile']=='mvp_manual_v2' and not lock.get('offline_only')
+          _,symbols,cap,reserve=batch_spec(lock)
+          if os.environ['MVP_UNIVERSE']=='three':assert symbols==['NVDA','MU','QQQ']
           assert expected in os.environ['APPROVAL_REF'] and os.environ['SECRET_APPROVAL_REF'].strip()
-          auth={'authorize_paid_posts':True,'batch_sha256':expected,'run_id':os.environ['GITHUB_RUN_ID'],'max_total_POSTs':3,'reservation_USD':'0.09','authorization_reference':os.environ['APPROVAL_REF'],'secret_upload_approval_reference':os.environ['SECRET_APPROVAL_REF']}
+          auth={'authorize_paid_posts':True,'batch_sha256':expected,'run_id':os.environ['GITHUB_RUN_ID'],'max_total_POSTs':cap,'reservation_USD':reserve,'authorization_reference':os.environ['APPROVAL_REF'],'secret_upload_approval_reference':os.environ['SECRET_APPROVAL_REF']}
           pathlib.Path('approved-batch.json').write_text(json.dumps(auth))
           PY
-      - name: At most three separately bound native calls, no retries
+      - name: At most the explicitly approved manual batch, no retries
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
           BATCH_SHA: ${{ inputs.request_sha256 }}
-        run: python preparation/.github/scripts/mvp_three_live.py --source upstream-fixed --bundle preparation/.github/frozen/mvp-three --out real-research --batch-sha "$BATCH_SHA" --execute-authorized --authorization approved-batch.json
+        run: python preparation/.github/scripts/mvp_three_live.py --source upstream-fixed --bundle "$MVP_BUNDLE" --out real-research --batch-sha "$BATCH_SHA" --execute-authorized --authorization approved-batch.json
       - name: Credential scan before artifacts
         if: always()
         id: real_scan
@@ -254,7 +265,7 @@ jobs:
       - uses: actions/upload-artifact@v6
         if: ${{ always() && steps.real_scan.outputs.safe == 'true' }}
         with:
-          name: real-three-research-${{ github.run_id }}
+          name: real-manual-research-${{ github.run_id }}
           path: |
             real-research/**/*.json
             real-research/**/*.md

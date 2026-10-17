@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [改进] Reuse the guarded manual research adapter for approved subsets of the existing 35-symbol watchlist, with full batch binding, per-symbol failure isolation, raw usage and unpublished report indexes.
+
 - [修复] Clarify completed daily closes, pairwise MA facts and separate volume benchmarks; allow explicit watch plans and distinguish new exposure from existing holdings without changing saved model text.
 
 - [修复] Reserve three-stock paid batches and request hashes with protected create-only GitHub refs; reject cross-Runner reuse and unknown reservation outcomes before model transport.

@@ -244,7 +244,7 @@ def main():
         rows.append(row)
         trace=out/code/'HTTP_TRACE.json'
         if trace.exists():rate_limited=any(r.get('status')==429 for r in json.loads(trace.read_text('utf-8')))
-    save(out/'RESULTS.json',{'run_id':os.getenv('GITHUB_RUN_ID'),'commit':os.getenv('GITHUB_SHA'),'mode':'OFFLINE_saved' if offline else 'LIVE_FREE_DATA_MOCK_MODEL','symbols':rows,'real_POSTs':0,'new_model_cost_USD':'0','mail_sent':0})
+    save(out/'RESULTS.json',{'run_id':os.getenv('GITHUB_RUN_ID'),'commit':os.getenv('GITHUB_SHA'),'business_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True).strip(),'mode':'OFFLINE_saved' if offline else 'LIVE_FREE_DATA_MOCK_MODEL','symbols':rows,'real_POSTs':0,'new_model_cost_USD':'0','mail_sent':0})
     text=f'<h1>DSA {len(rows)}标的MVP</h1><p>'+NOTICE+'</p><ul>'
     for row in rows:
         code=row['symbol'];link=f'<a href="{code}/REPORT.html">{code}</a>' if row['status'].startswith('success') else code
