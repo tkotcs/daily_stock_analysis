@@ -6,7 +6,7 @@ from html.parser import HTMLParser
 import httpx
 from deepseek_post_guard import GuardStop
 
-MANUAL_BUSINESS='15a93504f909d1af118d95f6108af8bf4c7d10db'
+MANUAL_BUSINESS='68b85e7a143be95f5f7d4bea66989c37f777877a'
 FIXED='f93a7609e569e3b6c6372e652a3d36a27225d783'
 # Exact reviewed profile; no arbitrary 16K payload or business revision is accepted.
 REVIEWED_16K_SHA='08b09a31d1d08c4b1fa33bc92f850feb63709ace5c6f8fd43a63aa9bee82cdee'

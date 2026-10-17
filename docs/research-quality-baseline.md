@@ -48,3 +48,5 @@ Yahoo summary to avoid mixed-quarter prompts. Report date is not publication
 time; date-only disclosures use a conservative availability proxy. The checked
 packet is a dated evidence snapshot, not an evergreen financial provider or a
 comprehensive news search. ETF company-finance fields remain not applicable.
+
+Current material preparation and paid entry are pinned to `68b85e7a143be95f5f7d4bea66989c37f777877a`, with the reviewed official packet supplied only in free preparation. Existing consumed requests remain unchanged.
