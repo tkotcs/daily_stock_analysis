@@ -50,3 +50,4 @@ tests/fixtures/mvp_real_three/** -text
 .github/frozen/mvp-*-v2/** -text
 
 .github/frozen/mvp-three-v3/** -text
+.github/frozen/mode-comparison-v1/** -text

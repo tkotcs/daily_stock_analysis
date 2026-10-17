@@ -3,6 +3,10 @@ run-name: ${{ inputs.execute_live && 'Authorized frozen manual research batch' |
 on:
   workflow_dispatch:
     inputs:
+      comparison_modes:
+        description: "Frozen three-symbol paired Flash modes; default FREE"
+        type: boolean
+        default: false
       execute_live:
         type: boolean
         default: false
@@ -45,7 +49,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   preflight:
-    if: ${{ !inputs.execute_live && !inputs.mvp_three && inputs.request_sha256 != 'FREE_REMOTE_CLAIM_TEST' && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    if: ${{ !inputs.comparison_modes && (!inputs.execute_live && !inputs.mvp_three && inputs.request_sha256 != 'FREE_REMOTE_CLAIM_TEST' && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -93,7 +97,7 @@ jobs:
             startup-evidence/
           retention-days: 14
   claim_test:
-    if: ${{ !inputs.execute_live && !inputs.mvp_three && inputs.request_sha256 == 'FREE_REMOTE_CLAIM_TEST' && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    if: ${{ !inputs.comparison_modes && (!inputs.execute_live && !inputs.mvp_three && inputs.request_sha256 == 'FREE_REMOTE_CLAIM_TEST' && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -123,7 +127,7 @@ jobs:
             claim-evidence/
           retention-days: 14
   mvp:
-    if: ${{ !inputs.execute_live && inputs.mvp_three && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    if: ${{ !inputs.comparison_modes && (!inputs.execute_live && inputs.mvp_three && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation') }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -185,7 +189,7 @@ jobs:
           assert len(rows)==(35 if os.environ['MVP_UNIVERSE']=='watchlist35' else 3) and all(x['status']=='success_simulated_model' for x in rows), 'Partial failure: inspect per-symbol evidence; do not retry automatically'
           PY
   mvp_live:
-    if: ${{ inputs.execute_live && inputs.mvp_three && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    if: ${{ !inputs.comparison_modes && (inputs.execute_live && inputs.mvp_three && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation') }}
     permissions:
       contents: write
       actions: read
@@ -275,7 +279,7 @@ jobs:
             real-research/**/*.log
           retention-days: 14
   once:
-    if: ${{ inputs.execute_live && !inputs.mvp_three && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    if: ${{ !inputs.comparison_modes && (inputs.execute_live && !inputs.mvp_three && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation') }}
     environment: nvda-one-call-approval
     runs-on: ubuntu-latest
     env:
@@ -395,3 +399,129 @@ jobs:
           path: authorized-evidence/
           retention-days: 7
 
+
+  paired_free:
+    if: ${{ inputs.comparison_modes && !inputs.execute_live && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONIOENCODING: utf-8
+      PYTHONDONTWRITEBYTECODE: '1'
+      LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+      MVP_BUNDLE: preparation/.github/frozen/mode-comparison-v1
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: preparation
+      - uses: actions/checkout@v5
+        with:
+          ref: 577624ad8459871630c690e5760ae504ac6f2b9f
+          persist-credentials: false
+          path: upstream-fixed
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Original dependencies, no model credentials
+        run: |
+          python -m pip install -r upstream-fixed/requirements.txt litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6 pytest
+          python -m pip check
+      - name: Only paired entry compatibility, no real key or model network
+        env:
+          DSA_FIXED_SOURCE: ${{ github.workspace }}/upstream-fixed
+          PAIR_SHA: ${{ inputs.request_sha256 }}
+        run: |
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$PAIR_SHA" = 3dde3f5041d57b51cd8f5dfa043069bfd5e12d3827ac86773af9eb676d6cf843
+          python -m pytest preparation/.github/scripts/test_comparison_entry.py preparation/.github/scripts/test_mode_comparison.py preparation/.github/scripts/test_nvda_frozen_once.py -q
+          python preparation/.github/scripts/mvp_three_live.py --source upstream-fixed --bundle "$MVP_BUNDLE" --out paired-free --batch-sha "$PAIR_SHA" --simulate
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: paired-free-${{ github.run_id }}
+          path: paired-free/
+          retention-days: 14
+
+  paired_live:
+    if: ${{ inputs.comparison_modes && inputs.execute_live && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    permissions:
+      contents: write
+      actions: read
+    environment: nvda-one-call-approval
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONIOENCODING: utf-8
+      PYTHONDONTWRITEBYTECODE: '1'
+      LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+      MVP_BUNDLE: preparation/.github/frozen/mode-comparison-v1
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: preparation
+      - uses: actions/checkout@v5
+        with:
+          ref: 577624ad8459871630c690e5760ae504ac6f2b9f
+          persist-credentials: false
+          path: upstream-fixed
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Original dependencies, no model credentials
+        run: |
+          python -m pip install -r upstream-fixed/requirements.txt litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6 pytest
+          python -m pip check
+      - name: Bind the explicitly approved six-request batch (never regenerate)
+        env:
+          BATCH_SHA: ${{ inputs.request_sha256 }}
+          APPROVAL_REF: ${{ inputs.authorization_reference }}
+          SECRET_APPROVAL_REF: ${{ inputs.secret_upload_approval_reference }}
+        run: |
+          python - <<'PY'
+          import hashlib,json,os,pathlib,sys,subprocess
+          if os.environ['GITHUB_RUN_ATTEMPT']!='1':raise SystemExit('rerun_forbidden')
+          root=pathlib.Path(os.environ['MVP_BUNDLE'])
+          expected='3dde3f5041d57b51cd8f5dfa043069bfd5e12d3827ac86773af9eb676d6cf843'
+          assert os.environ['BATCH_SHA']==expected==hashlib.sha256((root/'COMPARISON_LOCK.json').read_bytes()).hexdigest()
+          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd='preparation',text=True).strip()==os.environ['GITHUB_SHA']
+          assert subprocess.check_output(['git','rev-parse','HEAD'],cwd='upstream-fixed',text=True).strip()=='577624ad8459871630c690e5760ae504ac6f2b9f'
+          sys.path.insert(0,str(pathlib.Path('preparation/.github/scripts').resolve()))
+          from mvp_three_live import load_set,batch_spec
+          lock,_,_=load_set(root,expected);business,slots,cap,reserve=batch_spec(lock)
+          assert cap==6 and reserve=='0.27' and expected in os.environ['APPROVAL_REF'] and os.environ['SECRET_APPROVAL_REF'].strip()
+          auth={'authorize_paid_posts':True,'batch_sha256':expected,'run_id':os.environ['GITHUB_RUN_ID'],'max_total_POSTs':cap,'reservation_USD':reserve,'authorization_reference':os.environ['APPROVAL_REF'],'secret_upload_approval_reference':os.environ['SECRET_APPROVAL_REF']}
+          pathlib.Path('approved-comparison.json').write_text(json.dumps(auth),encoding='utf-8')
+          PY
+      - name: Authorized six slots only, zero retries (key only here)
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          BATCH_SHA: ${{ inputs.request_sha256 }}
+        run: python preparation/.github/scripts/mvp_three_live.py --source upstream-fixed --bundle "$MVP_BUNDLE" --out paired-real --batch-sha "$BATCH_SHA" --execute-authorized --authorization approved-comparison.json
+      - name: Credential scan before artifacts
+        if: always()
+        id: paired_scan
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          python - <<'PY'
+          import gzip,os,pathlib
+          key=os.environ.get('DEEPSEEK_API_KEY','').encode();root=pathlib.Path('paired-real')
+          if not key or not root.is_dir():raise SystemExit('no_safe_artifact')
+          for p in root.rglob('*'):
+              if p.is_file():
+                  raw=p.read_bytes()
+                  if key in raw or (raw.startswith(b'\x1f\x8b') and key in gzip.decompress(raw)):raise SystemExit('credential_found_do_not_upload')
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write('safe=true\n')
+          PY
+      - uses: actions/upload-artifact@v6
+        if: ${{ always() && steps.paired_scan.outputs.safe == 'true' }}
+        with:
+          name: real-paired-research-${{ github.run_id }}
+          path: paired-real/
+          retention-days: 14

@@ -6,7 +6,7 @@ import argparse,atexit,datetime as dt,hashlib,html,json,os,pathlib,smtplib,subpr
 from decimal import Decimal
 
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
-from authorized_once import LiveSession,SafeWriter,canonical_sha,free_get,MANUAL_BUSINESS,pricing_text_sha
+from authorized_once import LiveSession,SafeWriter,canonical_sha,free_get,MANUAL_BUSINESS,pricing_text_sha,COMPARISON_PROFILE,COMPARISON_BUSINESS
 from free_market_validation import WATCHLIST
 from deepseek_post_guard import OnePostGuard,GuardStop,ENDPOINT
 from nvda_frozen_once import dispatch_frozen,render_native_report
@@ -16,6 +16,8 @@ SYMBOLS=('NVDA','MU','QQQ');BUSINESS='a1daaa302b3a72fb5694c9872ceecf2c4dc0b6e4'
 
 
 def batch_spec(lock):
+    if lock.get('profile')==COMPARISON_PROFILE:
+        return COMPARISON_BUSINESS,[c+'_'+m for c in SYMBOLS for m in ('nonthinking','thinking')],6,'0.27'
     if lock.get('profile')=='mvp_three_v1':return BUSINESS,list(SYMBOLS),3,'0.09'
     if lock.get('profile')!='mvp_manual_v2':raise GuardStop('batch_profile_invalid')
     symbols=[m.get('symbol') for m in lock.get('members',[])]
@@ -25,6 +27,7 @@ def batch_spec(lock):
 
 
 def load_set(bundle,approved_sha):
+    if (bundle/'COMPARISON_LOCK.json').exists():return load_comparison_set(bundle,approved_sha)
     raw=(bundle/'REQUEST_SET_LOCK.json').read_bytes()
     if hashlib.sha256(raw).hexdigest()!=approved_sha:raise GuardStop('batch_hash_mismatch')
     lock=json.loads(raw)
@@ -47,6 +50,39 @@ def load_set(bundle,approved_sha):
     return lock,packets,contexts
 
 
+def load_comparison_set(bundle,approved_sha):
+    raw=(bundle/'COMPARISON_LOCK.json').read_bytes()
+    if hashlib.sha256(raw).hexdigest()!=approved_sha:raise GuardStop('batch_hash_mismatch')
+    lock=json.loads(raw);business,slots,cap,reserve=batch_spec(lock)
+    if lock.get('profile')!=COMPARISON_PROFILE or lock.get('business_commit')!=business or lock.get('model')!='deepseek-flash':raise GuardStop('paired_profile_invalid')
+    if lock.get('authorize_paid_POST') is not False or lock.get('max_total_POSTs')!=cap or lock.get('max_POSTs_per_request')!=1 or lock.get('max_POSTs_per_symbol')!=2 or lock.get('total_reservation_USD')!=reserve or lock.get('automatic_retry') is not False or lock.get('fallback') is not False:raise GuardStop('paired_call_limits_invalid')
+    if [m.get('request_id') for m in lock['members']]!=slots:raise GuardStop('paired_slots_invalid')
+    history=(bundle/'HISTORICAL_LOCK.json').read_bytes()
+    if hashlib.sha256(history).hexdigest()!=lock.get('historical_source_batch_sha256'):raise GuardStop('paired_source_lock_mismatch')
+    pricing_sha=json.loads(history)['pricing_sha256']
+    if hashlib.sha256((bundle/'OFFICIAL_PRICING.html').read_bytes()).hexdigest()!=pricing_sha:raise GuardStop('pricing_material_mismatch')
+    packets={};contexts={}
+    for m in lock['members']:
+        code,mode=m['symbol'],m['mode'];slot=m['request_id']
+        if code not in SYMBOLS or mode not in ('nonthinking','thinking') or slot!=code+'_'+mode:raise GuardStop('paired_slot_invalid')
+        expected=f'{code}/{mode}/FINAL_REQUEST.json'
+        if m.get('relative_request')!=expected:raise GuardStop('paired_path_invalid')
+        raw=(bundle/expected).read_bytes();context=(bundle/code/mode/'NATIVE_CONTEXT.json').read_bytes();body=json.loads(raw)
+        if hashlib.sha256(raw).hexdigest()!=m['request_sha256'] or canonical_sha(body)!=m['request_sha256'] or hashlib.sha256(context).hexdigest()!=m['context_sha256']:raise GuardStop('full_request_hash_mismatch')
+        limit,reservation=(32768,'0.06') if mode=='thinking' else (16384,'0.03')
+        if body.get('model')!='deepseek-flash' or body.get('thinking')!={'type':'enabled' if mode=='thinking' else 'disabled'} or body.get('max_tokens')!=limit or m.get('max_tokens')!=limit or body.get('stream') is not True or body.get('stream_options')!={'include_usage':True} or m.get('reservation_USD')!=reservation:raise GuardStop('request_parameters_changed')
+        if (mode=='thinking' and body.get('reasoning_effort')!='high') or (mode=='nonthinking' and 'reasoning_effort' in body):raise GuardStop('paired_effort_invalid')
+        if set(body)-{'model','max_tokens','stream','stream_options','temperature','messages','thinking','reasoning_effort'}:raise GuardStop('unreviewed_request_parameters')
+        if canonical_sha(body['messages'])!=m.get('messages_sha256') or json.loads(context)['code']!=code:raise GuardStop('paired_material_mismatch')
+        packets[slot]=body;contexts[slot]=json.loads(context)
+    for code in SYMBOLS:
+        a,b=(code+'_'+m for m in ('nonthinking','thinking'))
+        if packets[a]['messages']!=packets[b]['messages'] or contexts[a]!=contexts[b]:raise GuardStop('paired_material_not_identical')
+    if len({m['request_sha256'] for m in lock['members']})!=6:raise GuardStop('paired_duplicate_request')
+    lock['pricing_sha256']=pricing_sha # Derived from hash-bound historical lock; never rewrite frozen JSON.
+    return lock,packets,contexts
+
+
 def render_status_index(rows,mode):
     text='<h1>手动研究报告目录</h1><p>模型完成不等于内容获准发布；全部待人工审阅。</p>'
     for label,success in [('执行成功（仍未发布）',True),('执行失败',False)]:
@@ -63,7 +99,7 @@ def render_status_index(rows,mode):
 def main():
     p=argparse.ArgumentParser();p.add_argument('--source',type=pathlib.Path,required=True);p.add_argument('--bundle',type=pathlib.Path,required=True);p.add_argument('--out',type=pathlib.Path,required=True);p.add_argument('--batch-sha',required=True)
     group=p.add_mutually_exclusive_group(required=True);group.add_argument('--simulate',action='store_true');group.add_argument('--execute-authorized',action='store_true')
-    p.add_argument('--authorization',type=pathlib.Path);p.add_argument('--inject-failure',choices=WATCHLIST)
+    p.add_argument('--authorization',type=pathlib.Path);p.add_argument('--inject-failure',choices=tuple(WATCHLIST)+tuple(c+'_'+m for c in SYMBOLS for m in ('nonthinking','thinking')))
     a=p.parse_args();source=a.source.resolve();bundle=a.bundle.resolve();out=a.out.resolve()
     if a.inject_failure and not a.simulate:raise GuardStop('fault_injection_is_offline_only')
     lock,packets,contexts=load_set(bundle,a.batch_sha)
@@ -72,14 +108,14 @@ def main():
     sys.path.insert(0,str(source))  # Before LiveSession calendar/material checks.
     claim=None
     if a.execute_authorized:
-        if lock.get('profile')!='mvp_manual_v2' or lock.get('offline_only'):raise GuardStop('legacy_or_offline_bundle_not_live_authorizable')
+        if lock.get('profile') not in ('mvp_manual_v2',COMPARISON_PROFILE) or lock.get('offline_only'):raise GuardStop('legacy_or_offline_bundle_not_live_authorizable')
         if os.getenv('GITHUB_ACTIONS')!='true' or os.getenv('GITHUB_RUN_ATTEMPT')!='1' or not a.authorization:raise GuardStop('protected_first_manual_run_required')
         approval=json.loads(a.authorization.read_text('utf-8'))
         if approval.get('authorize_paid_posts') is not True or approval.get('batch_sha256')!=a.batch_sha or approval.get('run_id')!=os.getenv('GITHUB_RUN_ID') or approval.get('max_total_POSTs')!=cap or approval.get('reservation_USD')!=reserve or a.batch_sha not in approval.get('authorization_reference',''):raise GuardStop('new_explicit_batch_authorization_required')
         key=os.getenv('DEEPSEEK_API_KEY','').strip()
         if not key:raise GuardStop('missing_key_no_POST')
         claim=RemoteExecutionClaim(GitHubAPI(os.getenv('GITHUB_REPOSITORY',''),os.getenv('GITHUB_TOKEN','')),
-                                   a.batch_sha,approval['run_id'],os.getenv('GITHUB_SHA',''),symbols=symbols)
+                                   a.batch_sha,approval['run_id'],os.getenv('GITHUB_SHA',''),symbols=symbols,paired_modes=lock.get('profile')==COMPARISON_PROFILE)
         # Validate expiry/calendar BEFORE consuming remote reservations.
         now=dt.datetime.now(dt.timezone.utc)
         from src.core.trading_calendar import get_effective_trading_date,_XCALS_AVAILABLE
@@ -96,7 +132,7 @@ def main():
     out.mkdir(parents=True,exist_ok=False);rows=[];total=0
     if claim:
         try:
-            records=claim.reserve(lock['members'])
+            records=claim.reserve([{**m,'symbol':m.get('request_id',m['symbol'])} for m in lock['members']])
             (out/'REMOTE_CLAIM.json').write_text(json.dumps(records,indent=2),encoding='utf-8')
         except GuardStop:
             (out/'CLAIM_BLOCKED.json').write_text(json.dumps({'reason':'remote_reservation_failed_or_unknown_no_retry',
@@ -127,24 +163,24 @@ def main():
         from mvp_three import fixture
         def fake(transport,request):
             code=fake_symbol['code'];fake_calls.append(code)
-            if a.inject_failure==code:raise httpx.ReadTimeout('OFFLINE injected timeout')
-            text=json.dumps(fixture(code,contexts[code]),ensure_ascii=False)
+            if a.inject_failure in (code,contexts[code]['code']):raise httpx.ReadTimeout('OFFLINE injected timeout')
+            text=json.dumps(fixture(contexts[code]['code'],contexts[code]),ensure_ascii=False)
             sse='data: '+json.dumps({'model':'deepseek-flash','choices':[{'index':0,'delta':{'content':text},'finish_reason':'stop'}]},ensure_ascii=False)+'\n\ndata: [DONE]\n\n'
             return httpx.Response(200,content=sse.encode(),headers={'content-type':'text/event-stream'},request=request)
         httpx.HTTPTransport.handle_request=fake
     else:get=free_get
     try:
         for member in lock['members']:
-            code=member['symbol'];dest=out/code;dest.mkdir();fake_symbol['code']=code
-            row={'symbol':code,'mode':'SIMULATED' if a.simulate else 'REAL_MODEL_PENDING_MANUAL_REVIEW','published':False,'request_sha256':member['request_sha256']}
+            code=member.get('request_id',member['symbol']);dest=out/code;dest.mkdir();fake_symbol['code']=code
+            row={'symbol':code,'research_symbol':member['symbol'],'comparison_mode':member.get('mode'),'mode':'SIMULATED' if a.simulate else 'REAL_MODEL_PENDING_MANUAL_REVIEW','published':False,'request_sha256':member['request_sha256']}
             guard=None;session=None
             try:
                 if total>=cap:raise GuardStop('batch_POST_cap')
                 expiry=min(dt.datetime.now(dt.timezone.utc)+dt.timedelta(minutes=15),dt.datetime.fromisoformat(member['material_expires_at']))
                 auth={'test_profile':lock['profile'],'authorize_paid_post':True,'authorization_reference':approval['authorization_reference']+' '+member['request_sha256'],
                       'secret_upload_approval_reference':approval.get('secret_upload_approval_reference','existing approved repository Secret'),'run_id':approval['run_id'],'fixed_commit':business,
-                      'batch_sha256':a.batch_sha,'request_sha256':member['request_sha256'],'symbol':code,'analysis_asof':member['analysis_asof'],'target_session':member['target_session'],
-                      'material_expires_at':member['material_expires_at'],'expires_at':expiry.isoformat(),'pricing_sha256':lock['pricing_sha256'],'reservation_usd':'.03','allow_peak_test':True,'pricing_text_sha256':pricing_text_sha((bundle/'OFFICIAL_PRICING.html').read_bytes())}
+                      'batch_sha256':a.batch_sha,'request_sha256':member['request_sha256'],'symbol':member['symbol'],'request_id':code,'comparison_mode':member.get('mode'),'analysis_asof':member['analysis_asof'],'target_session':member['target_session'],
+                      'material_expires_at':member['material_expires_at'],'expires_at':expiry.isoformat(),'pricing_sha256':lock['pricing_sha256'],'reservation_usd':member.get('reservation_USD','0.03'),'allow_peak_test':True,'pricing_text_sha256':pricing_text_sha((bundle/'OFFICIAL_PRICING.html').read_bytes())}
                 session=LiveSession(dest,auth,key,approval['run_id'],get=get)
                 session.save('AUTHORIZATION_USED.json',auth)
                 def approve(body):
@@ -158,7 +194,7 @@ def main():
                 if response['result_unknown'] or response['truncated'] or response['finish_reason']!='stop':raise GuardStop('response_unknown_or_truncated_do_not_retry')
                 if not a.simulate and response['cost_estimate']['status'].startswith('unknown'):raise GuardStop('supplier_usage_unknown_do_not_retry')
                 _,model_json=analyzer._extract_analysis_json_object(text);session.save('PARSED_MODEL_JSON.json',model_json)
-                parsed=analyzer._parse_response(text,code,contexts[code].get('stock_name',code));parsed.raw_response=text;parsed.report_language='zh';parsed.model_used='deepseek/deepseek-flash';parsed.search_performed=False
+                parsed=analyzer._parse_response(text,member['symbol'],contexts[code].get('stock_name',member['symbol']));parsed.raw_response=text;parsed.report_language='zh';parsed.model_used='deepseek/deepseek-flash';parsed.search_performed=False
                 parsed.market_snapshot=analyzer._build_market_snapshot(contexts[code])
                 passed,missing=analyzer._check_content_integrity(parsed,require_phase_decision=True)
                 session.save('NATIVE_INTEGRITY.json',{'passed':passed,'missing':missing,'manual_fact_review_required':True})

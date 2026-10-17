@@ -46,7 +46,7 @@ class GitHubAPI:
 
 
 class RemoteExecutionClaim:
-    def __init__(self, api, batch_sha, run_id, commit, *, namespace='dsa-mvp-consumed-v1', symbols=('NVDA','MU','QQQ')):
+    def __init__(self, api, batch_sha, run_id, commit, *, namespace='dsa-mvp-consumed-v1', symbols=('NVDA','MU','QQQ'), paired_modes=False):
         if not re.fullmatch('[a-f0-9]{64}', batch_sha) or not re.fullmatch('[a-f0-9]{40}', commit):
             raise GuardStop('remote_claim_identity_invalid')
         if not re.fullmatch(r'[0-9]+', str(run_id)) or namespace not in (
@@ -56,7 +56,9 @@ class RemoteExecutionClaim:
         self.api, self.batch, self.run, self.commit = api, batch_sha, str(run_id), commit
         self.namespace = namespace
         from free_market_validation import WATCHLIST
-        if not symbols or len(symbols)>len(WATCHLIST) or len(set(symbols))!=len(symbols) or any(c not in WATCHLIST for c in symbols):
+        paired_slots=tuple(c+'_'+m for c in ('NVDA','MU','QQQ') for m in ('nonthinking','thinking'))
+        if paired_modes and tuple(symbols)!=paired_slots:raise GuardStop('remote_claim_paired_slots_invalid')
+        if not paired_modes and (not symbols or len(symbols)>len(WATCHLIST) or len(set(symbols))!=len(symbols) or any(c not in WATCHLIST for c in symbols)):
             raise GuardStop('remote_claim_watchlist_invalid')
         self.symbols=tuple(symbols)
         self.records = {}

@@ -6,6 +6,8 @@ from html.parser import HTMLParser
 import httpx
 from deepseek_post_guard import GuardStop
 
+COMPARISON_PROFILE='paired_mode_comparison_proposal_v1'
+COMPARISON_BUSINESS='577624ad8459871630c690e5760ae504ac6f2b9f'
 MANUAL_BUSINESS='68b85e7a143be95f5f7d4bea66989c37f777877a'
 FIXED='f93a7609e569e3b6c6372e652a3d36a27225d783'
 # Exact reviewed profile; no arbitrary 16K payload or business revision is accepted.
@@ -15,6 +17,7 @@ REVIEWED_16K_ASOF='2026-10-16T06:04:29.560325+00:00'
 REVIEWED_16K_DEADLINE='2026-10-16T20:00:00+00:00'
 
 def authorized_business(authorization):
+    if authorization.get('test_profile')==COMPARISON_PROFILE:return COMPARISON_BUSINESS
     if authorization.get('test_profile')=='mvp_manual_v2':return MANUAL_BUSINESS
     return REVIEWED_16K_FIXED if authorization.get('request_sha256')==REVIEWED_16K_SHA or authorization.get('test_profile')=='mvp_three_v1' else FIXED
 BASE='https://api.deepseek.com'
@@ -93,8 +96,11 @@ class LiveSession:
         if not key or not run_id or os.getenv('GITHUB_RUN_ATTEMPT','1')!='1':raise GuardStop('key_run_id_or_attempt_invalid')
         if authorization.get('authorize_paid_post') is not True or not authorization.get('authorization_reference') or not authorization.get('secret_upload_approval_reference'):raise GuardStop('separate_explicit_approvals_required')
         self.reviewed_16k=authorization.get('request_sha256')==REVIEWED_16K_SHA
-        self.mvp_test=authorization.get('test_profile') in ('mvp_three_v1','mvp_manual_v2')
-        self.max_tokens=16384 if self.reviewed_16k or self.mvp_test else 8192
+        self.comparison=authorization.get('test_profile')==COMPARISON_PROFILE
+        self.thinking=self.comparison and authorization.get('comparison_mode')=='thinking'
+        if self.comparison and (authorization.get('comparison_mode') not in ('nonthinking','thinking') or authorization.get('request_id')!=authorization.get('symbol','')+'_'+authorization.get('comparison_mode','')):raise GuardStop('paired_slot_invalid')
+        self.mvp_test=authorization.get('test_profile') in ('mvp_three_v1','mvp_manual_v2',COMPARISON_PROFILE)
+        self.max_tokens=32768 if self.thinking else 16384 if self.reviewed_16k or self.mvp_test else 8192
         if authorization.get('run_id')!=run_id or authorization.get('fixed_commit')!=authorized_business(authorization):raise GuardStop('authorization_identity_mismatch')
         try:expires=datetime.fromisoformat(authorization['expires_at'])
         except Exception:raise GuardStop('authorization_expiry_required') from None
@@ -112,7 +118,7 @@ class LiveSession:
             self.check_material()
         try:self.reserve=Decimal(str(authorization['reservation_usd']))
         except Exception:raise GuardStop('invalid_reservation') from None
-        if not self.reserve.is_finite() or not 0<self.reserve<=Decimal('.03'):raise GuardStop('reservation_outside_authorized_limit')
+        if not self.reserve.is_finite() or not 0<self.reserve<=(Decimal('.06') if self.thinking else Decimal('.03')):raise GuardStop('reservation_outside_authorized_limit')
     def save(self,name,value):
         text=json.dumps(value,ensure_ascii=False,indent=2)
         (self.out/name).write_text(text.replace(self.key,'[REDACTED]'),encoding='utf-8')
@@ -122,9 +128,10 @@ class LiveSession:
         if canonical_sha(body)!=self.auth.get('request_sha256'):raise GuardStop('request_hash_mismatch')
         if body.get('model')!='deepseek-flash' or body.get('max_tokens')!=self.max_tokens or body.get('stream') is not True:raise GuardStop('request_parameters_changed')
         if body.get('stream_options')!={'include_usage':True}:raise GuardStop('stream_usage_option_required')
-        if set(body)-{'model','max_tokens','stream','stream_options','temperature','messages','thinking'}:raise GuardStop('unreviewed_request_parameters')
-        if 'thinking' in body and body['thinking']!={'type':'disabled'}:raise GuardStop('unreviewed_thinking_mode')
-        if (self.reviewed_16k or self.mvp_test) and body.get('thinking')!={'type':'disabled'}:raise GuardStop('thinking_disabled_required')
+        if set(body)-({'model','max_tokens','stream','stream_options','temperature','messages','thinking'} | ({'reasoning_effort'} if self.thinking else set())):raise GuardStop('unreviewed_request_parameters')
+        if 'thinking' in body and body['thinking']!={'type':'enabled' if self.thinking else 'disabled'}:raise GuardStop('unreviewed_thinking_mode')
+        if self.thinking and body.get('reasoning_effort')!='high':raise GuardStop('thinking_effort_high_required')
+        if (self.reviewed_16k or self.mvp_test) and body.get('thinking')!={'type':'enabled' if self.thinking else 'disabled'}:raise GuardStop('thinking_disabled_required')
         content=json.dumps(body,ensure_ascii=False,separators=(',',':')).encode()
         if self.key.encode() in content:raise GuardStop('credential_in_request_body')
         allowance=len(content)+1024
@@ -138,7 +145,7 @@ class LiveSession:
         infos=[{k:b.get(k) for k in ('currency','total_balance')} for b in balance.get('balance_infos',[])]
         if not infos or not any(Decimal(str(b['total_balance']))>0 for b in infos):raise GuardStop('balance_not_positive')
         pricing=self.get(PRICING)
-        rates=verify_pricing_snapshot(pricing,self.auth.get('pricing_sha256'),self.auth.get('pricing_text_sha256') if self.auth.get('test_profile')=='mvp_manual_v2' else None)
+        rates=verify_pricing_snapshot(pricing,self.auth.get('pricing_sha256'),self.auth.get('pricing_text_sha256') if self.auth.get('test_profile') in ('mvp_manual_v2',COMPARISON_PROFILE) else None)
         if datetime.now(timezone.utc)>=datetime.fromisoformat(self.auth['expires_at']):raise GuardStop('authorization_expired_during_preflight')
         self.check_material()
         # Atomic exclusive local marker. A new Runner needs a different authorized run_id;
