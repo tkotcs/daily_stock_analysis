@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > For user-friendly release highlights, see the [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) page.
 
 ## [Unreleased]
+- [改进] 收敛研究提示词的均线比较、观望仓位与情景止损口径，移除要求模型重复计算风险比例的冲突指令；增加三股历史真实报告的小样本质量回归。
 
 - [改进] Reuse the guarded manual research adapter for approved subsets of the existing 35-symbol watchlist, with full batch binding, per-symbol failure isolation, raw usage and unpublished report indexes.
 

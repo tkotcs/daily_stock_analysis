@@ -4523,6 +4523,10 @@ current MA position from a NEW crossing today, including in summaries; do not
 call all below-MA states new breakdowns. State financial source/period/currency
 and news evidence limits. Missing evidence stays unavailable. Avoid duplicated
 indicator lists and filler; 5000-6000 output tokens is a planning range, not a quota.
+Use the computed pairwise MA comparisons throughout, not a memorized ordering.
+Separate observed facts from hypotheses. Explain a driver, its evidence, a bullish,
+bearish or watch condition and what would invalidate it; do not infer MA slope
+from one snapshot. No news coverage means unknown event risk, not no event risk.
 Add dashboard.battle_plan.risk_plan with numeric max_position_pct (0-100) and
 scenarios: [{"entry":100,"stop":95,"target":110,"position_pct":10,
 "trigger":"hypothetical closing and volume confirmation",
@@ -4531,8 +4535,14 @@ levels. If no justified entry exists, use
 {"mode":"watch","max_position_pct":0,"existing_position_cap_pct":null,"scenarios":[]}.
 max_position_pct caps NEW exposure only; existing_position_cap_pct separately caps
 existing holdings (null means unknown). Never invent a watch-only entry or stop.
+Without a supplied holding mandate, keep the existing-position cap null; discuss
+conditional holding risks, not an invented personal allocation. Watch-only mode
+must also remain watch-only in the summary and legacy entry fields.
 For trade mode, use numeric scenarios, null for an unsupported target, and refer
 to scenario numbers in legacy prose instead of duplicating stop/target/cap values.
+A scenario-specific stop is not a universal stop; state which entry it protects.
+The structured volume_ratio retains the supplied multi-session benchmark;
+label a previous-session volume multiple separately.
 Python computes loss_pct=(entry-stop)/entry*100 and
 reward_risk=(target-entry)/(entry-stop); never invent arithmetic percentages.
 Scenarios are alternatives, not simultaneous allocations. All NEW exposure scenarios must respect the same cap; existing holdings use their separately supplied cap.
@@ -4545,13 +4555,17 @@ do not repeat numeric position or loss percentages in legacy prose fields.
 摘要及看空信号也必须区分当前均线下方状态与“本日新下穿”；不能把所有低于均线写成新跌破。
 财务须标来源、期间和币种；新闻仅依据已提供内容；缺失材料直接说明，不补造。
 按资料丰富程度分配篇幅，正常5000–6000输出Token仅为规划区间，不是最低字数要求；不重复堆指标。
+全文均线大小关系以程序两两比较为准，不能套用默认排列；单日快照不能证明均线斜率。
+事实与推断分开：重要结论说明依据、驱动机制、看多/看空或观望条件及推翻判断的新信息；无新闻覆盖只表示事件风险未知。
 在dashboard.battle_plan增加risk_plan对象，含数值max_position_pct（0–100）与scenarios数组：
 {"entry":100,"stop":95,"target":110,"position_pct":10,"trigger":"假设的收盘与量能确认","invalidation":"判断失效条件"}。
 以上仅演示结构，不是本股价位。没有入场依据时使用
 {"mode":"watch","max_position_pct":0,"existing_position_cap_pct":null,"scenarios":[]}，不虚构价格。
 max_position_pct仅指新增仓位；existing_position_cap_pct单列既有持仓上限，未知为null；不得相互替代。
+没有用户持仓约束时，既有仓位上限保持null，只讨论条件性持仓风险，不虚构个人配置比例；观望模式的摘要和旧入场字段也不得暗示立即新建仓。
 有交易计划时mode="trade"，scenarios填真实假设数值；无依据目标target=null。
 旧sniper_points及position_strategy只引用情景编号和条件，不另写相冲突的止损、目标或仓位数字。
+不同入场情景不能共用一句“统一止损”；说明止损对应哪个入场。结构化volume_ratio沿用输入多日均量口径，前日成交量倍数另行标注。
 名义损失率=(entry-stop)/entry*100，收益风险比=(target-entry)/(entry-stop)，由Python计算，模型不得自行填写算术百分比。
 各情景互为备选，不同时叠加；所有情景仓位不得超过唯一max_position_pct；原有仓位/入场文案仅写条件，不重复数字仓位、损失率或收益风险比。
 """
@@ -4565,9 +4579,9 @@ max_position_pct仅指新增仓位；existing_position_cap_pct单列既有持仓
                    'Yahoo聚合不是公司逐项核验GAAP。未提供新闻、基金或财务资料不能证明风险不存在；'
                    '不得断言未给出的跟踪误差、市场份额或“无基金管理人风险”。\n')
         if english:
-            prompt += "\nEvidence limits: supplied news is not a comprehensive search. Titles/metadata do not establish article details or absence of adverse news; mark no-adverse-news checklist items unverified when coverage is incomplete. For each hypothetical entry E and stop S, give nominal price loss (E-S)/E*100%; do not guarantee realized or portfolio drawdown. Yahoo financial ratios may be TTM/aggregated and are not individually issuer-verified unless explicitly stated. Revenue/profit amounts alone do not establish earnings quality; examine comparable-period cash flows and working capital, otherwise state uncertainty.\n"
+            prompt += "\nEvidence limits: supplied news is not a comprehensive search. Titles/metadata do not establish article details or absence of adverse news; mark no-adverse-news checklist items unverified when coverage is incomplete. For each hypothetical entry and stop, supply the scenario inputs only; Python calculates loss and reward/risk. Do not duplicate arithmetic in prose or guarantee realized or portfolio drawdown. Yahoo financial ratios may be TTM/aggregated and are not individually issuer-verified unless explicitly stated. Revenue/profit amounts alone do not establish earnings quality; examine comparable-period cash flows and working capital, otherwise state uncertainty.\n"
         else:
-            prompt += "\n证据与风险口径：提供新闻不等于执行综合搜索；标题和元数据不能证明全文细节，也不能证明不存在其他重大利空。仅有标题时必须明示；覆盖不足时，无利空检查项应标待核实，不得写近3日无减持、无处罚。对每个假设入场价E及止损S，分别说明名义价格损失(E-S)/E*100%；不能保证实际损失或组合回撤。Yahoo财务比率可能为TTM或聚合口径，除明确声明外未经公司逐项核验。收入、利润绝对金额不能证明盈利质量充分验证；需比较同期间现金流和营运资金，资料不足应保留不确定性。\n"
+            prompt += "\n证据与风险口径：提供新闻不等于执行综合搜索；标题和元数据不能证明全文细节，也不能证明不存在其他重大利空。仅有标题时必须明示；覆盖不足时，无利空检查项应标待核实，不得写近3日无减持、无处罚。每个假设入场与止损仅填情景参数，由Python计算名义损失率和收益风险比；正文不重复算术，不保证实际损失或组合回撤。Yahoo财务比率可能为TTM或聚合口径，除明确声明外未经公司逐项核验。收入、利润绝对金额不能证明盈利质量充分验证；需比较同期间现金流和营运资金，资料不足应保留不确定性。\n"
         prompt += format_market_phase_prompt_section(
             context.get("market_phase_context"),
             report_language=report_language,
