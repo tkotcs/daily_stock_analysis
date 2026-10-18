@@ -197,6 +197,8 @@ def main():
                 safe_model=json.loads(json.dumps(model_json,ensure_ascii=False).replace(key,'[REDACTED]'))
                 save_full_report(dest,code,safe_model,contexts[code],analyzer._format_computed_quote_facts(contexts[code]),a.simulate)
                 parsed=analyzer._parse_response(text,member['symbol'],contexts[code].get('stock_name',member['symbol']));parsed.raw_response=text;parsed.report_language='zh';parsed.model_used='deepseek/deepseek-flash';parsed.search_performed=False
+                from saved_news import apply_saved_news_metadata
+                apply_saved_news_metadata(parsed,contexts[code])
                 parsed.market_snapshot=analyzer._build_market_snapshot(contexts[code])
                 passed,missing=analyzer._check_content_integrity(parsed,require_phase_decision=True)
                 session.save('NATIVE_INTEGRITY.json',{'passed':passed,'missing':missing,'manual_fact_review_required':True})

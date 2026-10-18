@@ -173,6 +173,26 @@ No natural-language trigger is treated as programmatically confirmed; buy plans
 remain conditional and unpublished. These rules do not evaluate arbitrary trigger
 language, invent scenarios, rewrite model labels, or regenerate accepted sidecars.
 
+### Saved news evidence (free preparation only)
+
+The existing `mvp_three.py` preparation CLI accepts optional `--news-data FILE`.
+The UTF-8 JSON maps symbols to lists of saved evidence. Each item requires
+`source`, HTTPS `url`, `title`, timezone-aware `published_at` and `fetched_at`,
+and `content_kind` (`metadata_only` or `full_text`). Only saved full text may
+include `text`; its optional `content_sha256` is checked against UTF-8 text bytes,
+not the original HTTP body. Publication must fall within three days of the new
+preparation cutoff; collection must follow publication and not exceed cutoff.
+Invalid items are excluded with reasons in `SAVED_NEWS_AUDIT.json`.
+
+The adapter supplies native context-pack and analyzer news slots, without fetching,
+changing financial fields or claiming a SearchService search. Existing supplied
+release text is retained separately, not counted as recent news. It can coexist
+with `--research-data`, whose financial replacement remains explicit. Missing news
+keeps unknown search-result counts and event risk. No environment variable, search
+provider or production workflow is enabled. Omit the flag for the unchanged path.
+Never apply this entry to historical consumed output directories or reuse their
+approval; any future model batch still needs fresh material and authorization.
+
 ```powershell
 python -m pytest .github/scripts/test_manual_quality.py -q
 ```

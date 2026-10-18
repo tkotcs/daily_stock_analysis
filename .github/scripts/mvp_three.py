@@ -24,19 +24,20 @@ def attach_previous_ma60(context, computed_daily):
 
 def fixture(code,context):
     t=context['today'];p=t['close'];note=NOTICE
+    news_note=context.get('news_source_note') or '未执行新闻搜索，本轮没有新闻证据。'
     return {'stock_name':context.get('stock_name',code),'sentiment_score':50,'trend_prediction':'模拟观望',
       'operation_advice':'观望','decision_type':'hold','action':'watch','confidence_level':'低',
       'analysis_summary':note+' 财务仅为Yahoo聚合，发布日期未核验；没有执行综合新闻搜索，不推断不存在利空。',
       'technical_analysis':f"收盘{p}美元；MA60={t.get('ma60')}。状态与当日新穿越分别查看本地技术事实。",
       'fundamental_analysis':'仅使用随附Yahoo字段；缺失保留，ETF不适用企业财务，不推断利润质量。',
-      'news_summary':'未执行新闻搜索，本轮没有新闻证据。','risk_warning':note,
+      'news_summary':news_note,'risk_warning':note,
       'dashboard':{'core_conclusion':{'one_sentence':note,'signal_type':'🟡观望',
           'position_advice':{'no_position':'模拟观望，不新建仓','has_position':'不生成真实仓位建议'}},
         'data_perspective':{'trend_status':{'ma_alignment':context.get('trend_analysis',{}).get('ma_alignment'),'is_bullish':False,'trend_score':50},
           'price_position':{'current_price':p,**{k:t.get(k) for k in ('ma5','ma10','ma20','ma60')}},
           'volume_analysis':{'volume_ratio':t.get('volume_ratio'),'volume_meaning':'今日量/此前5日均量，与昨日倍数不同'},
           'chip_structure':{'chip_health':'暂无可靠数据'}},
-        'intelligence':{'latest_news':'未提供新闻','risk_alerts':[note,'财务并非逐项核验的官方披露'],'positive_catalysts':[],
+        'intelligence':{'latest_news':news_note,'risk_alerts':[note,'财务并非逐项核验的官方披露'],'positive_catalysts':[],
           'earnings_outlook':'请查看财务来源审计，不补造缺失数字。'},
         'battle_plan':{'sniper_points':{'ideal_buy':'不适用：模拟观望','secondary_buy':'不适用','stop_loss':'不适用：未建立交易计划','take_profit':'不适用'},
           'position_strategy':{'suggested_position':'本轮不提供仓位建议','entry_plan':'等待真实研究单独验收','risk_control':'无交易执行'},
@@ -46,7 +47,7 @@ def fixture(code,context):
           'confidence_reason':note,'data_limitations':['无实时行情','无新闻检索','财务公开时间未核验']}}}
 
 
-def run_symbol(source,out,code,offline=None,inject=False,research_data=None):
+def run_symbol(source,out,code,offline=None,inject=False,research_data=None,news_data=None):
     out.mkdir(parents=True,exist_ok=False);start=time.monotonic();trace=[];restricted=False
     def persist():save(out/'HTTP_TRACE.json',trace)
     import atexit;atexit.register(persist)
@@ -167,12 +168,32 @@ def run_symbol(source,out,code,offline=None,inject=False,research_data=None):
     pipeline.trend_analyzer.analyze=trend
     analyzer=pipeline.analyzer;assert analyzer._router and not config.litellm_fallback_models
     analyzer._router.num_retries=0
+    prepared_news = {}
+    if news_data:
+        from dataclasses import replace
+        from saved_news import attach_saved_news_context
+        news_packet = json.loads(news_data.read_text('utf-8'))
+        original_pack_outputs = pipeline._build_analysis_context_pack_outputs
+        def prepare_news_pack(artifacts, **kwargs):
+            if research_data:
+                from nvda_research_materials import attach_reviewed_release
+                enhanced, supplied = attach_reviewed_release(artifacts.enhanced_context,json.loads(research_data.read_text('utf-8')),now,out)
+                artifacts = replace(artifacts, enhanced_context=enhanced, fundamental_context=enhanced.get('fundamental_context'), news_context=supplied or artifacts.news_context)
+            artifacts = attach_saved_news_context(artifacts, news_packet, now)
+            prepared_news['artifacts'] = artifacts
+            save(out/'SAVED_NEWS_AUDIT.json',artifacts.enhanced_context['saved_news_audit'])
+            return original_pack_outputs(artifacts, **kwargs)
+        pipeline._build_analysis_context_pack_outputs = prepare_news_pack
     native_analyze=analyzer.analyze
     def analyze(context,*a,**k):
         assert tech and context['date']==target
+        if news_data:
+            artifacts = prepared_news['artifacts']
+            context = artifacts.enhanced_context
+            k['news_context'] = artifacts.news_context
         # Existing native helper evaluates the full MA60 window BEFORE tail(2).
         attach_previous_ma60(context, pipeline._build_analysis_context_from_daily_df(code, frame))
-        if research_data:
+        if research_data and not news_data:
             from nvda_research_materials import attach_reviewed_release
             context, supplied = attach_reviewed_release(context,json.loads(research_data.read_text('utf-8')),now,out)
             if supplied:
@@ -225,6 +246,9 @@ def run_symbol(source,out,code,offline=None,inject=False,research_data=None):
     from authorized_once import canonical_sha
     save(out/'REQUEST_IDENTITY.json',{'sha256':canonical_sha(wire),'new_paid_authorization':False,'symbol':code,'session':target})
     result.search_performed=False;result.report_language='zh'
+    if news_data:
+        from saved_news import apply_saved_news_metadata
+        apply_saved_news_metadata(result,contexts[-1])
     result.data_sources=NOTICE+'；Yahoo真实日线；未执行新闻搜索；'+(result.data_sources or '')
     md='# '+code+' 流水线模拟报告\n\n> '+NOTICE+'\n\n'+NotificationService().generate_single_stock_report(result)
     (out/'REPORT.md').write_text(md,encoding='utf-8')
@@ -238,11 +262,12 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('--source',required=True,type=pathlib.Path);p.add_argument('--out',required=True,type=pathlib.Path)
     p.add_argument('--child',choices=WATCHLIST);p.add_argument('--offline-data',type=pathlib.Path);p.add_argument('--inject-failure',choices=WATCHLIST)
     p.add_argument('--research-data',type=pathlib.Path,help='Optional reviewed public release packet; no model call')
+    p.add_argument('--news-data',type=pathlib.Path,help='Saved news evidence by symbol; no fetching or financial replacement')
     p.add_argument('--universe',choices=('three','watchlist35'),default='three');p.add_argument('--only',help='Free recovery subset; use a NEW output directory')
     a=p.parse_args();source=a.source.resolve();out=a.out.resolve();offline=a.offline_data.resolve() if a.offline_data else None
     if a.child:
         status=None
-        try:status=run_symbol(source,out,a.child,offline,a.inject_failure==a.child,a.research_data.resolve() if a.research_data else None)
+        try:status=run_symbol(source,out,a.child,offline,a.inject_failure==a.child,a.research_data.resolve() if a.research_data else None,a.news_data.resolve() if a.news_data else None)
         except BaseException as e:
             out.mkdir(parents=True,exist_ok=True);status={'symbol':a.child,'status':'failed','error':type(e).__name__+':'+str(e),'real_POSTs':0}
             import traceback;(out/'ERROR.txt').write_text(traceback.format_exc(),encoding='utf-8')
@@ -257,6 +282,7 @@ def main():
         cmd=[sys.executable,'-I',str(pathlib.Path(__file__).resolve()),'--source',str(source),'--out',str(out/code),'--child',code]
         if offline:cmd+=['--offline-data',str(offline)]
         if a.research_data:cmd+=['--research-data',str(a.research_data.resolve())]
+        if a.news_data:cmd+=['--news-data',str(a.news_data.resolve())]
         if a.inject_failure:cmd+=['--inject-failure',a.inject_failure]
         try:
             run=subprocess.run(cmd,env=env,capture_output=True,timeout=240);(out/(code+'-process.log')).write_bytes(run.stdout+run.stderr)
