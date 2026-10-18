@@ -5,6 +5,7 @@ import datetime as dt
 import hashlib
 import json
 import pathlib
+import re
 import subprocess
 import sys
 from decimal import Decimal
@@ -30,6 +31,58 @@ def batch_spec(lock):
 
 def encode(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')
+
+
+def qualify_financial_fields(context, packet, audit):
+    context, packet = copy.deepcopy(context), copy.deepcopy(packet)
+    report = (((context.get('fundamental_context') or {}).get('earnings') or {}).get('data') or {}).get('financial_report') or {}
+    fields = audit.get('fields') or {}
+    if not fields:
+        if any(report.get(field) is not None for field in ('revenue', 'net_profit_parent', 'operating_cash_flow')):
+            raise GuardStop('financial_field_audit_required')
+        return context, packet
+    official = context.get('official_research') or {}
+    notes = {}
+    labels = {'revenue': '营业收入', 'net_profit_parent': '归母净利润', 'operating_cash_flow': '经营现金流', 'roe': 'ROE'}
+    for field in labels:
+        item = fields.get(field) or {}
+        value = report.get(field)
+        supplied_official = value is not None and value == (official.get('values') or {}).get(field)
+        classification = 'not_applicable_ETF' if audit.get('enterprise_applicable') is False else item.get('classification', 'TTM_or_unknown_info_fallback')
+        if supplied_official:
+            classification = 'reviewed_official_packet_not_revalidated'
+            period, source = official.get('period_end'), official.get('source_url')
+            warning = '复用已审阅官方资料包；本批未附原网页逐字段复核，不宣称已独立核验'
+        else:
+            period = item.get('actual_series_period') if classification == 'quarterly_Yahoo_not_officially_verified' else None
+            source = item.get('source_url') or 'Yahoo聚合字段'
+            warning = 'Yahoo季度表，未独立官方核验' if period else 'TTM或期间未知，非正式单季度数字'
+            if classification == 'estimated_revenue_times_margin':
+                warning = '收入乘利润率推算，期间未知；不是正式季度归母净利润，不得用于季度同比或利润质量结论'
+            if classification == 'not_applicable_ETF':
+                warning = 'ETF企业财务不适用'
+        notes[field] = dict(value=value, classification=classification, period_end=period, adapter_report_date=report.get('report_date'), currency=report.get('currency'), source_url=source, independently_official_verified=False, limitation=warning)
+    counts = {field: 0 for field in labels}
+    for message in packet['messages']:
+        if not isinstance(message.get('content'), str):
+            continue
+        text = message['content']
+        text = re.sub(r'(?m)^\| 最近报告期 \|[^\n]*$', '| 报告期口径 | 见逐字段说明 | 适配器日期不代表所有字段属于同一季度 |', text)
+        for field, label in labels.items():
+            note = notes[field]
+            expected = str(report[field]) if field in report else 'N/A'
+            def replace_row(match):
+                if match.group(1).strip() != expected:
+                    raise GuardStop('financial_prompt_value_mismatch')
+                counts[field] += 1
+                detail = f"期间={note['period_end'] or '未知/不适用'}；{note['classification']}；{note['limitation']}；来源={note['source_url']}"
+                return f'| {label} | {expected} | {detail} |'
+            text = re.sub(r'(?m)^\| ' + re.escape(label) + r' \| ([^|\n]*) \|[^\n]*$', replace_row, text)
+        message['content'] = text
+    if any(count != 1 for count in counts.values()):
+        raise GuardStop('native_financial_table_required')
+    context['financial_field_provenance'] = notes
+    return context, packet
 
 
 def load_set(bundle, approved_sha):
@@ -106,12 +159,16 @@ def prepare(data, source, out, mode, pricing, symbols=None, offline_only=False):
         packet = copy.deepcopy(json.loads((directory / 'FINAL_REQUEST.json').read_text('utf-8')))
         if packet.get('model') != 'deepseek-flash' or not isinstance(packet.get('messages'), list) or not packet['messages']:
             raise GuardStop('native_packet_required')
+        financial_audit = json.loads((directory / 'FINANCIAL_AUDIT.json').read_text('utf-8'))
+        context_value, packet = qualify_financial_fields(context_value, packet, financial_audit)
+        if context_value.get('financial_field_provenance'):
+            context = encode(context_value)
         packet.update(max_tokens=limit, thinking={'type': 'enabled' if mode == 'thinking' else 'disabled'}, stream=True, stream_options={'include_usage': True})
         packet.pop('reasoning_effort', None)
         if mode == 'thinking':
             packet['reasoning_effort'] = 'high'
         raw = encode(packet)
-        asof = dt.datetime.fromisoformat(json.loads((directory / 'FINANCIAL_AUDIT.json').read_text('utf-8'))['fetched_at'])
+        asof = dt.datetime.fromisoformat(financial_audit['fetched_at'])
         deadline = min(asof + dt.timedelta(hours=24), calendar.session_close(calendar.next_session(pd.Timestamp(target))).to_pydatetime())
         if asof.tzinfo is None or asof > now or now >= deadline:
             raise GuardStop('material_EXPIRED_or_invalid')

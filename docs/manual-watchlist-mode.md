@@ -35,9 +35,17 @@ python .github/scripts/watchlist_mode.py --source ../dsa-mode-business-577 --dat
 an explicit ordered subset for a separately authorized batch. Never use old
 `FROZEN_REQUESTS` or extend historical timestamps to prepare a new batch.
 
-The preparer preserves native messages and context, including deterministic
+The preparer preserves native research messages and market context, including deterministic
 price/MA roles, actual two-day crossing events, volume denominators, and financial
-period/source/currency. Only mode parameters change. It checks the latest complete
+period/source/currency. Financial table rows receive field-specific period,
+source, estimation and verification labels from the saved audit. TTM/unknown and
+revenue-times-margin estimates are not labeled as quarterly reported figures.
+Reviewed official packet values are distinguished from the original Yahoo audit;
+without the original page independently revalidated in this batch they remain
+explicitly unverified. ROE is not covered by the three financial amount fields.
+The same provenance is saved in context and program-facts views. This changes
+request/context hashes, never raw captures or their original expiry timestamps.
+Apart from these labels, only mode parameters change. It checks the latest complete
 session and the existing 24-hour/next-session-close expiry rule; no live request is
 sent. It refuses to overwrite an output directory. New locks start with
 `authorize_paid_POST=false`. Synthetic test bundles have `offline_only=true` and

@@ -17,7 +17,7 @@ def save_full_report(directory, symbol, model, context, computed_facts, simulate
         sections.append('<section><h2>' + html.escape(field) + '</h2><pre>' + html.escape(text) + '</pre></section>')
     (directory / 'MODEL_ALL_FIELDS.html').write_text(page(symbol, ''.join(sections)), encoding='utf-8')
     (directory / 'MODEL_COMPLETE.html').write_text(page(symbol, '<h1>完整模型 JSON</h1><p>' + label + '</p><pre>' + html.escape(model_text) + '</pre>'), encoding='utf-8')
-    facts = {'computed_quote_facts': computed_facts, 'fundamental_context': context.get('fundamental_context'), 'official_research': context.get('official_research')}
+    facts = {'computed_quote_facts': computed_facts, 'fundamental_context': context.get('fundamental_context'), 'official_research': context.get('official_research'), 'financial_field_provenance': context.get('financial_field_provenance')}
     (directory / 'PROGRAM_FACTS.json').write_text(json.dumps(facts, ensure_ascii=False, indent=2, default=str), encoding='utf-8')
     (directory / 'PROGRAM_FACTS.html').write_text(page(symbol, '<h1>程序事实与随附财务来源</h1><p>此部分不是模型输出；缺失信息不代表已经核实。</p><pre>' + html.escape(json.dumps(facts, ensure_ascii=False, indent=2, default=str)) + '</pre>'), encoding='utf-8')
     markdown = '# ' + symbol + ' 完整模型字段\n\n> ' + label + '\n\n'

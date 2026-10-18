@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > For user-friendly release highlights, see the [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) page.
 
 ## [Unreleased]
+- [修复] 新35股冻结请求逐字段标注财务期间、来源、估算与验证状态，防止TTM和推算利润被误作季度财报；原采集及到期时间不变，报告事实页同步保留来源。
 - [修复] 新35股手动工作流显式记录既有Secret授权来源，空引用在执行器启动前拒绝；引用不替代用户批次授权及Environment审批。
 - [新功能] 新增独立35标的单模式手动研究profile，固定577624a业务源码，支持Flash非Thinking与Thinking high并保留旧入口及消费记录；默认不收费。
 - [改进] 手动报告补齐完整模型字段、原文、独立程序事实、Markdown入口及批次Usage/费用估算；未知消费不按零处理，全部待人工审核。

@@ -17,7 +17,7 @@ from authorized_once import WATCHLIST_BUSINESS, WATCHLIST_PROFILE, canonical_sha
 from deepseek_post_guard import GuardStop
 from free_market_validation import WATCHLIST
 from manual_reports import summarize_usage
-from watchlist_mode import batch_spec, encode, load_set, prepare
+from watchlist_mode import batch_spec, encode, load_set, prepare, qualify_financial_fields
 
 
 @pytest.fixture
@@ -145,6 +145,67 @@ def test_workflow_secret_reference_is_explicit(monkeypatch):
     monkeypatch.setenv('SECRET_APPROVAL_REF', '  OFFLINE TEST user message reference  ')
     exec(code, namespace)
     assert namespace['approval']['secret_upload_approval_reference'] == 'OFFLINE TEST user message reference'
+
+
+def financial_fixture():
+    report = dict(report_date='2026-06-30', revenue=700.0, net_profit_parent=70.0, operating_cash_flow=20.0, roe=10.0, currency='USD')
+    context = dict(code='AMZN', fundamental_context=dict(earnings=dict(data=dict(financial_report=report))))
+    audit = dict(fields=dict(revenue=dict(classification='TTM_or_unknown_info_fallback', value=700.0), net_profit_parent=dict(classification='estimated_revenue_times_margin', value=70.0), operating_cash_flow=dict(classification='quarterly_Yahoo_not_officially_verified', actual_series_period='2026-06-30', value=20.0)))
+    table = '| 最近报告期 | 2026-06-30 | 来自结构化财报字段 |\n'
+    table += '\n'.join(f'| {label} | {report[field]} | |' for field, label in [('revenue', '营业收入'), ('net_profit_parent', '归母净利润'), ('operating_cash_flow', '经营现金流'), ('roe', 'ROE')])
+    return context, dict(messages=[dict(role='user', content=table)]), audit
+
+
+def test_financial_periods_and_source_classes_are_field_specific():
+    context, packet, audit = financial_fixture()
+    before = encode(context), encode(packet), encode(audit)
+    qualified, updated = qualify_financial_fields(context, packet, audit)
+    notes = qualified['financial_field_provenance']
+    assert notes['revenue']['period_end'] is None
+    assert notes['net_profit_parent']['classification'] == 'estimated_revenue_times_margin'
+    assert notes['operating_cash_flow']['period_end'] == '2026-06-30'
+    assert '不是正式季度归母净利润' in updated['messages'][0]['content']
+    assert '| 最近报告期 |' not in updated['messages'][0]['content']
+    assert before == (encode(context), encode(packet), encode(audit))
+    context['official_research'] = dict(values=dict(revenue=700.0, net_profit_parent=70.0, operating_cash_flow=20.0), period_end='2026-07-26', source_url='https://example.invalid/official-fixture')
+    official, _ = qualify_financial_fields(context, packet, audit)
+    assert official['financial_field_provenance']['revenue']['period_end'] == '2026-07-26'
+    assert official['financial_field_provenance']['revenue']['classification'] == 'reviewed_official_packet_not_revalidated'
+    assert all(not item['independently_official_verified'] for item in official['financial_field_provenance'].values())
+    assert official['financial_field_provenance']['roe']['period_end'] is None
+
+
+def test_financial_qualifier_rejects_ambiguous_prompt():
+    context, packet, audit = financial_fixture()
+    packet['messages'][0]['content'] = packet['messages'][0]['content'].replace('700.0', '701.0')
+    with pytest.raises(GuardStop, match='financial_prompt_value_mismatch'):
+        qualify_financial_fields(context, packet, audit)
+
+
+@pytest.mark.parametrize('mode', ['nonthinking', 'thinking'])
+def test_preparer_qualifies_financials_without_extending_material(capture, tmp_path, mode):
+    data, source, pricing = capture
+    directory = data / 'AMZN'
+    financial_context, financial_packet, audit = financial_fixture()
+    context = json.loads((directory / 'NATIVE_CONTEXT.json').read_text('utf-8'))
+    context.update(financial_context)
+    packet = json.loads((directory / 'FINAL_REQUEST.json').read_text('utf-8'))
+    packet['messages'] = financial_packet['messages']
+    original_asof = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=1)).isoformat()
+    audit['fetched_at'] = original_asof
+    (directory / 'NATIVE_CONTEXT.json').write_bytes(encode(context))
+    (directory / 'FINAL_REQUEST.json').write_bytes(encode(packet))
+    (directory / 'FINANCIAL_AUDIT.json').write_bytes(encode(audit))
+    before = {name: (directory / name).read_bytes() for name in ('NATIVE_CONTEXT.json', 'FINAL_REQUEST.json', 'FINANCIAL_AUDIT.json')}
+    lock = prepare(data, source, tmp_path / 'qualified', mode, pricing, ['AMZN'], offline_only=True)
+    _, packets, contexts = load_set(tmp_path / 'qualified', canonical_sha(lock))
+    assert lock['members'][0]['analysis_asof'] == original_asof
+    assert lock['members'][0]['request_sha256'] != canonical_sha(packet)
+    assert packets['AMZN']['messages'] != packet['messages']
+    assert contexts['AMZN']['today'] == context['today']
+    assert contexts['AMZN']['financial_field_provenance']['revenue']['period_end'] is None
+    assert dt.datetime.fromisoformat(lock['members'][0]['material_expires_at']) <= dt.datetime.fromisoformat(original_asof) + dt.timedelta(hours=24)
+    assert before == {name: (directory / name).read_bytes() for name in before}
 
 
 def test_old_profile_business_bindings_unchanged():
