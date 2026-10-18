@@ -101,7 +101,7 @@ def test_normal_report_path_accepts_review_additions_without_publication(tmp_pat
     review = json.loads((tmp_path / 'QA_FINDINGS.json').read_text('utf-8'))
     assert review['published'] is False and review['quality_accepted'] is False
     assert review['evidence_status_counts']['INTERPRETATION_LIMITATION'] == 2
-    assert review['findings'][1]['discovery_origin'] == 'operator_supplied_review'
+    assert review['findings'][-1]['discovery_origin'] == 'operator_supplied_review'
     assert 'synthetic estimate' not in (tmp_path / 'MODEL_ALL_FIELDS.md').read_text('utf-8')
 
 
@@ -109,3 +109,46 @@ def test_unknown_categories_remain_review_candidates(tmp_path):
     review = save_quality_review(tmp_path, 'SYNTHETIC', {}, {}, [dict(category='NEW_UNVERIFIED_CASE')])
     assert review['findings'][0]['evidence_status'] == 'REVIEW_CANDIDATE'
     assert review['quality_accepted'] is False
+
+
+def test_empty_risk_dependencies_across_battle_plan():
+    model = dict(dashboard=dict(battle_plan=dict(risk_plan=dict(mode='watch', scenarios=[]), sniper_points=dict(ideal_buy='待risk_plan情景触发后评估'), position_strategy=dict(entry_plan='触发后按risk_plan情景评估'))))
+    findings = quality_findings(model, {})
+    assert len(findings) == 2
+    assert all(item['category'] == 'EMPTY_SCENARIO_DEPENDENCY' for item in findings)
+    model['dashboard']['battle_plan']['risk_plan']['scenarios'] = [dict(id='S1')]
+    assert not quality_findings(model, {})
+
+
+def test_position_reference_checked_but_definition_not_scanned():
+    model = dict(dashboard=dict(battle_plan=dict(risk_plan=dict(mode='watch', scenarios=[]), position_strategy=dict(entry_plan='仅情景S2成立后考虑'))))
+    assert quality_findings(model, {})[0]['evidence']['missing'] == ['S2']
+    model['dashboard']['battle_plan']['risk_plan']['scenarios'] = [dict(id='S2', trigger='情景S3只是描述')]
+    assert not quality_findings(model, {})
+
+
+def test_decision_scope_warning_does_not_rewrite_or_reject_watch_hold(tmp_path):
+    model = dict(action='watch', decision_type='sell', operation_advice='观望')
+    before = copy.deepcopy(model)
+    review = save_quality_review(tmp_path, 'SYNTHETIC', model, {})
+    assert model == before
+    assert review['findings'][0]['category'] == 'DECISION_LABEL_SCOPE_REVIEW'
+    assert review['findings'][0]['evidence_status'] == 'REVIEW_CANDIDATE'
+    assert not quality_findings(dict(action='watch', decision_type='hold', operation_advice='观望'), {})
+
+
+def test_buy_trigger_remains_unknown_despite_model_claim():
+    model = dict(action='buy', decision_type='buy', operation_advice='持有', dashboard=dict(battle_plan=dict(risk_plan=dict(mode='trade', scenarios=[dict(id='S1', trigger='已触发')]))))
+    findings = quality_findings(model, {})
+    trigger = next(item for item in findings if item['category'] == 'CONDITIONAL_ENTRY_NOT_VERIFIED')
+    assert trigger['evidence']['trigger_evaluation'] == 'not_performed'
+    assert any(item['category'] == 'DECISION_LABEL_SCOPE_REVIEW' for item in findings)
+
+
+def test_defensive_reference_path_is_candidate_not_fabricated_field(tmp_path):
+    model = dict(dashboard=dict(battle_plan=dict(risk_plan=dict(mode='watch', scenarios=[]), sniper_points=dict(stop_loss='参考risk_plan中防守观察条件'), position_strategy=dict(risk_control='收盘跌破观察线再评估'))))
+    review = save_quality_review(tmp_path, 'SYNTHETIC', model, {})
+    finding = review['findings'][0]
+    assert finding['category'] == 'RISK_PLAN_REFERENCE_PATH_REVIEW'
+    assert finding['evidence_status'] == 'REVIEW_CANDIDATE'
+    assert 'risk_control' not in model['dashboard']['battle_plan']['risk_plan']

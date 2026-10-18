@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > For user-friendly release highlights, see the [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) page.
 
 ## [Unreleased]
+- [修复] 独立审核补充战术计划跨字段情景依赖与决策标签范围提示；空情景引用不再漏过，引用路径和持仓/新增仓位标签差异仅标候选，不补造情景或核准即时交易。
 - [改进] 独立审核记录区分自动规则与人工补充来源、四类证据状态及字段级计数；正常报告渲染支持显式人工审核补充，保持原文及未发布状态不变。
 - [修复] 手动研究新增独立质量侧车及目录入口，核对显式MA排序、低点日期与情景引用；未核验触发的buy仅作条件性计划，不改写历史模型原文或授予发布通过。
 - [修复] 已注册手动入口可复用新35股单模式工作流，默认免费、保留原Environment审批；与旧35股及已消费六请求入口互斥，不修改默认分支。

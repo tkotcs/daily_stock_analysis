@@ -44,14 +44,23 @@ def quality_findings(model, context):
                 if '前低' in value or '前日低点' in value or '前一交易日低点' in value:
                     if re.search(re.escape(shown) + r'.{0,12}(?:前低|前日低点|前一交易日低点)|(?:前低|前日低点|前一交易日低点).{0,12}' + re.escape(shown), value):
                         add(path, value, 'LOW_DATE_REFERENCE_REVIEW', dict(target_session=today.get('date'), target_low=low, previous_session=yesterday.get('date'), previous_low=previous_low), '此价为目标日低点；前日称谓不符，其他历史前低须另有历史证据，不能直接判定历史支撑不存在。')
-            if 'sniper_points' in path:
+            if path.startswith('dashboard.battle_plan.') and '.risk_plan.' not in path:
                 references = set(re.findall(r'情景\s*([A-Z][A-Z0-9]*)(?![A-Z0-9])', value))
                 missing = sorted(references - scenario_ids)
                 if missing:
                     add(path, value, 'UNDEFINED_SCENARIO_REFERENCE', dict(referenced=sorted(references), defined=sorted(scenario_ids), missing=missing), '引用的情景必须存在；观望且无情景时，不展示这些文字为可执行交易计划。')
+                elif not scenario_ids and re.search(r'risk_plan\s*情景', value):
+                    add(path, value, 'EMPTY_SCENARIO_DEPENDENCY', dict(defined=[], risk_mode=plan.get('mode')), '此文字依赖未定义的结构化情景；仅作观察条件，不补造情景或声称计划可执行。')
+                if re.search(r'risk_plan\s*中\s*防守观察条件', value) and not any(key in plan for key in ('risk_control', 'defensive_conditions')):
+                    add(path, value, 'RISK_PLAN_REFERENCE_PATH_REVIEW', dict(risk_plan_keys=sorted(plan), alternative_path='dashboard.battle_plan.position_strategy.risk_control'), '核查引用路径；自由文本观察条件不等于risk_plan结构化字段，不自动迁移或补造。')
     walk(model, '')
     if model.get('action') == 'buy' or model.get('decision_type') == 'buy':
         add('action/decision_type/operation_advice', {key: model.get(key) for key in ('action', 'decision_type', 'operation_advice')}, 'CONDITIONAL_ENTRY_NOT_VERIFIED', dict(risk_mode=plan.get('mode'), scenario_ids=sorted(scenario_ids), trigger_evaluation='not_performed'), '仅显示条件性计划，非即时买入指令；模型自称触发不等于程序核验，未建立触发核验前保持未发布。')
+    labels = {key: model.get(key) for key in ('action', 'decision_type', 'operation_advice')}
+    normalized = [dict(buy='buy', sell='sell', watch='watch', hold='hold', 买入='buy', 卖出='sell', 观望='watch', 持有='hold').get(value) for value in labels.values() if isinstance(value, str)]
+    known = {value for value in normalized if value}
+    if ('buy' in known or 'sell' in known) and len(known) > 1:
+        add('action/decision_type/operation_advice', labels, 'DECISION_LABEL_SCOPE_REVIEW', dict(normalized=normalized, risk_mode=plan.get('mode')), '决策标签不一致或对象范围不同，须人工对照持仓者/新增仓位语境；不自动选取买卖标签、不改原文。')
     return findings
 
 
@@ -59,6 +68,7 @@ def save_quality_review(directory, symbol, model, context, additional_findings=(
     evidence_states = {
         'MA_ORDER_CONTRADICTION': 'CONFIRMED_CONTRADICTION',
         'UNDEFINED_SCENARIO_REFERENCE': 'CONFIRMED_CONTRADICTION',
+        'EMPTY_SCENARIO_DEPENDENCY': 'CONFIRMED_CONTRADICTION',
         'CASH_CONVERSION_INTERPRETATION': 'CONFIRMED_CONTRADICTION',
         'BLOCKED_PERIOD_MAPPING': 'SOURCE_BLOCKER',
         'CONDITIONAL_ENTRY_NOT_VERIFIED': 'INTERPRETATION_LIMITATION',

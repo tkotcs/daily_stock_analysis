@@ -165,6 +165,14 @@ source verifier. The operator must supply verified review records; nothing is
 silently read from a model output, external file, or environment variable.
 The historical accepted sidecar baseline is not regenerated for this metadata change.
 
+Battle-plan review also checks position-strategy references, generic dependencies
+on empty `risk_plan` scenarios, and defensive-condition reference paths. Decision
+label differences remain review candidates because existing holdings and new-entry
+advice can legitimately have different scopes. Watch/hold alone is not a conflict.
+No natural-language trigger is treated as programmatically confirmed; buy plans
+remain conditional and unpublished. These rules do not evaluate arbitrary trigger
+language, invent scenarios, rewrite model labels, or regenerate accepted sidecars.
+
 ```powershell
 python -m pytest .github/scripts/test_manual_quality.py -q
 ```
