@@ -1,6 +1,7 @@
 """Local readable views and usage totals; never modify model narrative."""
 import html
 import json
+import re
 from decimal import Decimal
 
 
@@ -8,10 +9,73 @@ def page(title, body):
     return '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + html.escape(title) + '</title><style>body{font:16px/1.7 system-ui;max-width:1100px;margin:auto;padding:20px;overflow-wrap:anywhere}pre{white-space:pre-wrap}table{border-collapse:collapse;width:100%}td,th{padding:8px;border:1px solid #ccc;text-align:left}details{margin:12px 0}</style><body>' + body + '</body></html>'
 
 
+def quality_findings(model, context):
+    findings = []
+    today, yesterday = context.get('today') or {}, context.get('yesterday') or {}
+    plan = ((model.get('dashboard') or {}).get('battle_plan') or {}).get('risk_plan') or {}
+    scenario_ids = {str(item.get('id')) for item in plan.get('scenarios', []) if isinstance(item, dict) and item.get('id')}
+
+    def add(path, original, category, evidence, recommendation):
+        findings.append(dict(field_path=path, original_content=original, category=category, evidence=evidence, recommendation=recommendation))
+
+    def walk(value, path):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                walk(child, path + '.' + key if path else key)
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                walk(child, f'{path}[{index}]')
+        elif isinstance(value, str):
+            for match in re.finditer(r'MA(?:5|10|20|60)(?:\s*[<>]\s*MA(?:5|10|20|60))+', value, re.I):
+                chain = match.group()
+                before = re.split('[。；]', value[:match.start()])[-1]
+                after = re.split('[。；]', value[match.end():])[0]
+                if re.search('不满足|未满足|不成立|不符合|未形成|必要|条件|前提|要求|需|互斥|不将', before + after):
+                    continue
+                names = re.findall(r'MA(?:5|10|20|60)', chain, re.I)
+                values = [today.get(name.lower()) for name in names]
+                operators = re.findall('[<>]', chain)
+                if all(type(number) in (int, float) for number in values) and any(not (left < right if operator == '<' else left > right) for left, operator, right in zip(values, operators, values[1:])):
+                    add(path, value, 'MA_ORDER_CONTRADICTION', dict(claim=chain, actual={name: number for name, number in zip(names, values)}), '以程序数值排序为准；不修改原文，不将部分均线排列扩展为完整四线排列。')
+            low = today.get('low')
+            previous_low = yesterday.get('low')
+            if type(low) in (int, float) and type(previous_low) in (int, float) and round(low, 2) != round(previous_low, 2):
+                shown = f'{low:.2f}'
+                if '前低' in value or '前日低点' in value or '前一交易日低点' in value:
+                    if re.search(re.escape(shown) + r'.{0,12}(?:前低|前日低点|前一交易日低点)|(?:前低|前日低点|前一交易日低点).{0,12}' + re.escape(shown), value):
+                        add(path, value, 'LOW_DATE_REFERENCE_REVIEW', dict(target_session=today.get('date'), target_low=low, previous_session=yesterday.get('date'), previous_low=previous_low), '此价为目标日低点；前日称谓不符，其他历史前低须另有历史证据，不能直接判定历史支撑不存在。')
+            if 'sniper_points' in path:
+                references = set(re.findall(r'情景\s*([A-Z][A-Z0-9]*)(?![A-Z0-9])', value))
+                missing = sorted(references - scenario_ids)
+                if missing:
+                    add(path, value, 'UNDEFINED_SCENARIO_REFERENCE', dict(referenced=sorted(references), defined=sorted(scenario_ids), missing=missing), '引用的情景必须存在；观望且无情景时，不展示这些文字为可执行交易计划。')
+    walk(model, '')
+    if model.get('action') == 'buy' or model.get('decision_type') == 'buy':
+        add('action/decision_type/operation_advice', {key: model.get(key) for key in ('action', 'decision_type', 'operation_advice')}, 'CONDITIONAL_ENTRY_NOT_VERIFIED', dict(risk_mode=plan.get('mode'), scenario_ids=sorted(scenario_ids), trigger_evaluation='not_performed'), '仅显示条件性计划，非即时买入指令；模型自称触发不等于程序核验，未建立触发核验前保持未发布。')
+    return findings
+
+
+def save_quality_review(directory, symbol, model, context, additional_findings=()):
+    findings = quality_findings(model, context) + list(additional_findings)
+    today = context.get('today') or {}
+    averages = sorted(((name.upper(), today[name]) for name in ('ma5', 'ma10', 'ma20', 'ma60') if type(today.get(name)) in (int, float)), key=lambda item: item[1])
+    review = dict(symbol=symbol, published=False, quality_accepted=False, scope='narrow_deterministic_checks_plus_explicit_review_findings_not_exhaustive', action_display='条件性计划/未核实触发，非即时指令', authoritative_ma_order=averages, findings=findings)
+    text = json.dumps(review, ensure_ascii=False, indent=2)
+    (directory / 'QA_FINDINGS.json').write_text(text, encoding='utf-8')
+    markdown = '# ' + symbol + ' 独立质量审核\n\n> 未发布。原始模型文字不变；检查无发现不等于事实全部正确。此页不是新模型研究或新Usage。\n\n'
+    markdown += '均线数值升序（相等值不代表严格小于）：' + '，'.join(f'{name}={value:g}' for name, value in averages) + '\n\n'
+    markdown += '日线OHLCV不能证明尾盘路径、主动买卖方向或抛压是否出尽。财务解释只在期间、币种、来源及非估算口径均有证据时成立。\n\n'
+    markdown += '```json\n' + text + '\n```\n'
+    (directory / 'QUALITY_REVIEW.md').write_text(markdown, encoding='utf-8')
+    (directory / 'QUALITY_REVIEW.html').write_text(page(symbol + ' 独立质量审核', '<h1>独立审核，不改写模型原文</h1><p>未发布；条件性计划并非即时指令。检查无发现不等于事实全部正确。</p><pre>' + html.escape(markdown) + '</pre>'), encoding='utf-8')
+    return review
+
+
 def save_full_report(directory, symbol, model, context, computed_facts, simulated):
+    save_quality_review(directory, symbol, model, context)
     label = '模拟模型输出，非真实研究' if simulated else '模型输出原文，仅排版，待人工审核'
     model_text = json.dumps(model, ensure_ascii=False, indent=2)
-    sections = ['<h1>' + html.escape(symbol) + ' 完整模型字段</h1><p>' + label + '</p>']
+    sections = ['<h1>' + html.escape(symbol) + ' 完整模型字段</h1><p>' + label + '</p><p><a href="QUALITY_REVIEW.html">独立质量审核：条件性计划非即时指令</a></p>']
     for field, value in model.items():
         text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, indent=2)
         sections.append('<section><h2>' + html.escape(field) + '</h2><pre>' + html.escape(text) + '</pre></section>')
@@ -35,7 +99,7 @@ def record_outputs(row, directory, simulated):
         row['cost_estimate'] = response.get('cost_estimate')
         row['elapsed_seconds'] = response.get('elapsed_seconds')
     row['usage_source'] = 'synthetic_test_only' if simulated else 'supplier_response'
-    names = ('REPORT.html', 'REPORT.md', 'MODEL_ALL_FIELDS.html', 'MODEL_ALL_FIELDS.md', 'MODEL_COMPLETE.html', 'MODEL_RAW_TEXT.txt', 'MODEL_REASONING_TEXT.txt', 'PROGRAM_FACTS.html', 'PROGRAM_FACTS.json', 'RESPONSE_RESULT.json')
+    names = ('REPORT.html', 'REPORT.md', 'MODEL_ALL_FIELDS.html', 'MODEL_ALL_FIELDS.md', 'MODEL_COMPLETE.html', 'MODEL_RAW_TEXT.txt', 'MODEL_REASONING_TEXT.txt', 'PROGRAM_FACTS.html', 'PROGRAM_FACTS.json', 'RESPONSE_RESULT.json', 'QUALITY_REVIEW.html', 'QUALITY_REVIEW.md', 'QA_FINDINGS.json')
     row['artifacts'] = {name: row['symbol'] + '/' + name for name in names if (directory / name).is_file()}
 
 
@@ -71,6 +135,7 @@ def render_status_index(rows, mode, usage=None):
         body += '<h2>批次用量与费用估算</h2><p>推理 Token 已含在输出中，不重复计费；费用不是供应商账单。缺失响应显示未知，不按零费用处理。</p><pre>' + html.escape(json.dumps(usage, ensure_ascii=False, indent=2)) + '</pre>'
     body += '<table><thead><tr><th>标的</th><th>模式</th><th>执行/审核</th><th>报告</th><th>输入/输出 Token</th></tr></thead><tbody>'
     labels = {'REPORT.html': '原版HTML', 'REPORT.md': '原版Markdown', 'MODEL_ALL_FIELDS.html': '完整模型字段', 'MODEL_ALL_FIELDS.md': '全字段Markdown', 'MODEL_COMPLETE.html': '模型JSON', 'MODEL_RAW_TEXT.txt': '模型原文', 'MODEL_REASONING_TEXT.txt': '推理原文', 'PROGRAM_FACTS.html': '程序事实/财务来源', 'RESPONSE_RESULT.json': '真实响应/Usage'}
+    labels.update({'QUALITY_REVIEW.html': '独立质量审核', 'QUALITY_REVIEW.md': '审核Markdown', 'QA_FINDINGS.json': '问题证据JSON'})
     if simulated:
         labels['RESPONSE_RESULT.json'] = '模拟响应/Usage'
     for row in rows:

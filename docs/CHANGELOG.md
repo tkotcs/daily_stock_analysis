@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > For user-friendly release highlights, see the [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) page.
 
 ## [Unreleased]
+- [修复] 手动研究新增独立质量侧车及目录入口，核对显式MA排序、低点日期与情景引用；未核验触发的buy仅作条件性计划，不改写历史模型原文或授予发布通过。
 - [修复] 已注册手动入口可复用新35股单模式工作流，默认免费、保留原Environment审批；与旧35股及已消费六请求入口互斥，不修改默认分支。
 - [修复] 财报与报价异币种且分红缺少逐事件依据时，隔离模型输入中的财务、ROE及分红数值，保留原始证据与技术行情，不猜测币种或ADR换算。
 - [修复] 新35股冻结请求逐字段标注财务期间、来源、估算与验证状态，防止TTM和推算利润被误作季度财报；原采集及到期时间不变，报告事实页同步保留来源。

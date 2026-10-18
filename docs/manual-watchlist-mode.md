@@ -130,6 +130,33 @@ is introduced. Native input facts do not guarantee that a model follows them.
 
 ## Narrow verification and rollback
 
+### Independent review sidecars
+
+New reports include `QUALITY_REVIEW.md` / `.html` and `QA_FINDINGS.json`, linked
+from the batch index and full-field view. These are separate from the unchanged
+model narrative and do not grant publication approval. Narrow deterministic
+checks compare explicit MA ordering with native values, flag target-day lows
+called previous lows, detect undefined scenario references, and label buy actions
+as conditional plans without a trusted trigger evaluation. A historical support
+reference requires evidence; a review flag does not prove no earlier support exists.
+
+Historical artifacts must not be rewritten. Call `save_quality_review` into a new
+review directory with the original parsed model and frozen context; explicit
+human-reviewed findings may be appended with their exact field paths and evidence.
+Financial period mapping or plausibility findings isolate financial conclusions,
+not valid technical facts. An unusual profit margin alone is not proof of error.
+Missing source headers remain unresolved, not silently repaired or called verified.
+Daily OHLCV cannot prove intraday paths or whether selling pressure is exhausted.
+These checks are deliberately limited: no findings does not mean research acceptance.
+
+```powershell
+python -m pytest .github/scripts/test_manual_quality.py -q
+```
+
+This test target is offline and does not rerun historical analysis or model calls.
+Removing the sidecar helper and its report/index links rolls back this display-only
+review layer. Keep all original response bytes and remote consumed records.
+
 ```powershell
 python -m pytest .github/scripts/test_watchlist_mode.py -q
 ```
