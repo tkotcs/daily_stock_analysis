@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > For user-friendly release highlights, see the [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) page.
 
 ## [Unreleased]
+- [修复] 新35股手动工作流显式记录既有Secret授权来源，空引用在执行器启动前拒绝；引用不替代用户批次授权及Environment审批。
 - [新功能] 新增独立35标的单模式手动研究profile，固定577624a业务源码，支持Flash非Thinking与Thinking high并保留旧入口及消费记录；默认不收费。
 - [改进] 手动报告补齐完整模型字段、原文、独立程序事实、Markdown入口及批次Usage/费用估算；未知消费不按零处理，全部待人工审核。
 - [测试] 定向验证新profile的35标的参数、原生传输、失败继续、长报告完整性和Usage汇总，不重跑历史35股流水线。

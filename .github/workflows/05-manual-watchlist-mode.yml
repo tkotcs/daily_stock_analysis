@@ -13,6 +13,9 @@ on:
         type: string
       authorization_reference:
         type: string
+      secret_upload_approval_reference:
+        description: Reference to the user's existing repository Secret authorization, never the key itself
+        type: string
       execute_live:
         type: boolean
         default: false
@@ -69,6 +72,7 @@ jobs:
       BUNDLE_PATH: ${{ inputs.bundle_path }}
       BATCH_SHA: ${{ inputs.batch_sha256 }}
       APPROVAL_REF: ${{ inputs.authorization_reference }}
+      SECRET_APPROVAL_REF: ${{ inputs.secret_upload_approval_reference }}
       SELECTED_MODE: ${{ inputs.mode }}
     steps:
       - uses: actions/checkout@v5
@@ -98,7 +102,8 @@ jobs:
           assert not lock.get('offline_only') and lock['mode']==os.environ['SELECTED_MODE']
           assert os.environ['BATCH_SHA'] in os.environ['APPROVAL_REF']
           _,_,count,reserve=batch_spec(lock)
-          approval=dict(authorize_paid_posts=True,batch_sha256=os.environ['BATCH_SHA'],run_id=os.environ['GITHUB_RUN_ID'],max_total_POSTs=count,reservation_USD=reserve,authorization_reference=os.environ['APPROVAL_REF'],secret_upload_approval_reference='Existing repository Secret; user-approved Environment')
+          assert os.environ['SECRET_APPROVAL_REF'].strip(), 'existing_secret_authorization_reference_required'
+          approval=dict(authorize_paid_posts=True,batch_sha256=os.environ['BATCH_SHA'],run_id=os.environ['GITHUB_RUN_ID'],max_total_POSTs=count,reservation_USD=reserve,authorization_reference=os.environ['APPROVAL_REF'],secret_upload_approval_reference=os.environ['SECRET_APPROVAL_REF'].strip())
           pathlib.Path('approved-batch.json').write_text(json.dumps(approval),encoding='utf-8')
           PY
       - name: Existing executor, one attempt per symbol

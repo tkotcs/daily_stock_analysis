@@ -54,6 +54,12 @@ bundle to the existing approved deploy branch. Select `mode`, `bundle_path`, the
 exact `BATCH_SHA256.txt` value, and an explicit authorization reference containing
 that hash. Set `execute_live=true` only for that authorized batch. The selected
 mode must match the hashed lock; changing the UI mode cannot change packets.
+Also supply `secret_upload_approval_reference`: a traceable message or record of
+the user's existing authorization to store/use the repository Secret, never its
+value. This input is required only for live execution; an empty reference stops
+before the executor. A reference is an audit pointer, not proof or a new grant of
+permission: verify the actual human record before dispatch. It does not replace
+the separate hash-scoped paid-batch authorization or the Environment approval.
 The existing `nvda-one-call-approval` Environment requires the user's own approval.
 Repository/workflow enabling and publishing are separate steps not performed by
 this development change. A local key does not bypass the protected GitHub entry.

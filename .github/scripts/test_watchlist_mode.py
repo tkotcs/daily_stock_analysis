@@ -121,6 +121,32 @@ def test_workflow_remains_manual_and_user_approved():
     assert 'secrets.' not in json.dumps(workflow['jobs']['offline'])
 
 
+def test_workflow_secret_reference_is_explicit(monkeypatch):
+    import ast
+    import yaml
+    workflow = yaml.load((ROOT / '.github/workflows/05-manual-watchlist-mode.yml').read_text('utf-8'), Loader=yaml.BaseLoader)
+    live = workflow['jobs']['live']
+    assert live['env']['SECRET_APPROVAL_REF'] == '${{ inputs.secret_upload_approval_reference }}'
+    assert 'secret_upload_approval_reference' in workflow['on']['workflow_dispatch']['inputs']
+    script = next(step['run'] for step in live['steps'] if step.get('name') == 'Bind new batch after user Environment approval')
+    tree = ast.parse(script.split("python - <<'PY'\n", 1)[1].rsplit('\nPY', 1)[0])
+    nodes = [node for node in tree.body if isinstance(node, ast.Assert) and 'SECRET_APPROVAL_REF' in ast.unparse(node)]
+    nodes += [node for node in tree.body if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == 'approval' for target in node.targets)]
+    assert len(nodes) == 2
+    code = compile(ast.Module(body=nodes, type_ignores=[]), '<workflow-secret-reference>', 'exec')
+    monkeypatch.setenv('BATCH_SHA', 'a' * 64)
+    monkeypatch.setenv('GITHUB_RUN_ID', 'OFFLINE-TEST')
+    monkeypatch.setenv('APPROVAL_REF', 'OFFLINE ONLY ' + 'a' * 64)
+    namespace = dict(os=os, count=35, reserve='2.10')
+    monkeypatch.setenv('SECRET_APPROVAL_REF', '   ')
+    with pytest.raises(AssertionError, match='existing_secret_authorization_reference_required'):
+        exec(code, namespace)
+    assert 'approval' not in namespace
+    monkeypatch.setenv('SECRET_APPROVAL_REF', '  OFFLINE TEST user message reference  ')
+    exec(code, namespace)
+    assert namespace['approval']['secret_upload_approval_reference'] == 'OFFLINE TEST user message reference'
+
+
 def test_old_profile_business_bindings_unchanged():
     from authorized_once import authorized_business, COMPARISON_PROFILE, MANUAL_BUSINESS
     from mvp_three_live import batch_spec as executor_spec
