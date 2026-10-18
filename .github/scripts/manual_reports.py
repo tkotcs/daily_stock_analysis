@@ -56,10 +56,21 @@ def quality_findings(model, context):
 
 
 def save_quality_review(directory, symbol, model, context, additional_findings=()):
-    findings = quality_findings(model, context) + list(additional_findings)
+    evidence_states = {
+        'MA_ORDER_CONTRADICTION': 'CONFIRMED_CONTRADICTION',
+        'UNDEFINED_SCENARIO_REFERENCE': 'CONFIRMED_CONTRADICTION',
+        'CASH_CONVERSION_INTERPRETATION': 'CONFIRMED_CONTRADICTION',
+        'BLOCKED_PERIOD_MAPPING': 'SOURCE_BLOCKER',
+        'CONDITIONAL_ENTRY_NOT_VERIFIED': 'INTERPRETATION_LIMITATION',
+        'ESTIMATE_NOT_REPORTED_QUARTERLY_INCOME': 'INTERPRETATION_LIMITATION',
+    }
+    findings = []
+    for origin, items in (('automatic_narrow_rule', quality_findings(model, context)), ('operator_supplied_review', additional_findings)):
+        for item in items:
+            findings.append(dict(item, discovery_origin=origin, evidence_status=evidence_states.get(item.get('category'), 'REVIEW_CANDIDATE')))
     today = context.get('today') or {}
     averages = sorted(((name.upper(), today[name]) for name in ('ma5', 'ma10', 'ma20', 'ma60') if type(today.get(name)) in (int, float)), key=lambda item: item[1])
-    review = dict(symbol=symbol, published=False, quality_accepted=False, scope='narrow_deterministic_checks_plus_explicit_review_findings_not_exhaustive', action_display='条件性计划/未核实触发，非即时指令', authoritative_ma_order=averages, findings=findings)
+    review = dict(symbol=symbol, published=False, quality_accepted=False, scope='narrow_deterministic_checks_plus_explicit_review_findings_not_exhaustive', action_display='条件性计划/未核实触发，非即时指令', authoritative_ma_order=averages, evidence_status_counts={status: sum(item['evidence_status'] == status for item in findings) for status in ('CONFIRMED_CONTRADICTION', 'REVIEW_CANDIDATE', 'SOURCE_BLOCKER', 'INTERPRETATION_LIMITATION')}, findings=findings)
     text = json.dumps(review, ensure_ascii=False, indent=2)
     (directory / 'QA_FINDINGS.json').write_text(text, encoding='utf-8')
     markdown = '# ' + symbol + ' 独立质量审核\n\n> 未发布。原始模型文字不变；检查无发现不等于事实全部正确。此页不是新模型研究或新Usage。\n\n'
@@ -71,8 +82,8 @@ def save_quality_review(directory, symbol, model, context, additional_findings=(
     return review
 
 
-def save_full_report(directory, symbol, model, context, computed_facts, simulated):
-    save_quality_review(directory, symbol, model, context)
+def save_full_report(directory, symbol, model, context, computed_facts, simulated, additional_findings=()):
+    save_quality_review(directory, symbol, model, context, additional_findings)
     label = '模拟模型输出，非真实研究' if simulated else '模型输出原文，仅排版，待人工审核'
     model_text = json.dumps(model, ensure_ascii=False, indent=2)
     sections = ['<h1>' + html.escape(symbol) + ' 完整模型字段</h1><p>' + label + '</p><p><a href="QUALITY_REVIEW.html">独立质量审核：条件性计划非即时指令</a></p>']

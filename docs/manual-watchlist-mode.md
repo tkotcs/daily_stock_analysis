@@ -149,6 +149,22 @@ Missing source headers remain unresolved, not silently repaired or called verifi
 Daily OHLCV cannot prove intraday paths or whether selling pressure is exhausted.
 These checks are deliberately limited: no findings does not mean research acceptance.
 
+Each finding has `discovery_origin` (`automatic_narrow_rule` or
+`operator_supplied_review`) and an `evidence_status`: `CONFIRMED_CONTRADICTION`,
+`REVIEW_CANDIDATE`, `SOURCE_BLOCKER`, or `INTERPRETATION_LIMITATION`. Unknown
+categories default to review candidates, never confirmed errors. Status counts
+count field-level records, not independent errors or a research quality score.
+An unusual financial ratio remains a candidate, not proof of a false number.
+No status changes `published=false` or `quality_accepted=false`.
+
+The normal rendering entry `save_full_report(..., additional_findings=reviews)`
+accepts operator-reviewed field-path/original-content/evidence/recommendation
+records and passes them only to the sidecar. This is an in-process review hook,
+not model-generated evidence, a POST authorization, or an automatic financial
+source verifier. The operator must supply verified review records; nothing is
+silently read from a model output, external file, or environment variable.
+The historical accepted sidecar baseline is not regenerated for this metadata change.
+
 ```powershell
 python -m pytest .github/scripts/test_manual_quality.py -q
 ```

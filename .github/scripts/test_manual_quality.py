@@ -78,3 +78,34 @@ def test_missing_facts_are_not_invented_and_html_escaped(tmp_path):
     save_quality_review(tmp_path, '<synthetic>', model, {})
     assert not quality_findings(model, {})
     assert '<synthetic>' not in (tmp_path / 'QUALITY_REVIEW.html').read_text('utf-8')
+
+
+def test_review_states_and_discovery_origins(tmp_path):
+    model = dict(analysis_summary='MA5<MA10<MA20<MA60')
+    manual = [dict(category='BLOCKED_PERIOD_MAPPING', field_path='fundamental_analysis', original_content='synthetic', evidence='missing headers', recommendation='financial conclusions blocked'), dict(category='UNVERIFIED_FINANCIAL_PLAUSIBILITY', field_path='fundamental_analysis', original_content='synthetic', evidence='unusual ratio, not proof of error', recommendation='verify source')]
+    before = copy.deepcopy(manual)
+    review = save_quality_review(tmp_path, 'SYNTHETIC', model, context(), manual)
+    assert manual == before
+    assert review['findings'][0]['discovery_origin'] == 'automatic_narrow_rule'
+    assert review['findings'][0]['evidence_status'] == 'CONFIRMED_CONTRADICTION'
+    assert review['findings'][1]['discovery_origin'] == 'operator_supplied_review'
+    assert review['findings'][1]['evidence_status'] == 'SOURCE_BLOCKER'
+    assert review['findings'][2]['evidence_status'] == 'REVIEW_CANDIDATE'
+    assert review['evidence_status_counts'] == dict(CONFIRMED_CONTRADICTION=1, REVIEW_CANDIDATE=1, SOURCE_BLOCKER=1, INTERPRETATION_LIMITATION=0)
+
+
+def test_normal_report_path_accepts_review_additions_without_publication(tmp_path):
+    manual = [dict(category='ESTIMATE_NOT_REPORTED_QUARTERLY_INCOME', field_path='fundamental_analysis', original_content='synthetic estimate', evidence='mixed periods', recommendation='do not compute quarterly profit margin')]
+    model = dict(action='buy', operation_advice='持有')
+    save_full_report(tmp_path, 'SYNTHETIC', model, context(), 'synthetic facts', True, additional_findings=manual)
+    review = json.loads((tmp_path / 'QA_FINDINGS.json').read_text('utf-8'))
+    assert review['published'] is False and review['quality_accepted'] is False
+    assert review['evidence_status_counts']['INTERPRETATION_LIMITATION'] == 2
+    assert review['findings'][1]['discovery_origin'] == 'operator_supplied_review'
+    assert 'synthetic estimate' not in (tmp_path / 'MODEL_ALL_FIELDS.md').read_text('utf-8')
+
+
+def test_unknown_categories_remain_review_candidates(tmp_path):
+    review = save_quality_review(tmp_path, 'SYNTHETIC', {}, {}, [dict(category='NEW_UNVERIFIED_CASE')])
+    assert review['findings'][0]['evidence_status'] == 'REVIEW_CANDIDATE'
+    assert review['quality_accepted'] is False
