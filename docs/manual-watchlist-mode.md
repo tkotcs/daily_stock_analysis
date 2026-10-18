@@ -183,6 +183,11 @@ include `text`; its optional `content_sha256` is checked against UTF-8 text byte
 not the original HTTP body. Publication must fall within three days of the new
 preparation cutoff; collection must follow publication and not exceed cutoff.
 Invalid items are excluded with reasons in `SAVED_NEWS_AUDIT.json`.
+Missing symbol keys are explicitly audited as `ticker_entry_missing`, distinct
+from an intentional empty list. Per-symbol and batch status retain `not_configured`
+without a packet; provided packets report `saved_evidence_attached_not_searched`
+or `saved_evidence_empty_or_rejected_not_searched`. These describe this saved
+packet, not comprehensive search coverage or the absence of event risk.
 
 The adapter supplies native context-pack and analyzer news slots, without fetching,
 changing financial fields or claiming a SearchService search. Existing supplied

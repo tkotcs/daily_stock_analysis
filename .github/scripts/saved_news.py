@@ -12,6 +12,8 @@ def attach_saved_news_context(artifacts, packet, asof):
     if not isinstance(packet, dict) or not isinstance(packet.get(artifacts.code, []), list):
         raise ValueError('news_packet_symbol_list_required')
     accepted, rejected = [], []
+    if artifacts.code not in packet:
+        rejected.append(dict(index=None, reason='ticker_entry_missing'))
     for index, item in enumerate(packet.get(artifacts.code, [])):
         try:
             if not isinstance(item, dict) or any(not isinstance(item.get(key), str) or not item[key].strip() for key in ('source', 'url', 'title', 'published_at', 'fetched_at')):
@@ -40,7 +42,7 @@ def attach_saved_news_context(artifacts, packet, asof):
     enhanced = copy.deepcopy(artifacts.enhanced_context)
     note = '已提供独立保存的新闻证据；综合新闻搜索未执行，不能据此排除其他事件。' if accepted else '没有可用的截止前新闻证据；综合新闻搜索未执行，事件风险未知。'
     enhanced.update(news_evidence_present=bool(accepted or artifacts.news_context), news_result_count=None, news_source_note=note)
-    enhanced['saved_news_audit'] = dict(asof=asof.isoformat(), source_scope='supplied_saved_evidence_not_search', accepted=accepted, rejected=rejected, search_performed=False, text_hash_scope='UTF8_saved_text_not_original_HTTP_bytes')
+    enhanced['saved_news_audit'] = dict(asof=asof.isoformat(), ticker_entry_present=artifacts.code in packet, source_scope='supplied_saved_evidence_not_search', accepted=accepted, rejected=rejected, search_performed=False, text_hash_scope='UTF8_saved_text_not_original_HTTP_bytes')
     sections = ['既有随附上下文（不计作本包近三日新闻）：\n' + artifacts.news_context] if artifacts.news_context else []
     if accepted or sections:
         sections.append(note)
@@ -57,3 +59,9 @@ def apply_saved_news_metadata(parsed, context):
         parsed.news_source_note = context['news_source_note']
         parsed.data_sources = context['news_source_note'] + ('；' + parsed.data_sources if parsed.data_sources else '')
     return parsed
+
+
+def saved_news_status(context):
+    if 'saved_news_audit' not in context:
+        return 'not_configured'
+    return 'saved_evidence_attached_not_searched' if context['saved_news_audit']['accepted'] else 'saved_evidence_empty_or_rejected_not_searched'
