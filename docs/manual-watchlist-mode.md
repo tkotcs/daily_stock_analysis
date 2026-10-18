@@ -45,6 +45,11 @@ without the original page independently revalidated in this batch they remain
 explicitly unverified. ROE is not covered by the three financial amount fields.
 The same provenance is saved in context and program-facts views. This changes
 request/context hashes, never raw captures or their original expiry timestamps.
+When financial and quote currencies differ and a nonzero quote-currency dividend
+has no event-level evidence, financial amounts/ROE and dividend inputs are
+quarantined as unavailable in both messages and context. No currency or receipt
+ratio conversion is attempted. Raw provider evidence is retained outside the
+model input. Technical facts remain usable; do not infer valuation or yield.
 Apart from these labels, only mode parameters change. It checks the latest complete
 session and the existing 24-hour/next-session-close expiry rule; no live request is
 sent. It refuses to overwrite an output directory. New locks start with

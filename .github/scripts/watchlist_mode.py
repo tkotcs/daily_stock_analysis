@@ -33,7 +33,7 @@ def encode(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')
 
 
-def qualify_financial_fields(context, packet, audit):
+def qualify_financial_fields(context, packet, audit, quote_currency=None):
     context, packet = copy.deepcopy(context), copy.deepcopy(packet)
     report = (((context.get('fundamental_context') or {}).get('earnings') or {}).get('data') or {}).get('financial_report') or {}
     fields = audit.get('fields') or {}
@@ -42,6 +42,13 @@ def qualify_financial_fields(context, packet, audit):
             raise GuardStop('financial_field_audit_required')
         return context, packet
     official = context.get('official_research') or {}
+    earnings = (context.get('fundamental_context') or {}).get('earnings') or {}
+    dividend = (earnings.get('data') or {}).get('dividend') or {}
+    quarantine = bool(quote_currency and report.get('currency') and report['currency'] != quote_currency
+                      and dividend.get('currency') == quote_currency and not dividend.get('events')
+                      and any(type(dividend.get(field)) in (int, float) and dividend[field] != 0
+                              for field in ('ttm_cash_dividend_per_share', 'ttm_dividend_yield_pct')))
+    restriction = '财务及分红暂不可用：财报与报价币种不同，分红缺少逐事件币种及存托股份口径证据；不换算，不推导盈利能力、ROE、分红收益率或估值，仅作技术研究。'
     notes = {}
     labels = {'revenue': '营业收入', 'net_profit_parent': '归母净利润', 'operating_cash_flow': '经营现金流', 'roe': 'ROE'}
     for field in labels:
@@ -62,7 +69,10 @@ def qualify_financial_fields(context, packet, audit):
             if classification == 'not_applicable_ETF':
                 warning = 'ETF企业财务不适用'
         notes[field] = dict(value=value, classification=classification, period_end=period, adapter_report_date=report.get('report_date'), currency=report.get('currency'), source_url=source, independently_official_verified=False, limitation=warning)
+        if quarantine:
+            notes[field].update(value=None, classification='quarantined_currency_and_receipt_basis', period_end=None, limitation=restriction)
     counts = {field: 0 for field in labels}
+    dividend_counts = {field: 0 for field in ('ttm_cash_dividend_per_share', 'ttm_dividend_yield_pct', 'ttm_event_count')}
     for message in packet['messages']:
         if not isinstance(message.get('content'), str):
             continue
@@ -76,11 +86,32 @@ def qualify_financial_fields(context, packet, audit):
                     raise GuardStop('financial_prompt_value_mismatch')
                 counts[field] += 1
                 detail = f"期间={note['period_end'] or '未知/不适用'}；{note['classification']}；{note['limitation']}；来源={note['source_url']}"
-                return f'| {label} | {expected} | {detail} |'
+                return f"| {label} | {'N/A' if quarantine else expected} | {detail} |"
             text = re.sub(r'(?m)^\| ' + re.escape(label) + r' \| ([^|\n]*) \|[^\n]*$', replace_row, text)
+        if quarantine:
+            message_dividend_count = 0
+            for field, label in [('ttm_cash_dividend_per_share', '近12个月每股现金分红'), ('ttm_dividend_yield_pct', 'TTM 股息率'), ('ttm_event_count', 'TTM 分红事件数')]:
+                pattern = r'(?m)^\| ' + re.escape(label) + r' \| ([^|\n]*) \|[^\n]*$'
+                def replace_dividend(match):
+                    if match.group(1).strip() != str(dividend.get(field, 'N/A')):
+                        raise GuardStop('dividend_prompt_value_mismatch')
+                    return f'| {label} | N/A | {restriction} |'
+                text, count = re.subn(pattern, replace_dividend, text)
+                dividend_counts[field] += count
+                message_dividend_count += count
+            if message_dividend_count:
+                text += '\n\n' + restriction
         message['content'] = text
     if any(count != 1 for count in counts.values()):
         raise GuardStop('native_financial_table_required')
+    if quarantine:
+        if any(count != 1 for count in dividend_counts.values()):
+            raise GuardStop('native_dividend_table_required')
+        data = earnings['data']
+        data['financial_report'] = dict(report_date=None, revenue=None, net_profit_parent=None, operating_cash_flow=None, roe=None, currency=report.get('currency'))
+        data['dividend'] = dict(events=[], ttm_cash_dividend_per_share=None, ttm_dividend_yield_pct=None, ttm_event_count=None, currency=None)
+        earnings['status'] = 'unavailable_currency_and_receipt_basis'
+        context['financial_input_restriction'] = restriction
     context['financial_field_provenance'] = notes
     return context, packet
 
@@ -160,7 +191,9 @@ def prepare(data, source, out, mode, pricing, symbols=None, offline_only=False):
         if packet.get('model') != 'deepseek-flash' or not isinstance(packet.get('messages'), list) or not packet['messages']:
             raise GuardStop('native_packet_required')
         financial_audit = json.loads((directory / 'FINANCIAL_AUDIT.json').read_text('utf-8'))
-        context_value, packet = qualify_financial_fields(context_value, packet, financial_audit)
+        price_audit_path = directory / 'PRICE_AUDIT.json'
+        quote_currency = (json.loads(price_audit_path.read_text('utf-8')).get('metadata') or {}).get('currency') if price_audit_path.exists() else None
+        context_value, packet = qualify_financial_fields(context_value, packet, financial_audit, quote_currency)
         if context_value.get('financial_field_provenance'):
             context = encode(context_value)
         packet.update(max_tokens=limit, thinking={'type': 'enabled' if mode == 'thinking' else 'disabled'}, stream=True, stream_options={'include_usage': True})

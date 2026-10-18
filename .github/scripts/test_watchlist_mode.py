@@ -208,6 +208,32 @@ def test_preparer_qualifies_financials_without_extending_material(capture, tmp_p
     assert before == {name: (directory / name).read_bytes() for name in before}
 
 
+@pytest.mark.parametrize('event_evidence', [False, True])
+def test_cross_currency_dividend_quarantine(event_evidence):
+    context, packet, audit = financial_fixture()
+    report = context['fundamental_context']['earnings']['data']['financial_report']
+    report['currency'] = 'KRW'
+    dividend = dict(events=[dict(cash_dividend_per_share=1.0)] if event_evidence else [], currency='USD', ttm_cash_dividend_per_share=3750.0, ttm_dividend_yield_pct=2747.454, ttm_event_count=1 if event_evidence else 0)
+    context['fundamental_context']['earnings']['data']['dividend'] = dividend
+    packet['messages'].insert(0, dict(role='system', content='Original native system text'))
+    packet['messages'][1]['content'] += '\n' + '\n'.join(f'| {label} | {dividend[field]} | |' for field, label in [('ttm_cash_dividend_per_share', '近12个月每股现金分红'), ('ttm_dividend_yield_pct', 'TTM 股息率'), ('ttm_event_count', 'TTM 分红事件数')])
+    before = encode(context), encode(packet), encode(audit)
+    qualified, updated = qualify_financial_fields(context, packet, audit, 'USD')
+    data = qualified['fundamental_context']['earnings']['data']
+    if event_evidence:
+        assert 'financial_input_restriction' not in qualified
+        assert data['dividend']['ttm_cash_dividend_per_share'] == 3750.0
+    else:
+        assert 'financial_input_restriction' in qualified
+        assert all(data['financial_report'][field] is None for field in ('revenue', 'net_profit_parent', 'operating_cash_flow', 'roe'))
+        assert data['dividend']['ttm_cash_dividend_per_share'] is None
+        assert '3750.0' not in json.dumps(updated)
+        assert '2747.454' not in json.dumps(updated)
+        assert all(note['value'] is None for note in qualified['financial_field_provenance'].values())
+        assert updated['messages'][0] == packet['messages'][0]
+    assert before == (encode(context), encode(packet), encode(audit))
+
+
 def test_old_profile_business_bindings_unchanged():
     from authorized_once import authorized_business, COMPARISON_PROFILE, MANUAL_BUSINESS
     from mvp_three_live import batch_spec as executor_spec
