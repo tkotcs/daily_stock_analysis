@@ -47,7 +47,9 @@ def fixture(code,context):
           'confidence_reason':note,'data_limitations':['无实时行情','无新闻检索','财务公开时间未核验']}}}
 
 
-def run_symbol(source,out,code,offline=None,inject=False,research_data=None,news_data=None):
+def run_symbol(source,out,code,offline=None,inject=False,research_data=None,news_data=None,prompt_only=False):
+    if prompt_only and not offline:
+        raise ValueError('prompt_only_requires_offline_fixture')
     out.mkdir(parents=True,exist_ok=False);start=time.monotonic();trace=[];restricted=False
     def persist():save(out/'HTTP_TRACE.json',trace)
     import atexit;atexit.register(persist)
@@ -203,6 +205,10 @@ def run_symbol(source,out,code,offline=None,inject=False,research_data=None,news
                 k['analysis_context_pack_summary'] = None
         contexts.append(context);save(out/'NATIVE_CONTEXT.json',context)
         f=fixture(code,context);fixtures.append(f);save(out/'SIMULATED_MODEL.json',f)
+        if prompt_only:
+            prompt = analyzer._format_prompt(context,context.get('stock_name',code),news_context=k.get('news_context'),analysis_context_pack_summary=k.get('analysis_context_pack_summary'))
+            save(out/'OFFLINE_PROMPT_PROBE.json',dict(fixture_only=True,authorize_paid_POST=False,not_a_final_request=True,prompt=prompt))
+            return analyzer._parse_response(json.dumps(f,ensure_ascii=False),code,context.get('stock_name',code))
         return native_analyze(context,*a,**k)
     analyzer.analyze=analyze
     dispatch=analyzer._dispatch_litellm_completion
@@ -240,23 +246,26 @@ def run_symbol(source,out,code,offline=None,inject=False,research_data=None,news
     assert result and result.success,'native_pipeline_or_parser_failed'
     valid,missing=analyzer._check_content_integrity(result,require_phase_decision=True)
     assert valid,str(missing)
-    assert len(fake_calls)==1 and guard.allowed==1
-    wire=guard.captured[0]['body'];assert wire['max_tokens']==16384 and wire['thinking']=={'type':'disabled'} and wire['stream_options']=={'include_usage':True}
-    save(out/'FINAL_REQUEST.json',wire)
-    from authorized_once import canonical_sha
-    save(out/'REQUEST_IDENTITY.json',{'sha256':canonical_sha(wire),'new_paid_authorization':False,'symbol':code,'session':target})
+    if prompt_only:
+        assert not fake_calls and guard.allowed==0 and guard.attempts==0
+    else:
+        assert len(fake_calls)==1 and guard.allowed==1
+        wire=guard.captured[0]['body'];assert wire['max_tokens']==16384 and wire['thinking']=={'type':'disabled'} and wire['stream_options']=={'include_usage':True}
+        save(out/'FINAL_REQUEST.json',wire)
+        from authorized_once import canonical_sha
+        save(out/'REQUEST_IDENTITY.json',{'sha256':canonical_sha(wire),'new_paid_authorization':False,'symbol':code,'session':target})
     result.search_performed=False;result.report_language='zh'
     if news_data:
         from saved_news import apply_saved_news_metadata
         apply_saved_news_metadata(result,contexts[-1])
-    result.data_sources=NOTICE+'；Yahoo真实日线；未执行新闻搜索；'+(result.data_sources or '')
+    result.data_sources=NOTICE+('；本地离线日线（非本次新行情）' if offline else '；Yahoo真实日线')+'；未执行新闻搜索；'+(result.data_sources or '')
     md='# '+code+' 流水线模拟报告\n\n> '+NOTICE+'\n\n'+NotificationService().generate_single_stock_report(result)
     (out/'REPORT.md').write_text(md,encoding='utf-8')
     import markdown2
     body=markdown2.markdown(md,safe_mode='escape',extras=['tables'])
     (out/'REPORT.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{overflow-x:hidden}body{font:16px/1.7 system-ui;width:100%;max-width:960px;box-sizing:border-box;margin:auto;padding:16px;overflow-wrap:anywhere}blockquote{margin:12px 0;padding:12px;background:#fff3cd}pre{white-space:pre-wrap;word-break:break-word;max-width:100%}table{display:block;max-width:100%;overflow-x:auto}td,th{padding:6px;border:1px solid #ccc;min-width:55px}</style><body>'+body+'</body></html>',encoding='utf-8')
     from saved_news import saved_news_status
-    return {'symbol':code,'status':'success_simulated_model','session':target,'rows':len(frame),'technical_rows':tech[-1]['rows_read'],'real_POSTs':0,'news':saved_news_status(contexts[-1]),'financial_limitations':True,'seconds':round(time.monotonic()-start,2),'data_mode':'offline_saved' if offline else 'fresh_Yahoo_this_run'}
+    return {'symbol':code,'status':'success_offline_prompt_probe' if prompt_only else 'success_simulated_model','session':target,'rows':len(frame),'technical_rows':tech[-1]['rows_read'],'real_POSTs':0,'news':saved_news_status(contexts[-1]),'financial_limitations':True,'seconds':round(time.monotonic()-start,2),'data_mode':'offline_saved' if offline else 'fresh_Yahoo_this_run','prompt_probe_only':prompt_only}
 
 
 def main():
@@ -264,11 +273,13 @@ def main():
     p.add_argument('--child',choices=WATCHLIST);p.add_argument('--offline-data',type=pathlib.Path);p.add_argument('--inject-failure',choices=WATCHLIST)
     p.add_argument('--research-data',type=pathlib.Path,help='Optional reviewed public release packet; no model call')
     p.add_argument('--news-data',type=pathlib.Path,help='Saved news evidence by symbol; no fetching or financial replacement')
+    p.add_argument('--offline-prompt-only',action='store_true',help='Offline fixture prompt and simulated report; no model dispatch or final request')
     p.add_argument('--universe',choices=('three','watchlist35'),default='three');p.add_argument('--only',help='Free recovery subset; use a NEW output directory')
     a=p.parse_args();source=a.source.resolve();out=a.out.resolve();offline=a.offline_data.resolve() if a.offline_data else None
+    if a.offline_prompt_only and not offline:p.error('--offline-prompt-only requires --offline-data')
     if a.child:
         status=None
-        try:status=run_symbol(source,out,a.child,offline,a.inject_failure==a.child,a.research_data.resolve() if a.research_data else None,a.news_data.resolve() if a.news_data else None)
+        try:status=run_symbol(source,out,a.child,offline,a.inject_failure==a.child,a.research_data.resolve() if a.research_data else None,a.news_data.resolve() if a.news_data else None,a.offline_prompt_only)
         except BaseException as e:
             out.mkdir(parents=True,exist_ok=True);status={'symbol':a.child,'status':'failed','error':type(e).__name__+':'+str(e),'real_POSTs':0}
             import traceback;(out/'ERROR.txt').write_text(traceback.format_exc(),encoding='utf-8')
@@ -284,6 +295,7 @@ def main():
         if offline:cmd+=['--offline-data',str(offline)]
         if a.research_data:cmd+=['--research-data',str(a.research_data.resolve())]
         if a.news_data:cmd+=['--news-data',str(a.news_data.resolve())]
+        if a.offline_prompt_only:cmd+=['--offline-prompt-only']
         if a.inject_failure:cmd+=['--inject-failure',a.inject_failure]
         try:
             run=subprocess.run(cmd,env=env,capture_output=True,timeout=240);(out/(code+'-process.log')).write_bytes(run.stdout+run.stderr)

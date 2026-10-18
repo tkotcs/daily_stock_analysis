@@ -198,6 +198,14 @@ provider or production workflow is enabled. Omit the flag for the unchanged path
 Never apply this entry to historical consumed output directories or reuse their
 approval; any future model batch still needs fresh material and authorization.
 
+For one synthetic CLI wiring probe, combine `--offline-data DIR`, `--only NVDA`,
+`--news-data FILE` and `--offline-prompt-only`. This mode requires local fixtures,
+formats the native prompt and parses a clearly synthetic model fixture solely to
+render a simulated report. It never calls native model dispatch or transport and
+does not write `FINAL_REQUEST.json` or a request identity. The status is
+`success_offline_prompt_probe`, not a real analysis success. Do not pass these
+outputs to paid preparation; they cannot meet the fresh-source capture contract.
+
 ```powershell
 python -m pytest .github/scripts/test_manual_quality.py -q
 ```

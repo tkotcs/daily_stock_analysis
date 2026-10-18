@@ -16,10 +16,11 @@ def test_actual_post_metadata_assignment_preserves_supplied_source(tmp_path):
     result = SimpleNamespace(data_sources='original source', raw_response='original raw')
     apply_saved_news_metadata(result, prepared.enhanced_context)
     compiled = compile(ast.fix_missing_locations(ast.Module(body=assignments, type_ignores=[])), str(source), 'exec')
-    exec(compiled, dict(result=result, NOTICE='SYNTHETIC NOTICE'))
+    exec(compiled, dict(result=result, NOTICE='SYNTHETIC NOTICE', offline=tmp_path))
     assert prepared.enhanced_context['news_source_note'] in result.data_sources
     assert 'original source' in result.data_sources
     assert result.search_performed is False and result.raw_response == 'original raw'
+    assert '本地离线日线' in result.data_sources and 'Yahoo真实日线' not in result.data_sources
     notification = Path(os.environ['DSA_FIXED_SOURCE']) / 'src/notification.py'
     appender = next(node for node in ast.walk(ast.parse(notification.read_text('utf-8'))) if isinstance(node, ast.FunctionDef) and node.name == '_append_data_sources_line')
     appender.decorator_list = []
