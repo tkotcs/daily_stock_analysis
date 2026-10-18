@@ -6,7 +6,9 @@ import argparse,atexit,datetime as dt,hashlib,html,json,os,pathlib,smtplib,subpr
 from decimal import Decimal
 
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
-from authorized_once import LiveSession,SafeWriter,canonical_sha,free_get,MANUAL_BUSINESS,pricing_text_sha,COMPARISON_PROFILE,COMPARISON_BUSINESS
+from authorized_once import LiveSession,SafeWriter,canonical_sha,free_get,MANUAL_BUSINESS,pricing_text_sha,COMPARISON_PROFILE,COMPARISON_BUSINESS,WATCHLIST_PROFILE
+import watchlist_mode
+from manual_reports import record_outputs,save_full_report,summarize_usage,render_status_index as render_manual_index
 from free_market_validation import WATCHLIST
 from deepseek_post_guard import OnePostGuard,GuardStop,ENDPOINT
 from nvda_frozen_once import dispatch_frozen,render_native_report
@@ -16,6 +18,7 @@ SYMBOLS=('NVDA','MU','QQQ');BUSINESS='a1daaa302b3a72fb5694c9872ceecf2c4dc0b6e4'
 
 
 def batch_spec(lock):
+    if lock.get('profile')==WATCHLIST_PROFILE:return watchlist_mode.batch_spec(lock)
     if lock.get('profile')==COMPARISON_PROFILE:
         return COMPARISON_BUSINESS,[c+'_'+m for c in SYMBOLS for m in ('nonthinking','thinking')],6,'0.27'
     if lock.get('profile')=='mvp_three_v1':return BUSINESS,list(SYMBOLS),3,'0.09'
@@ -27,6 +30,7 @@ def batch_spec(lock):
 
 
 def load_set(bundle,approved_sha):
+    if (bundle/'WATCHLIST_LOCK.json').exists():return watchlist_mode.load_set(bundle,approved_sha)
     if (bundle/'COMPARISON_LOCK.json').exists():return load_comparison_set(bundle,approved_sha)
     raw=(bundle/'REQUEST_SET_LOCK.json').read_bytes()
     if hashlib.sha256(raw).hexdigest()!=approved_sha:raise GuardStop('batch_hash_mismatch')
@@ -84,16 +88,7 @@ def load_comparison_set(bundle,approved_sha):
 
 
 def render_status_index(rows,mode):
-    text='<h1>手动研究报告目录</h1><p>模型完成不等于内容获准发布；全部待人工审阅。</p>'
-    for label,success in [('执行成功（仍未发布）',True),('执行失败',False)]:
-        text+='<h2>'+label+'</h2><ul>'
-        for row in rows:
-            if bool(row.get('execution_success'))!=success:continue
-            code=row['symbol'];link=f'<a href="{code}/REPORT.html">{code}</a>' if success else html.escape(code)
-            text+='<li>'+link+' '+html.escape(row['status']+' '+row.get('reason',''))+f'；未发布 <a href="{code}/STATUS.json">状态</a></li>'
-        text+='</ul>'
-    note='合成数据/模拟模型，不是真实行情或研究验收。' if mode=='SIMULATED' else '真实模型原文，待人工审阅。'
-    return '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body><p>'+html.escape(mode+' '+note)+'</p>'+text+'</body></html>'
+    return render_manual_index(rows,mode)
 
 
 def main():
@@ -108,7 +103,7 @@ def main():
     sys.path.insert(0,str(source))  # Before LiveSession calendar/material checks.
     claim=None
     if a.execute_authorized:
-        if lock.get('profile') not in ('mvp_manual_v2',COMPARISON_PROFILE) or lock.get('offline_only'):raise GuardStop('legacy_or_offline_bundle_not_live_authorizable')
+        if lock.get('profile') not in ('mvp_manual_v2',COMPARISON_PROFILE,WATCHLIST_PROFILE) or lock.get('offline_only'):raise GuardStop('legacy_or_offline_bundle_not_live_authorizable')
         if os.getenv('GITHUB_ACTIONS')!='true' or os.getenv('GITHUB_RUN_ATTEMPT')!='1' or not a.authorization:raise GuardStop('protected_first_manual_run_required')
         approval=json.loads(a.authorization.read_text('utf-8'))
         if approval.get('authorize_paid_posts') is not True or approval.get('batch_sha256')!=a.batch_sha or approval.get('run_id')!=os.getenv('GITHUB_RUN_ID') or approval.get('max_total_POSTs')!=cap or approval.get('reservation_USD')!=reserve or a.batch_sha not in approval.get('authorization_reference',''):raise GuardStop('new_explicit_batch_authorization_required')
@@ -165,7 +160,12 @@ def main():
             code=fake_symbol['code'];fake_calls.append(code)
             if a.inject_failure in (code,contexts[code]['code']):raise httpx.ReadTimeout('OFFLINE injected timeout')
             text=json.dumps(fixture(contexts[code]['code'],contexts[code]),ensure_ascii=False)
-            sse='data: '+json.dumps({'model':'deepseek-flash','choices':[{'index':0,'delta':{'content':text},'finish_reason':'stop'}]},ensure_ascii=False)+'\n\ndata: [DONE]\n\n'
+            usage_event=''
+            if lock.get('profile')==WATCHLIST_PROFILE:
+                synthetic_usage={'prompt_tokens':200,'completion_tokens':100,'prompt_cache_hit_tokens':0,'prompt_cache_miss_tokens':200}
+                if lock['mode']=='thinking':synthetic_usage['completion_tokens_details']={'reasoning_tokens':80}
+                usage_event='data: '+json.dumps({'choices':[],'usage':synthetic_usage})+'\n\n'
+            sse='data: '+json.dumps({'model':'deepseek-flash','choices':[{'index':0,'delta':{'content':text},'finish_reason':'stop'}]},ensure_ascii=False)+'\n\n'+usage_event+'data: [DONE]\n\n'
             return httpx.Response(200,content=sse.encode(),headers={'content-type':'text/event-stream'},request=request)
         httpx.HTTPTransport.handle_request=fake
     else:get=free_get
@@ -194,13 +194,15 @@ def main():
                 if response['result_unknown'] or response['truncated'] or response['finish_reason']!='stop':raise GuardStop('response_unknown_or_truncated_do_not_retry')
                 if not a.simulate and response['cost_estimate']['status'].startswith('unknown'):raise GuardStop('supplier_usage_unknown_do_not_retry')
                 _,model_json=analyzer._extract_analysis_json_object(text);session.save('PARSED_MODEL_JSON.json',model_json)
+                safe_model=json.loads(json.dumps(model_json,ensure_ascii=False).replace(key,'[REDACTED]'))
+                save_full_report(dest,code,safe_model,contexts[code],analyzer._format_computed_quote_facts(contexts[code]),a.simulate)
                 parsed=analyzer._parse_response(text,member['symbol'],contexts[code].get('stock_name',member['symbol']));parsed.raw_response=text;parsed.report_language='zh';parsed.model_used='deepseek/deepseek-flash';parsed.search_performed=False
                 parsed.market_snapshot=analyzer._build_market_snapshot(contexts[code])
                 passed,missing=analyzer._check_content_integrity(parsed,require_phase_decision=True)
                 session.save('NATIVE_INTEGRITY.json',{'passed':passed,'missing':missing,'manual_fact_review_required':True})
                 if not parsed.success or not passed:raise GuardStop('native_JSON_or_integrity_failed_no_repair')
                 note='模拟响应，不是供应商调用' if a.simulate else '真实DeepSeek响应，尚待人工事实审阅，不代表发布通过'
-                md='# '+code+'\n\n> '+note+'；日线截止'+member['target_session']+'。\n\n'+render_native_report(parsed)
+                md='# '+code+'\n\n> '+note+'；日线截止'+member['target_session']+'。原版精选视图包含程序事实与模型段落，不等于完整模型原文。\n\n[完整模型字段](MODEL_ALL_FIELDS.html) · [模型原文](MODEL_RAW_TEXT.txt) · [独立程序事实及财务来源](PROGRAM_FACTS.html)\n\n'+render_native_report(parsed)
                 (dest/'REPORT.md').write_text(md.replace(key,'[REDACTED]'),encoding='utf-8')
                 import markdown2
                 body=markdown2.markdown(md,safe_mode='escape',extras=['tables'])
@@ -219,10 +221,12 @@ def main():
                 if guard:guard.restore();total+=guard.allowed
                 row['transport_attempts']=guard.allowed if guard else 0;row['actual_paid_POSTs']=0 if a.simulate else row['transport_attempts']
                 row['automatic_retry']=False
+                record_outputs(row,dest,a.simulate)
                 (dest/'STATUS.json').write_text(json.dumps(row,ensure_ascii=False,indent=2).replace(key,'[REDACTED]'),encoding='utf-8');rows.append(row)
         summary={'mode':'SIMULATED' if a.simulate else 'REAL_MODEL_PENDING_MANUAL_REVIEW','batch_sha256':a.batch_sha,'symbols':rows,'transport_attempts':total,'actual_paid_POSTs':0 if a.simulate else total,'published':False,'fake_calls':fake_calls if a.simulate else None}
         summary.update(successful=sum(r.get('execution_success',False) for r in rows),failed=sum(r['status']=='failed_no_retry' for r in rows),unpublished=len(rows))
-        (out/'index.html').write_text(render_status_index(rows,summary['mode']),encoding='utf-8')
+        summary['usage_summary']=summarize_usage(rows,a.simulate)
+        (out/'index.html').write_text(render_manual_index(rows,summary['mode'],summary['usage_summary']),encoding='utf-8')
         (out/'BATCH_RESULT.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding='utf-8')
     finally:log.close();sys.stdout,sys.stderr=stdout,stderr
     print('Batch stopped after its authorized independent slots; no retry or notification.')

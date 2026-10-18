@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > For user-friendly release highlights, see the [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) page.
 
 ## [Unreleased]
+- [新功能] 新增独立35标的单模式手动研究profile，固定577624a业务源码，支持Flash非Thinking与Thinking high并保留旧入口及消费记录；默认不收费。
+- [改进] 手动报告补齐完整模型字段、原文、独立程序事实、Markdown入口及批次Usage/费用估算；未知消费不按零处理，全部待人工审核。
+- [测试] 定向验证新profile的35标的参数、原生传输、失败继续、长报告完整性和Usage汇总，不重跑历史35股流水线。
 - [改进] 现有手动控制器兼容冻结六请求Flash双模式对照，按标的/模式独立消费并复用人工审批；默认免费，不启用收费或调度。
 - [测试] 准备同材料Flash非思考/思考配对请求并验证实际HTTP参数；仅适配reasoning_effort转发，不启用收费入口。
 - [改进] 按真实三股对照补充均线互穿事件、各均线相对收盘角色及原生量能分类阈值；不改写历史报告。

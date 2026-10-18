@@ -1,0 +1,157 @@
+"""Only new single-mode watchlist contracts and native offline integration."""
+import copy
+import datetime as dt
+import hashlib
+import json
+import os
+from pathlib import Path
+import socket
+import subprocess
+import sys
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / '.github/scripts'))
+from authorized_once import WATCHLIST_BUSINESS, WATCHLIST_PROFILE, canonical_sha, usage_cost
+from deepseek_post_guard import GuardStop
+from free_market_validation import WATCHLIST
+from manual_reports import summarize_usage
+from watchlist_mode import batch_spec, encode, load_set, prepare
+
+
+@pytest.fixture
+def capture(tmp_path):
+    source = Path(os.environ['DSA_FIXED_SOURCE'])
+    sys.path.insert(0, str(source))
+    from src.core.trading_calendar import get_effective_trading_date
+    now = dt.datetime.now(dt.timezone.utc)
+    target = get_effective_trading_date('us', current_time=now).isoformat()
+    data = tmp_path / 'new-synthetic-capture'
+    data.mkdir()
+    (data / 'RESULTS.json').write_bytes(encode(dict(business_commit=WATCHLIST_BUSINESS, mode='SYNTHETIC_LOCAL_TEST')))
+    for symbol in WATCHLIST:
+        directory = data / symbol
+        directory.mkdir()
+        context = dict(code=symbol, stock_name='SYNTHETIC ' + symbol, date=target, fixture_only=True, today=dict(date=target, open=99, close=100, high=101, low=98, volume=1000, volume_ratio=1, ma5=101, ma10=102, ma20=103, ma60=104), yesterday=dict(date=target, close=100, volume=1000, ma5=101, ma10=102, ma20=103, ma60=104), trend_analysis={}, fundamental_context=dict(status='not_supported'))
+        (directory / 'NATIVE_CONTEXT.json').write_bytes(encode(context))
+        (directory / 'STATUS.json').write_bytes(encode(dict(status='success_simulated_model', session=target, data_mode='synthetic')))
+        (directory / 'FINANCIAL_AUDIT.json').write_bytes(encode(dict(fetched_at=now.isoformat())))
+        (directory / 'FINAL_REQUEST.json').write_bytes(encode(dict(model='deepseek-flash', messages=[dict(role='user', content='NEW SYNTHETIC TEST ONLY ' + symbol)], thinking=dict(type='disabled'), max_tokens=16384, stream=True, stream_options=dict(include_usage=True))))
+    return data, source, ROOT / '.github/frozen/mvp-three/OFFICIAL_PRICING.html'
+
+
+@pytest.mark.parametrize('mode,limit,reserve', [('nonthinking', 16384, '1.05'), ('thinking', 32768, '2.10')])
+def test_35_ordered_single_mode_packets(capture, tmp_path, mode, limit, reserve):
+    data, source, pricing = capture
+    bundle = tmp_path / mode
+    lock = prepare(data, source, bundle, mode, pricing, offline_only=True)
+    loaded, packets, contexts = load_set(bundle, canonical_sha(lock))
+    assert batch_spec(loaded) == (WATCHLIST_BUSINESS, WATCHLIST, 35, reserve)
+    assert len(packets) == len(contexts) == 35
+    for symbol in WATCHLIST:
+        packet = packets[symbol]
+        assert packet['max_tokens'] == limit
+        assert packet['thinking'] == {'type': 'enabled' if mode == 'thinking' else 'disabled'}
+        assert packet.get('reasoning_effort') == ('high' if mode == 'thinking' else None)
+        original = json.loads((data / symbol / 'FINAL_REQUEST.json').read_text('utf-8'))
+        assert packet['messages'] == original['messages']
+    changed = copy.deepcopy(lock)
+    changed['members'][0]['mode'] = 'invalid'
+    (bundle / 'WATCHLIST_LOCK.json').write_bytes(encode(changed))
+    with pytest.raises(GuardStop, match='watchlist_member_invalid'):
+        load_set(bundle, canonical_sha(changed))
+
+
+@pytest.mark.parametrize('mode', ['nonthinking', 'thinking'])
+def test_native_parameters_long_report_and_failure_isolation(capture, tmp_path, mode):
+    data, source, pricing = capture
+    bundle = tmp_path / 'bundle'
+    lock = prepare(data, source, bundle, mode, pricing, ['NVDA', 'MU', 'XLE'], offline_only=True)
+    output = tmp_path / 'reports'
+    environment = {name: value for name, value in os.environ.items() if not any(part in name.upper() for part in ('KEY', 'TOKEN', 'PASSWORD', 'WEBHOOK'))}
+    environment.update(ENV_FILE=str(tmp_path / 'nonexistent.env'), PYTHONIOENCODING='utf-8', LITELLM_LOCAL_MODEL_COST_MAP='True', DSA_FIXED_SOURCE=str(source))
+    for name in ('CUSTOM_TIKTOKEN_CACHE_DIR', 'TIKTOKEN_CACHE_DIR'):
+        environment[name] = os.environ[name]
+    command = [sys.executable, str(Path(__file__).resolve()), '--worker', '--source', str(source), '--bundle', str(bundle), '--out', str(output), '--batch-sha', canonical_sha(lock), '--simulate', '--inject-failure', 'MU']
+    result = subprocess.run(command, env=environment, capture_output=True, text=True, encoding='utf-8', timeout=90)
+    assert result.returncode == 0, result.stdout + result.stderr
+    summary = json.loads((output / 'BATCH_RESULT.json').read_text('utf-8'))
+    assert summary['successful'] == 2 and summary['failed'] == 1
+    assert summary['actual_paid_POSTs'] == 0 and summary['fake_calls'] == ['NVDA', 'MU', 'XLE']
+    assert all(row['automatic_retry'] is False and row['transport_attempts'] == 1 for row in summary['symbols'])
+    assert summary['usage_summary']['source'] == 'synthetic_test_only'
+    assert summary['usage_summary']['input_tokens'] == 400
+    assert summary['usage_summary']['output_tokens'] == 200
+    assert summary['usage_summary']['reported_reasoning_tokens'] == (160 if mode == 'thinking' else 0)
+    assert not summary['usage_summary']['complete'] and summary['usage_summary']['estimated_peak_usd'] is None
+    for symbol in ('NVDA', 'XLE'):
+        for name in ('REPORT.md', 'REPORT.html', 'MODEL_ALL_FIELDS.md', 'MODEL_ALL_FIELDS.html', 'MODEL_COMPLETE.html', 'PROGRAM_FACTS.html', 'MODEL_RAW_TEXT.txt'):
+            assert (output / symbol / name).is_file()
+        model = json.loads((output / symbol / 'PARSED_MODEL_JSON.json').read_text('utf-8'))
+        assert model['technical_analysis'].endswith('LONG_END')
+        full = (output / symbol / 'MODEL_ALL_FIELDS.html').read_text('utf-8')
+        assert 'LONG_END' in full and '&lt;script&gt;' in full and '<script>' not in full
+        assert 'LONG_END' in (output / symbol / 'MODEL_ALL_FIELDS.md').read_text('utf-8')
+        assert 'LONG_END' in (output / symbol / 'MODEL_RAW_TEXT.txt').read_text('utf-8')
+    index = (output / 'index.html').read_text('utf-8')
+    assert 'XLE/REPORT.md' in index and 'NVDA/MODEL_ALL_FIELDS.html' in index
+    assert 'MU/REPORT.html' not in index and 'MU/STATUS.json' in index
+
+
+def test_usage_totals_missing_and_reasoning_not_double_billed():
+    usage = dict(prompt_tokens=100, completion_tokens=900, prompt_cache_hit_tokens=60, prompt_cache_miss_tokens=40, completion_tokens_details=dict(reasoning_tokens=800))
+    row = dict(transport_attempts=1, actual_paid_POSTs=1, usage=usage, cost_estimate=usage_cost(usage))
+    summary = summarize_usage([row, row], False)
+    assert summary['input_tokens'] == 200 and summary['output_tokens'] == 1800
+    assert summary['reported_reasoning_tokens'] == 1600 and summary['complete']
+    from decimal import Decimal
+    assert Decimal(summary['estimated_peak_usd']) == Decimal(usage_cost(usage)['peak_usd']) * 2
+    assert Decimal(summary['estimated_off_peak_usd']) == Decimal(usage_cost(usage)['off_peak_usd']) * 2
+    unknown = summarize_usage([row, dict(transport_attempts=1, actual_paid_POSTs=1)], False)
+    assert unknown['estimated_peak_usd'] is None and unknown['missing_usage_requests'] == 1
+
+
+def test_workflow_remains_manual_and_user_approved():
+    import yaml
+    workflow = yaml.load((ROOT / '.github/workflows/05-manual-watchlist-mode.yml').read_text('utf-8'), Loader=yaml.BaseLoader)
+    assert set(workflow['on']) == {'workflow_dispatch'}
+    assert workflow['on']['workflow_dispatch']['inputs']['execute_live']['default'] == 'false'
+    assert workflow['jobs']['live']['environment'] == 'nvda-one-call-approval'
+    assert 'secrets.' not in json.dumps(workflow['jobs']['offline'])
+
+
+def test_old_profile_business_bindings_unchanged():
+    from authorized_once import authorized_business, COMPARISON_PROFILE, MANUAL_BUSINESS
+    from mvp_three_live import batch_spec as executor_spec
+    assert authorized_business({'test_profile': 'mvp_manual_v2'}) == MANUAL_BUSINESS
+    assert executor_spec({'profile': 'mvp_manual_v2', 'members': [{'symbol': 'NVDA'}]}) == (MANUAL_BUSINESS, ['NVDA'], 1, '0.03')
+    assert executor_spec({'profile': COMPARISON_PROFILE})[2:] == (6, '0.27')
+
+
+def test_expired_capture_is_not_repackaged(capture, tmp_path):
+    data, source, pricing = capture
+    (data / 'NVDA' / 'FINANCIAL_AUDIT.json').write_bytes(encode(dict(fetched_at=(dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=2)).isoformat())))
+    output = tmp_path / 'expired'
+    with pytest.raises(GuardStop, match='material_EXPIRED'):
+        prepare(data, source, output, 'thinking', pricing, ['NVDA'], offline_only=True)
+    assert not output.exists()
+
+
+if __name__ == '__main__' and '--worker' in sys.argv:
+    sys.argv.remove('--worker')
+    original_connect = socket.socket.connect
+    def deny_connection(instance, address):
+        if isinstance(address, tuple) and address[0] in ('127.0.0.1', '::1'):
+            return original_connect(instance, address)
+        raise AssertionError('offline integration attempted a network connection')
+    socket.socket.connect = deny_connection
+    import mvp_three
+    original_fixture = mvp_three.fixture
+    def long_fixture(symbol, context):
+        model = original_fixture(symbol, context)
+        model['technical_analysis'] += '<script>UNTRUSTED</script>' + '长报告字段。' * 7000 + 'LONG_END'
+        return model
+    mvp_three.fixture = long_fixture
+    from mvp_three_live import main
+    main()

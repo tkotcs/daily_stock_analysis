@@ -1,0 +1,128 @@
+name: Manual single-mode watchlist research
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [nonthinking, thinking]
+        default: nonthinking
+      bundle_path:
+        type: string
+        default: .github/frozen/manual-watchlist-next
+      batch_sha256:
+        type: string
+      authorization_reference:
+        type: string
+      execute_live:
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: nvda-manual-preflight
+  cancel-in-progress: false
+jobs:
+  offline:
+    if: ${{ !inputs.execute_live }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        with:
+          ref: 577624ad8459871630c690e5760ae504ac6f2b9f
+          path: upstream-fixed
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r upstream-fixed/requirements.txt pytest litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6
+      - name: Public tokenizer
+        run: python .github/scripts/prepare_offline_assets.py --cache .cache/tiktoken
+      - name: Only new watchlist mode tests
+        env:
+          DSA_FIXED_SOURCE: ${{ github.workspace }}/upstream-fixed
+          LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+          CUSTOM_TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+          TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+        run: python -m pytest .github/scripts/test_watchlist_mode.py -q --basetemp offline-evidence
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: offline-watchlist-${{ github.run_id }}
+          path: offline-evidence/
+          retention-days: 14
+  live:
+    if: ${{ inputs.execute_live && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    environment: nvda-one-call-approval
+    permissions:
+      contents: write
+      actions: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONIOENCODING: utf-8
+      LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+      CUSTOM_TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+      TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+      BUNDLE_PATH: ${{ inputs.bundle_path }}
+      BATCH_SHA: ${{ inputs.batch_sha256 }}
+      APPROVAL_REF: ${{ inputs.authorization_reference }}
+      SELECTED_MODE: ${{ inputs.mode }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        with:
+          ref: 577624ad8459871630c690e5760ae504ac6f2b9f
+          path: upstream-fixed
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r upstream-fixed/requirements.txt litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6
+      - run: python .github/scripts/prepare_offline_assets.py --cache .cache/tiktoken
+      - name: Bind new batch after user Environment approval
+        run: |
+          python - <<'PY'
+          import json,os,pathlib,sys
+          sys.path.insert(0,str(pathlib.Path('.github/scripts').resolve()))
+          from watchlist_mode import load_set,batch_spec
+          root=pathlib.Path('.github/frozen').resolve()
+          bundle=pathlib.Path(os.environ['BUNDLE_PATH']).resolve()
+          assert root in bundle.parents and bundle.name.startswith('manual-watchlist-')
+          assert os.environ['GITHUB_RUN_ATTEMPT']=='1'
+          lock,_,_=load_set(bundle,os.environ['BATCH_SHA'])
+          assert not lock.get('offline_only') and lock['mode']==os.environ['SELECTED_MODE']
+          assert os.environ['BATCH_SHA'] in os.environ['APPROVAL_REF']
+          _,_,count,reserve=batch_spec(lock)
+          approval=dict(authorize_paid_posts=True,batch_sha256=os.environ['BATCH_SHA'],run_id=os.environ['GITHUB_RUN_ID'],max_total_POSTs=count,reservation_USD=reserve,authorization_reference=os.environ['APPROVAL_REF'],secret_upload_approval_reference='Existing repository Secret; user-approved Environment')
+          pathlib.Path('approved-batch.json').write_text(json.dumps(approval),encoding='utf-8')
+          PY
+      - name: Existing executor, one attempt per symbol
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python .github/scripts/mvp_three_live.py --source upstream-fixed --bundle "$BUNDLE_PATH" --out manual-reports --batch-sha "$BATCH_SHA" --execute-authorized --authorization approved-batch.json
+      - name: Credential scan before artifact
+        if: always()
+        id: scan
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          python - <<'PY'
+          import os,pathlib
+          key=os.environ.get('DEEPSEEK_API_KEY','').encode()
+          root=pathlib.Path('manual-reports')
+          assert key and root.is_dir()
+          assert not any(key in path.read_bytes() for path in root.rglob('*') if path.is_file())
+          with open(os.environ['GITHUB_OUTPUT'],'a') as output:output.write('safe=true\n')
+          PY
+      - uses: actions/upload-artifact@v6
+        if: ${{ always() && steps.scan.outputs.safe == 'true' }}
+        with:
+          name: manual-watchlist-${{ github.run_id }}
+          path: manual-reports/
+          retention-days: 14

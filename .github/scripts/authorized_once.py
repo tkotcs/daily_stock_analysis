@@ -8,6 +8,8 @@ from deepseek_post_guard import GuardStop
 
 COMPARISON_PROFILE='paired_mode_comparison_proposal_v1'
 COMPARISON_BUSINESS='577624ad8459871630c690e5760ae504ac6f2b9f'
+WATCHLIST_PROFILE='manual_watchlist_mode_v1'
+WATCHLIST_BUSINESS=COMPARISON_BUSINESS
 MANUAL_BUSINESS='68b85e7a143be95f5f7d4bea66989c37f777877a'
 FIXED='f93a7609e569e3b6c6372e652a3d36a27225d783'
 # Exact reviewed profile; no arbitrary 16K payload or business revision is accepted.
@@ -17,6 +19,7 @@ REVIEWED_16K_ASOF='2026-10-16T06:04:29.560325+00:00'
 REVIEWED_16K_DEADLINE='2026-10-16T20:00:00+00:00'
 
 def authorized_business(authorization):
+    if authorization.get('test_profile')==WATCHLIST_PROFILE:return WATCHLIST_BUSINESS
     if authorization.get('test_profile')==COMPARISON_PROFILE:return COMPARISON_BUSINESS
     if authorization.get('test_profile')=='mvp_manual_v2':return MANUAL_BUSINESS
     return REVIEWED_16K_FIXED if authorization.get('request_sha256')==REVIEWED_16K_SHA or authorization.get('test_profile')=='mvp_three_v1' else FIXED
@@ -97,9 +100,11 @@ class LiveSession:
         if authorization.get('authorize_paid_post') is not True or not authorization.get('authorization_reference') or not authorization.get('secret_upload_approval_reference'):raise GuardStop('separate_explicit_approvals_required')
         self.reviewed_16k=authorization.get('request_sha256')==REVIEWED_16K_SHA
         self.comparison=authorization.get('test_profile')==COMPARISON_PROFILE
-        self.thinking=self.comparison and authorization.get('comparison_mode')=='thinking'
+        self.watchlist=authorization.get('test_profile')==WATCHLIST_PROFILE
+        self.thinking=(self.comparison or self.watchlist) and authorization.get('comparison_mode')=='thinking'
+        if self.watchlist and (authorization.get('comparison_mode') not in ('nonthinking','thinking') or authorization.get('request_id')!=authorization.get('symbol')):raise GuardStop('watchlist_slot_invalid')
         if self.comparison and (authorization.get('comparison_mode') not in ('nonthinking','thinking') or authorization.get('request_id')!=authorization.get('symbol','')+'_'+authorization.get('comparison_mode','')):raise GuardStop('paired_slot_invalid')
-        self.mvp_test=authorization.get('test_profile') in ('mvp_three_v1','mvp_manual_v2',COMPARISON_PROFILE)
+        self.mvp_test=authorization.get('test_profile') in ('mvp_three_v1','mvp_manual_v2',COMPARISON_PROFILE,WATCHLIST_PROFILE)
         self.max_tokens=32768 if self.thinking else 16384 if self.reviewed_16k or self.mvp_test else 8192
         if authorization.get('run_id')!=run_id or authorization.get('fixed_commit')!=authorized_business(authorization):raise GuardStop('authorization_identity_mismatch')
         try:expires=datetime.fromisoformat(authorization['expires_at'])
@@ -107,7 +112,7 @@ class LiveSession:
         if expires.tzinfo is None or datetime.now(timezone.utc)>=expires:raise GuardStop('authorization_expired')
         if self.mvp_test:
             from free_market_validation import WATCHLIST
-            allowed=WATCHLIST if authorization.get('test_profile')=='mvp_manual_v2' else ('NVDA','MU','QQQ')
+            allowed=WATCHLIST if authorization.get('test_profile') in ('mvp_manual_v2',WATCHLIST_PROFILE) else ('NVDA','MU','QQQ')
             if authorization.get('symbol') not in allowed or any(not re.fullmatch('[a-f0-9]{64}',str(authorization.get(k,''))) for k in ('batch_sha256','request_sha256')):raise GuardStop('mvp_batch_identity_invalid')
             if any(str(authorization.get(k)) not in authorization['authorization_reference'] for k in ('batch_sha256','request_sha256')):raise GuardStop('mvp_hash_scoped_approval_required')
             self.check_material()
@@ -145,7 +150,7 @@ class LiveSession:
         infos=[{k:b.get(k) for k in ('currency','total_balance')} for b in balance.get('balance_infos',[])]
         if not infos or not any(Decimal(str(b['total_balance']))>0 for b in infos):raise GuardStop('balance_not_positive')
         pricing=self.get(PRICING)
-        rates=verify_pricing_snapshot(pricing,self.auth.get('pricing_sha256'),self.auth.get('pricing_text_sha256') if self.auth.get('test_profile') in ('mvp_manual_v2',COMPARISON_PROFILE) else None)
+        rates=verify_pricing_snapshot(pricing,self.auth.get('pricing_sha256'),self.auth.get('pricing_text_sha256') if self.auth.get('test_profile') in ('mvp_manual_v2',COMPARISON_PROFILE,WATCHLIST_PROFILE) else None)
         if datetime.now(timezone.utc)>=datetime.fromisoformat(self.auth['expires_at']):raise GuardStop('authorization_expired_during_preflight')
         self.check_material()
         # Atomic exclusive local marker. A new Runner needs a different authorized run_id;
