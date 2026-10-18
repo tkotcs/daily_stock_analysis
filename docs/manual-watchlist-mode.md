@@ -59,8 +59,20 @@ cannot be authorized live.
 ## Execute only after new batch approval
 
 The new workflow is `.github/workflows/05-manual-watchlist-mode.yml`.
-Its only trigger is `workflow_dispatch`; `execute_live` defaults to false. The
+Its triggers are manual `workflow_dispatch` and reuse through `workflow_call`;
+`execute_live` defaults to false. The
 default job runs only the new offline tests without model secrets.
+
+When this new filename is not registered on the default branch, the already
+registered `04-nvda-free-preflight.yml` dispatches it on the approved deploy ref.
+Select `mvp_three=true`, `comparison_modes=false`, and
+`mvp_universe=single_mode_watchlist`. This deployment entry selects nonthinking
+and the separately reviewed `manual-watchlist-approved-bf7c3b89` bundle; it does
+not select the old watchlist or consumed six-request comparison. The existing
+`request_sha256` input passes the exact new batch hash. Both workflow defaults
+remain free, and live work still waits for the same user Environment approval.
+The caller and callee use distinct concurrency groups to avoid self-deadlock.
+No change to main/default branch or to the historical profiles is needed.
 
 For a separately approved real batch, publish the reviewed controller and new
 bundle to the existing approved deploy branch. Select `mode`, `bundle_path`, the

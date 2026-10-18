@@ -115,7 +115,7 @@ def test_usage_totals_missing_and_reasoning_not_double_billed():
 def test_workflow_remains_manual_and_user_approved():
     import yaml
     workflow = yaml.load((ROOT / '.github/workflows/05-manual-watchlist-mode.yml').read_text('utf-8'), Loader=yaml.BaseLoader)
-    assert set(workflow['on']) == {'workflow_dispatch'}
+    assert set(workflow['on']) == {'workflow_dispatch', 'workflow_call'}
     assert workflow['on']['workflow_dispatch']['inputs']['execute_live']['default'] == 'false'
     assert workflow['jobs']['live']['environment'] == 'nvda-one-call-approval'
     assert 'secrets.' not in json.dumps(workflow['jobs']['offline'])
@@ -145,6 +145,30 @@ def test_workflow_secret_reference_is_explicit(monkeypatch):
     monkeypatch.setenv('SECRET_APPROVAL_REF', '  OFFLINE TEST user message reference  ')
     exec(code, namespace)
     assert namespace['approval']['secret_upload_approval_reference'] == 'OFFLINE TEST user message reference'
+
+
+@pytest.mark.parametrize('execute_live', [False, True])
+def test_registered_dispatch_selects_only_the_requested_profile(execute_live):
+    import yaml
+    from types import SimpleNamespace
+    workflow = yaml.load((ROOT / '.github/workflows/04-nvda-free-preflight.yml').read_text('utf-8'), Loader=yaml.BaseLoader)
+    route = workflow['jobs']['single_mode_watchlist']
+    assert route['uses'] == './.github/workflows/05-manual-watchlist-mode.yml'
+    assert route['with']['mode'] == 'nonthinking'
+    assert route['with']['bundle_path'] == '.github/frozen/manual-watchlist-approved-bf7c3b89'
+    github = SimpleNamespace(actor='tkotcs', repository_owner='tkotcs', ref='refs/heads/deploy/phase2h-request-preparation')
+    for universe in ('three', 'watchlist35', 'single_mode_watchlist'):
+        inputs = SimpleNamespace(execute_live=execute_live, mvp_universe=universe, mvp_three=True, comparison_modes=False, request_sha256='approved-new-batch')
+        enabled = []
+        for name, job in workflow['jobs'].items():
+            expression = job['if'].removeprefix('${{').removesuffix('}}').strip().replace('&&', 'and').replace('||', 'or').replace('!inputs.', 'not inputs.')
+            if eval(expression, {'__builtins__': {}}, dict(inputs=inputs, github=github)):
+                enabled.append(name)
+        assert enabled == (['single_mode_watchlist'] if universe == 'single_mode_watchlist' else ['mvp_live'] if execute_live else ['mvp'])
+    called = yaml.load((ROOT / '.github/workflows/05-manual-watchlist-mode.yml').read_text('utf-8'), Loader=yaml.BaseLoader)
+    assert set(route['with']) == set(called['on']['workflow_call']['inputs'])
+    assert called['jobs']['live']['environment'] == 'nvda-one-call-approval'
+    assert called['concurrency']['group'] != workflow['concurrency']['group']
 
 
 def financial_fixture():

@@ -1,5 +1,28 @@
 name: Manual single-mode watchlist research
 on:
+  workflow_call:
+    inputs:
+      mode:
+        type: string
+        default: nonthinking
+      bundle_path:
+        type: string
+        required: true
+      batch_sha256:
+        type: string
+        required: true
+      authorization_reference:
+        type: string
+        required: true
+      secret_upload_approval_reference:
+        type: string
+        required: true
+      execute_live:
+        type: boolean
+        default: false
+    secrets:
+      DEEPSEEK_API_KEY:
+        required: true
   workflow_dispatch:
     inputs:
       mode:
@@ -22,7 +45,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: nvda-manual-preflight
+  group: single-mode-watchlist-research
   cancel-in-progress: false
 jobs:
   offline:

@@ -13,7 +13,7 @@ on:
       mvp_universe:
         description: 'Manual watchlist scope'
         type: choice
-        options: [three, watchlist35]
+        options: [three, watchlist35, single_mode_watchlist]
         default: three
       mvp_three:
         description: 'Select native MVP; paid mode still requires a new frozen batch and user approval'
@@ -48,6 +48,21 @@ concurrency:
   group: nvda-manual-preflight
   cancel-in-progress: false
 jobs:
+  single_mode_watchlist:
+    if: ${{ inputs.mvp_universe == 'single_mode_watchlist' && inputs.mvp_three && !inputs.comparison_modes && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    permissions:
+      contents: write
+      actions: read
+    uses: ./.github/workflows/05-manual-watchlist-mode.yml
+    with:
+      mode: nonthinking
+      bundle_path: .github/frozen/manual-watchlist-approved-bf7c3b89
+      batch_sha256: ${{ inputs.request_sha256 }}
+      authorization_reference: ${{ inputs.authorization_reference }}
+      secret_upload_approval_reference: ${{ inputs.secret_upload_approval_reference }}
+      execute_live: ${{ inputs.execute_live }}
+    secrets:
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
   preflight:
     if: ${{ !inputs.comparison_modes && (!inputs.execute_live && !inputs.mvp_three && inputs.request_sha256 != 'FREE_REMOTE_CLAIM_TEST' && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation') }}
     runs-on: ubuntu-latest
@@ -127,7 +142,7 @@ jobs:
             claim-evidence/
           retention-days: 14
   mvp:
-    if: ${{ !inputs.comparison_modes && (!inputs.execute_live && inputs.mvp_three && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation') }}
+    if: ${{ inputs.mvp_universe != 'single_mode_watchlist' && !inputs.comparison_modes && (!inputs.execute_live && inputs.mvp_three && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation') }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -189,7 +204,7 @@ jobs:
           assert len(rows)==(35 if os.environ['MVP_UNIVERSE']=='watchlist35' else 3) and all(x['status']=='success_simulated_model' for x in rows), 'Partial failure: inspect per-symbol evidence; do not retry automatically'
           PY
   mvp_live:
-    if: ${{ !inputs.comparison_modes && (inputs.execute_live && inputs.mvp_three && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation') }}
+    if: ${{ inputs.mvp_universe != 'single_mode_watchlist' && !inputs.comparison_modes && (inputs.execute_live && inputs.mvp_three && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation') }}
     permissions:
       contents: write
       actions: read
