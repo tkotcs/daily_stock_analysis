@@ -1,5 +1,6 @@
 import ast
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -7,7 +8,7 @@ from test_saved_news import ASOF, artifacts, item
 from saved_news import apply_saved_news_metadata, attach_saved_news_context, saved_news_status
 
 
-def test_actual_post_metadata_assignment_preserves_supplied_source():
+def test_actual_post_metadata_assignment_preserves_supplied_source(tmp_path):
     source = Path(__file__).with_name('mvp_three.py')
     assignments = [node for node in ast.walk(ast.parse(source.read_text('utf-8'))) if isinstance(node, ast.Assign) and any(isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == 'result' and target.attr == 'data_sources' for target in node.targets)]
     assert len(assignments) == 1
@@ -19,6 +20,16 @@ def test_actual_post_metadata_assignment_preserves_supplied_source():
     assert prepared.enhanced_context['news_source_note'] in result.data_sources
     assert 'original source' in result.data_sources
     assert result.search_performed is False and result.raw_response == 'original raw'
+    notification = Path(os.environ['DSA_FIXED_SOURCE']) / 'src/notification.py'
+    appender = next(node for node in ast.walk(ast.parse(notification.read_text('utf-8'))) if isinstance(node, ast.FunctionDef) and node.name == '_append_data_sources_line')
+    appender.decorator_list = []
+    namespace = dict(List=list, Dict=dict, AnalysisResult=SimpleNamespace)
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[appender], type_ignores=[])), str(notification), 'exec'), namespace)
+    lines = []
+    assert namespace['_append_data_sources_line'](lines, result, dict(data_sources_label='来源'))
+    report = tmp_path / 'REPORT.md'
+    report.write_text('\n'.join(lines), encoding='utf-8')
+    assert prepared.enhanced_context['news_source_note'] in report.read_text('utf-8')
 
 
 def test_status_parent_serialization_and_legacy_state(tmp_path):
