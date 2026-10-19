@@ -297,7 +297,8 @@ class YfinanceFundamentalAdapter:
             if hasattr(div_series, "columns"):
                 div_series = div_series.iloc[:, 0]
             try:
-                cutoff = pd.Timestamp(as_of_date).tz_localize(div_series.index.tz) - pd.Timedelta(days=365)
+                as_of_timestamp = pd.Timestamp(as_of_date).tz_localize(div_series.index.tz)
+                cutoff = as_of_timestamp - pd.Timedelta(days=365)
                 for ts, value in div_series.items():
                     per_share = _safe_float(value)
                     if per_share is None or per_share <= 0:
@@ -320,7 +321,7 @@ class YfinanceFundamentalAdapter:
                         event_ts = pd.Timestamp(item["event_date"]).tz_localize(div_series.index.tz)
                     except Exception:
                         continue
-                    if event_ts >= cutoff:
+                    if cutoff <= event_ts <= as_of_timestamp:
                         ttm_events.append(item)
             except Exception as exc:
                 result["errors"].append(f"dividend_window:{type(exc).__name__}")

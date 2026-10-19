@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > For user-friendly release highlights, see the [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) page.
 
 ## [Unreleased]
+- [修复] Yahoo分红TTM窗口同时限制起点与截止日，未来除息事件不再进入历史现金分红、事件数与股息率；保留原事件列表，不把未来公告改成已实付。
 - [测试] 免费准备增加必须配合本地夹具的离线prompt探针，验证单标的CLI新闻状态与报告传递，离线数据明确非本次新行情；不执行模型dispatch、不生成可收费冻结请求。
 - [修复] 已保存新闻状态区分未配置、有效随附和空/拒绝，并审计ticker缺项；回归锁定来源说明不被模拟报告前缀丢弃。
 - [新功能] 手动免费准备支持独立已保存新闻输入，复用原生上下文与提示词槽位，校验截止时间和内容类型、不替换财务、不宣称已搜索或启用真实采集。

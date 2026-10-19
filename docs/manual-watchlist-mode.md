@@ -226,5 +226,12 @@ They do not execute the old 35-symbol pipeline or regenerate consumed requests.
 
 Rollback removes the new workflow/profile helpers and reverts the executor and
 session changes together; keep historical artifacts and all remote consumed refs.
+The controller checkout's Yahoo adapter bounds dividend TTM events to both ends
+of the trailing window, excluding future ex-dates from historical cash sums and
+yield. The supplied event list remains unchanged; this does not add official
+announced-future-event ingestion, prove payment execution, or modify the pinned
+`577624a` business checkout used by the manual controller. That pinned runtime
+does not inherit this source fix until an explicitly reviewed source transition.
+
 No Chinese counterpart existed for this new topic; local delivery notes explain
 the same entry in Chinese. The upstream bilingual README is unchanged.
