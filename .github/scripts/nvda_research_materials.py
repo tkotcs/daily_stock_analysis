@@ -80,7 +80,6 @@ def attach_reviewed_materials(artifacts, packet, asof, out):
         earnings = fundamental.setdefault('earnings', {})
         data = earnings.setdefault('data', {})
         data.setdefault('dividend', {})['announced_future'] = copy.deepcopy(accepted)
-        earnings['status'] = 'partial'
     (out/'DIVIDEND_ANNOUNCEMENT_AUDIT.json').write_text(json.dumps(audit,ensure_ascii=False,indent=2),encoding='utf-8')
     return replace(artifacts, enhanced_context=enhanced, fundamental_context=enhanced.get('fundamental_context'),
                    news_context=supplied or artifacts.news_context)

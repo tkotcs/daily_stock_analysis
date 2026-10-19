@@ -246,6 +246,10 @@ requires `source`, HTTPS `source_url` without credentials, `announcement_date`,
 aware `fetched_at`, `ex_dividend_date`, positive finite
 `cash_dividend_per_share`, and a three-uppercase-letter `currency`.
 `record_date` and `payable_date` are optional calendar dates.
+Accepting a dividend announcement does not upgrade the existing earnings or
+parent fundamental status. Its acceptance is expressed only by the separate
+announcement audit; a missing financial report remains missing and existing
+financial errors and source chains are preserved.
 
 Calendar fields must use `YYYY-MM-DD`. Their comparison calendar is explicitly
 UTC; timestamps keep their supplied offset. Collection must not be after the

@@ -117,6 +117,26 @@ def test_legacy_financial_release_and_independent_dividend_can_coexist(tmp_path)
     assert len(combined.enhanced_context['dividend_announcement_audit']['accepted']) == 1
 
 
+@pytest.mark.parametrize('parent_status', ['not_supported', 'failed', 'partial'])
+def test_dividend_evidence_does_not_upgrade_failed_financial_status(tmp_path, parent_status):
+    original = artifacts()
+    original.fundamental_context['status'] = parent_status
+    earnings = original.fundamental_context['earnings']
+    earnings.update(status='failed', errors=['SYNTHETIC financial unavailable'], source_chain=['SYNTHETIC failed source'])
+    earnings['data'].pop('financial_report')
+    before = copy.deepcopy(original)
+    prepared = attach_reviewed_materials(original, {'SYNTHETIC': dict(dividend_announcements=[announcement()])}, ASOF, tmp_path)
+    assert original == before
+    assert prepared.fundamental_context['status'] == parent_status
+    result = prepared.fundamental_context['earnings']
+    assert result['status'] == 'failed'
+    assert result['errors'] == earnings['errors'] and result['source_chain'] == earnings['source_chain']
+    assert 'financial_report' not in result['data']
+    assert result['data']['dividend']['ttm_cash_dividend_per_share'] == 3.64
+    assert len(prepared.enhanced_context['dividend_announcement_audit']['accepted']) == 1
+    assert '2026-11-19' in format_dividend_announcements(prepared.enhanced_context)
+
+
 @pytest.mark.parametrize('with_news', [False, True])
 def test_controller_wiring_with_native_pack_body_formatter_and_report(tmp_path, monkeypatch, with_news):
     import src

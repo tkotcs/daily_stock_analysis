@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > For user-friendly release highlights, see the [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) page.
 
 ## [Unreleased]
+- [修复] 随附未来分红仅通过独立审计说明接受状态，不再把原earnings失败状态覆盖为partial；父级财务状态、错误与来源链保持原义。
 - [新功能] 手动research-data支持独立未来分红公告，统一在pack前准备并通过controller包装原生prompt展示，保留历史TTM与财报；日期比较明确UTC日历，缺失/空集/拒绝不代表不存在公告，不改固定业务源或执行在线采集。
 - [修复] Yahoo分红TTM窗口同时限制起点与截止日，未来除息事件不再进入历史现金分红、事件数与股息率；保留原事件列表，不把未来公告改成已实付。
 - [测试] 免费准备增加必须配合本地夹具的离线prompt探针，验证单标的CLI新闻状态与报告传递，离线数据明确非本次新行情；不执行模型dispatch、不生成可收费冻结请求。
