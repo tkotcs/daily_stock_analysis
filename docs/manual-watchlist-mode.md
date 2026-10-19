@@ -235,3 +235,37 @@ does not inherit this source fix until an explicitly reviewed source transition.
 
 No Chinese counterpart existed for this new topic; local delivery notes explain
 the same entry in Chinese. The upstream bilingual README is unchanged.
+
+### Supplied future dividend announcements
+
+The controller's existing `--research-data FILE` accepts a per-symbol object
+containing `dividend_announcements` independently of the existing financial
+release fields. An announcement-only object does not replace financial data,
+historical `dividend.events`, TTM cash, event counts or yield. Each announcement
+requires `source`, HTTPS `source_url` without credentials, `announcement_date`,
+aware `fetched_at`, `ex_dividend_date`, positive finite
+`cash_dividend_per_share`, and a three-uppercase-letter `currency`.
+`record_date` and `payable_date` are optional calendar dates.
+
+Calendar fields must use `YYYY-MM-DD`. Their comparison calendar is explicitly
+UTC; timestamps keep their supplied offset. Collection must not be after the
+cutoff, announcement date must not be after the UTC collection date, and ex-date
+must be strictly after the UTC cutoff date. Same-day ex-dates are not confirmed
+future events. Date-only publication evidence does not prove an exact first
+publication time. A payable date is planned payment, not proof of execution.
+
+Materials are loaded once and attached before the native pack-building call;
+analyze consumes those same prepared artifacts. The controller wraps the native
+formatter to append a separate source-limited announcement section, compatible
+with the unchanged pinned `577624a` formatter. This is a controller integration,
+not a modification or upgrade of that pinned business checkout. The native pack
+continues its existing coverage/status summary; it does not claim to summarize
+the individual announcement details.
+
+`DIVIDEND_ANNOUNCEMENT_AUDIT.json` and future `PROGRAM_FACTS.json` preserve
+accepted entries and indexed rejection reasons. Missing material is unknown;
+an explicit empty list or all-rejected input is not evidence of no announcements.
+Structural/cutoff validation does not authenticate the source or prove payment,
+after-tax receipts, ADR conversion or a comprehensive company-action search.
+This path does not add news hits, refresh old batches, fetch sources or authorize
+model dispatch. No legacy report or model narrative is rewritten.

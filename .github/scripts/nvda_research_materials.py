@@ -1,9 +1,110 @@
 """Small free-input adapter for manual native request preparation; never calls a model."""
-import copy,json,re,urllib.request,xml.etree.ElementTree as ET,email.utils
-from datetime import datetime,timedelta,timezone
+import copy,json,math,re,urllib.request,xml.etree.ElementTree as ET,email.utils
+from datetime import date,datetime,timedelta,timezone
 from dataclasses import replace
+from urllib.parse import urlsplit
 IR='https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/'
 RSS='https://nvidianews.nvidia.com/releases.xml'
+
+
+def attach_reviewed_materials(artifacts, packet, asof, out):
+    if asof.utcoffset() is None:
+        raise ValueError('research_cutoff_timezone_required')
+    if not isinstance(packet, dict):
+        raise ValueError('research_packet_object_required')
+    item = packet.get(artifacts.code, {})
+    if not isinstance(item, dict):
+        raise ValueError('research_ticker_object_required')
+    enhanced, supplied = artifacts.enhanced_context, None
+    if 'values' in item:
+        release = {key: value for key, value in item.items() if key != 'dividend_announcements'}
+        enhanced, supplied = attach_reviewed_release(enhanced, {artifacts.code: release}, asof, out)
+    elif set(item) - {'dividend_announcements'}:
+        raise ValueError('research_material_type_unknown')
+    enhanced = copy.deepcopy(enhanced)
+    provided = 'dividend_announcements' in item
+    entries = item.get('dividend_announcements', [])
+    accepted, rejected = [], []
+    if not isinstance(entries, list):
+        raise ValueError('dividend_announcements_list_required')
+    cutoff_date = asof.astimezone(timezone.utc).date()
+    for index, entry in enumerate(entries):
+        try:
+            if artifacts.enhanced_context.get('is_index_etf'):
+                raise ValueError('dividend_enterprise_material_not_applicable_ETF')
+            if not isinstance(entry, dict):
+                raise ValueError('dividend_announcement_object_required')
+            source, source_url = entry.get('source'), entry.get('source_url')
+            if not isinstance(source, str) or not source.strip() or not isinstance(source_url, str):
+                raise ValueError('dividend_source_required')
+            parsed_url = urlsplit(source_url)
+            if parsed_url.scheme != 'https' or not parsed_url.hostname or parsed_url.username is not None or parsed_url.password is not None:
+                raise ValueError('dividend_https_source_without_credentials_required')
+            dates = {}
+            for field in ('announcement_date', 'ex_dividend_date', 'record_date', 'payable_date'):
+                value = entry.get(field)
+                if field in ('record_date', 'payable_date') and value is None:
+                    dates[field] = None
+                    continue
+                if not isinstance(value, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', value):
+                    raise ValueError('dividend_date_precision_required')
+                dates[field] = date.fromisoformat(value)
+            fetched = datetime.fromisoformat(entry['fetched_at'])
+            if fetched.utcoffset() is None:
+                raise ValueError('dividend_fetched_timezone_required')
+            if fetched > asof or dates['announcement_date'] > fetched.astimezone(timezone.utc).date():
+                raise ValueError('dividend_announcement_unavailable_at_cutoff')
+            if not dates['announcement_date'] <= cutoff_date < dates['ex_dividend_date']:
+                raise ValueError('dividend_future_ex_date_required')
+            if dates['record_date'] is not None and dates['record_date'] < dates['ex_dividend_date']:
+                raise ValueError('dividend_record_date_before_ex_date')
+            if dates['payable_date'] is not None and dates['payable_date'] < (dates['record_date'] or dates['ex_dividend_date']):
+                raise ValueError('dividend_payable_date_before_record_or_ex_date')
+            amount, currency = entry.get('cash_dividend_per_share'), entry.get('currency')
+            if type(amount) not in (int, float) or not math.isfinite(amount) or amount <= 0:
+                raise ValueError('dividend_positive_finite_amount_required')
+            if not isinstance(currency, str) or not re.fullmatch('[A-Z]{3}', currency):
+                raise ValueError('dividend_currency_required')
+            accepted.append(dict(source=source.strip(), source_url=source_url, fetched_at=entry['fetched_at'],
+                                 cash_dividend_per_share=amount, currency=currency,
+                                 **{field: value.isoformat() if value is not None else None for field, value in dates.items()}))
+        except (ValueError, TypeError, KeyError, OverflowError) as error:
+            rejected.append(dict(index=index, reason=str(error)))
+    audit = dict(provided=provided, accepted=accepted, rejected=rejected, asof=asof.isoformat(),
+                 date_comparison_calendar='UTC', date_precision='date_only_not_first_publication_time',
+                 source_verification='supplied_material_not_automatically_authenticated')
+    enhanced['dividend_announcement_audit'] = audit
+    if accepted:
+        fundamental = enhanced.setdefault('fundamental_context', {}) or {}
+        enhanced['fundamental_context'] = fundamental
+        earnings = fundamental.setdefault('earnings', {})
+        data = earnings.setdefault('data', {})
+        data.setdefault('dividend', {})['announced_future'] = copy.deepcopy(accepted)
+        earnings['status'] = 'partial'
+    (out/'DIVIDEND_ANNOUNCEMENT_AUDIT.json').write_text(json.dumps(audit,ensure_ascii=False,indent=2),encoding='utf-8')
+    return replace(artifacts, enhanced_context=enhanced, fundamental_context=enhanced.get('fundamental_context'),
+                   news_context=supplied or artifacts.news_context)
+
+
+def format_dividend_announcements(context, report_language='zh'):
+    audit = context.get('dividend_announcement_audit')
+    if not audit:
+        return ''
+    english = report_language == 'en'
+    heading = 'Supplied announced future dividends' if english else '随附已公告未来分红'
+    limit = ('Not historical ex-events, TTM cash, realized yield, actual payment, after-tax income or ADR conversion. '
+             'Not recent news or a comprehensive announcement search. Sources are supplied, not automatically authenticated.'
+             if english else '独立于历史除息事件及TTM；不是已实现股息率、实际支付、税后到账或ADR换算；'
+             '不计入近三日新闻，也不是完整公告检索。来源为随附材料，不自动认证真实性。')
+    state = ('materials not supplied' if english else '未提供未来公告材料') if not audit['provided'] else (
+        'This input has no displayable records; future announcements remain unknown.' if english else
+        '本输入包无可展示记录，不代表不存在未来公告。')
+    if audit['accepted']:
+        state = 'Display only the validated supplied records.' if english else '仅展示通过结构及截止校验的随附记录。'
+    labels = ('Dates use UTC calendar comparisons; announcement dates have day precision only, not first-publication timestamps; payable_date is planned payment.'
+              if english else '日期比较采用UTC日历；公告日期仅日精度，不证明首次上线时分；payable_date仅计划支付日。')
+    payload = json.dumps(dict(asof=audit['asof'], accepted=audit['accepted'], rejected=audit['rejected']),ensure_ascii=False)
+    return f'\n### {heading}\n{state}\n{limit}\n{labels}\n{payload}\n'
 
 
 def attach_reviewed_release(context, packet, asof, out):

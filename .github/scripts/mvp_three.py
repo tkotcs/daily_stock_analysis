@@ -170,39 +170,35 @@ def run_symbol(source,out,code,offline=None,inject=False,research_data=None,news
     pipeline.trend_analyzer.analyze=trend
     analyzer=pipeline.analyzer;assert analyzer._router and not config.litellm_fallback_models
     analyzer._router.num_retries=0
-    prepared_news = {}
-    if news_data:
-        from dataclasses import replace
-        from saved_news import attach_saved_news_context
-        news_packet = json.loads(news_data.read_text('utf-8'))
+    prepared_materials = {}
+    if news_data or research_data:
+        news_packet = json.loads(news_data.read_text('utf-8')) if news_data else None
+        research_packet = json.loads(research_data.read_text('utf-8')) if research_data else None
+        from nvda_research_materials import attach_reviewed_materials, format_dividend_announcements
+        native_format_prompt = analyzer._format_prompt
+        def format_material_prompt(context, name, news_context=None, report_language='zh', analysis_context_pack_summary=None):
+            return native_format_prompt(context,name,news_context=news_context,report_language=report_language,analysis_context_pack_summary=analysis_context_pack_summary) + format_dividend_announcements(context,report_language)
+        analyzer._format_prompt = format_material_prompt
         original_pack_outputs = pipeline._build_analysis_context_pack_outputs
-        def prepare_news_pack(artifacts, **kwargs):
+        def prepare_material_pack(artifacts, **kwargs):
             if research_data:
-                from nvda_research_materials import attach_reviewed_release
-                enhanced, supplied = attach_reviewed_release(artifacts.enhanced_context,json.loads(research_data.read_text('utf-8')),now,out)
-                artifacts = replace(artifacts, enhanced_context=enhanced, fundamental_context=enhanced.get('fundamental_context'), news_context=supplied or artifacts.news_context)
-            artifacts = attach_saved_news_context(artifacts, news_packet, now)
-            prepared_news['artifacts'] = artifacts
-            save(out/'SAVED_NEWS_AUDIT.json',artifacts.enhanced_context['saved_news_audit'])
+                artifacts = attach_reviewed_materials(artifacts,research_packet,now,out)
+            if news_data:
+                from saved_news import attach_saved_news_context
+                artifacts = attach_saved_news_context(artifacts, news_packet, now)
+                save(out/'SAVED_NEWS_AUDIT.json',artifacts.enhanced_context['saved_news_audit'])
+            prepared_materials['artifacts'] = artifacts
             return original_pack_outputs(artifacts, **kwargs)
-        pipeline._build_analysis_context_pack_outputs = prepare_news_pack
+        pipeline._build_analysis_context_pack_outputs = prepare_material_pack
     native_analyze=analyzer.analyze
     def analyze(context,*a,**k):
         assert tech and context['date']==target
-        if news_data:
-            artifacts = prepared_news['artifacts']
+        if news_data or research_data:
+            artifacts = prepared_materials['artifacts']
             context = artifacts.enhanced_context
             k['news_context'] = artifacts.news_context
         # Existing native helper evaluates the full MA60 window BEFORE tail(2).
         attach_previous_ma60(context, pipeline._build_analysis_context_from_daily_df(code, frame))
-        if research_data and not news_data:
-            from nvda_research_materials import attach_reviewed_release
-            context, supplied = attach_reviewed_release(context,json.loads(research_data.read_text('utf-8')),now,out)
-            if supplied:
-                k['news_context'] = supplied
-                # The pipeline's earlier pack summarized the unmodified Yahoo quarter.
-                # Native formatting below uses the now-updated fields and source note.
-                k['analysis_context_pack_summary'] = None
         contexts.append(context);save(out/'NATIVE_CONTEXT.json',context)
         f=fixture(code,context);fixtures.append(f);save(out/'SIMULATED_MODEL.json',f)
         if prompt_only:
@@ -271,7 +267,7 @@ def run_symbol(source,out,code,offline=None,inject=False,research_data=None,news
 def main():
     p=argparse.ArgumentParser();p.add_argument('--source',required=True,type=pathlib.Path);p.add_argument('--out',required=True,type=pathlib.Path)
     p.add_argument('--child',choices=WATCHLIST);p.add_argument('--offline-data',type=pathlib.Path);p.add_argument('--inject-failure',choices=WATCHLIST)
-    p.add_argument('--research-data',type=pathlib.Path,help='Optional reviewed public release packet; no model call')
+    p.add_argument('--research-data',type=pathlib.Path,help='Reviewed release and/or separate dividend_announcements by symbol; no fetching')
     p.add_argument('--news-data',type=pathlib.Path,help='Saved news evidence by symbol; no fetching or financial replacement')
     p.add_argument('--offline-prompt-only',action='store_true',help='Offline fixture prompt and simulated report; no model dispatch or final request')
     p.add_argument('--universe',choices=('three','watchlist35'),default='three');p.add_argument('--only',help='Free recovery subset; use a NEW output directory')
