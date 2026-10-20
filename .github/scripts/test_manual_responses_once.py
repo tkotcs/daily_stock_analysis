@@ -41,19 +41,21 @@ def test_actual_usage_cached_subset_and_reasoning_not_double_charged():
     assert cost(usage, profile)['status'] == 'unknown_usage'
 
 
-def test_real_sender_HTTP_failure_consumes_one_attempt_and_redacts(tmp_path, monkeypatch):
+@pytest.mark.parametrize('failure_kind', ['HTTP', 'wrong_model', 'missing_model'])
+def test_real_sender_failure_consumes_one_attempt_and_redacts(tmp_path, monkeypatch, failure_kind):
     import sys
     import subprocess
     import httpx
     import manual_responses_once as sender
     import remote_execution_claim as remote
     key = 'SYNTHETIC_TEST_CREDENTIAL'
+    send_batch = 'f1f3e8dbc009e1eb0798bb397147c511cf5f8904f6ef64d7acb365bd26e908c4'
     for name, value in dict(SEEKERX=key, GITHUB_RUN_ATTEMPT='1',
                             GITHUB_REF='refs/heads/deploy/phase2h-request-preparation',
                             GITHUB_ACTOR='owner', GITHUB_REPOSITORY_OWNER='owner',
                             GITHUB_RUN_ID='1234567', GITHUB_SHA='a' * 40,
                             GITHUB_REPOSITORY='owner/repo', GITHUB_TOKEN='SYNTHETIC_GITHUB_KEY',
-                            APPROVAL_REF='synthetic approval ' + BATCH,
+                            APPROVAL_REF='synthetic approval ' + send_batch,
                             RESEARCH_API_BASE='https://api.sequenceq.com/v1').items():
         monkeypatch.setenv(name, value)
     monkeypatch.setattr(subprocess, 'check_output', lambda *a, **k: '577624ad8459871630c690e5760ae504ac6f2b9f\n')
@@ -71,13 +73,22 @@ def test_real_sender_HTTP_failure_consumes_one_attempt_and_redacts(tmp_path, mon
             events.append('before_send')
     monkeypatch.setattr(remote, 'RemoteExecutionClaim', Claim)
     class Response:
-        status_code = 401
+        status_code = 401 if failure_kind == 'HTTP' else 200
         def __enter__(self):
             return self
         def __exit__(self, *args):
             pass
         def iter_bytes(self):
-            yield ('synthetic error ' + key).encode()
+            if failure_kind == 'HTTP':
+                yield ('synthetic error ' + key).encode()
+            else:
+                response = dict(status='completed', output=[dict(type='message', content=[
+                    dict(type='output_text', text=json.dumps(dict(synthetic=key)))])],
+                    usage=dict(input_tokens=10, output_tokens=5,
+                               input_tokens_details=dict(cached_tokens=0)))
+                if failure_kind == 'wrong_model':
+                    response['model'] = 'unrequested-SYNTHETIC-model'
+                yield ('data: ' + json.dumps(dict(type='response.completed', response=response)) + '\n\n').encode()
     class Client:
         def __init__(self, **kwargs):
             assert kwargs['follow_redirects'] is False and kwargs['trust_env'] is False
@@ -92,8 +103,8 @@ def test_real_sender_HTTP_failure_consumes_one_attempt_and_redacts(tmp_path, mon
             return Response()
     monkeypatch.setattr(httpx, 'Client', Client)
     out = tmp_path / 'out'
-    monkeypatch.setattr(sys, 'argv', ['sender', '--bundle', str(ROOT / '.github/frozen/sol-aapl-20261020'),
-                                    '--source', str(tmp_path), '--out', str(out), '--batch-sha', BATCH])
+    monkeypatch.setattr(sys, 'argv', ['sender', '--bundle', str(ROOT / '.github/frozen/sol-aapl-news-20261020'),
+                                    '--source', str(tmp_path), '--out', str(out), '--batch-sha', send_batch])
     with pytest.raises(SystemExit) as stopped:
         sender.main()
     assert stopped.value.code == 1
@@ -101,6 +112,13 @@ def test_real_sender_HTTP_failure_consumes_one_attempt_and_redacts(tmp_path, mon
     status = json.loads((out / 'STATUS.json').read_text('utf-8'))
     assert status['actual_model_POST_attempts'] == 1 and status['status'] == 'failed_no_retry'
     assert (out / 'POST_ATTEMPT.json').exists()
+    if failure_kind != 'HTTP':
+        assert status['reason'] == 'response_model_mismatch_no_retry'
+        assert status['usage']['input_tokens'] == 10
+        assert status['cost_estimate']['estimated_CNY'] is not None
+        assert (out / 'RESPONSE_RESULT.json').exists()
+        assert (out / 'MODEL_RAW_TEXT.txt').exists()
+        assert not (out / 'REPORT.md').exists()
     assert not any(key.encode() in p.read_bytes() for p in out.iterdir())
 
 

@@ -12,16 +12,20 @@ import pytest
 from manual_responses_once import load_bundle
 
 ROOT = Path(__file__).resolve().parents[2]
-BUNDLE = Path('.github/frozen/sol-aapl-news-20261020')
 BATCH = 'f1f3e8dbc009e1eb0798bb397147c511cf5f8904f6ef64d7acb365bd26e908c4'
 
 
 @pytest.mark.parametrize('autocrlf', ['true', 'false'])
-def test_git_archive_preserves_reviewed_bundle_bytes(tmp_path, autocrlf):
+@pytest.mark.parametrize('folder,batch', [
+    ('sol-aapl-news-20261020', BATCH),
+    ('sol-aapl-final-20261020', '02d2f25f67487581f9111ac7924b020c9ed708ea04c104c3cb4105c9f2746d87'),
+])
+def test_git_archive_preserves_reviewed_bundle_bytes(tmp_path, autocrlf, folder, batch):
+    bundle = Path('.github/frozen') / folder
     repository = tmp_path / 'repository'
     repository.mkdir()
     shutil.copyfile(ROOT / '.gitattributes', repository / '.gitattributes')
-    shutil.copytree(ROOT / BUNDLE, repository / BUNDLE)
+    shutil.copytree(ROOT / bundle, repository / bundle)
 
     def git(*args):
         return subprocess.check_output(['git', '-C', str(repository), *args],
@@ -30,8 +34,8 @@ def test_git_archive_preserves_reviewed_bundle_bytes(tmp_path, autocrlf):
     git('init', '-q')
     git('config', 'core.autocrlf', autocrlf)
     git('add', '.')
-    for original in (repository / BUNDLE).iterdir():
-        name = (BUNDLE / original.name).as_posix()
+    for original in (repository / bundle).iterdir():
+        name = (bundle / original.name).as_posix()
         assert git('show', ':' + name) == original.read_bytes(), name
     tree = git('write-tree').decode().strip()
     # The producer may run on Windows; the consumer is the Linux Actions runner.
@@ -40,15 +44,15 @@ def test_git_archive_preserves_reviewed_bundle_bytes(tmp_path, autocrlf):
     exported = tmp_path / 'exported'
     with tarfile.open(fileobj=io.BytesIO(archive)) as stream:
         # Read only the expected regular bundle files; do not extract arbitrary paths.
-        for original in (repository / BUNDLE).iterdir():
-            name = BUNDLE / original.name
+        for original in (repository / bundle).iterdir():
+            name = bundle / original.name
             member = stream.getmember(name.as_posix())
             assert member.isfile()
             target = exported / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(stream.extractfile(member).read())
             assert target.read_bytes() == original.read_bytes(), name
-    lock, _, _, _ = load_bundle(exported / BUNDLE, BATCH)
-    news = (exported / BUNDLE / 'NEWS_PACKET.json').read_bytes()
+    lock, _, _, _ = load_bundle(exported / bundle, batch)
+    news = (exported / bundle / 'NEWS_PACKET.json').read_bytes()
     assert hashlib.sha256(news).hexdigest() == lock['news_packet_sha256']
     assert len(json.loads(news)['AAPL']) == 2

@@ -74,13 +74,22 @@ the existing deploy branch restriction, and a first-attempt-only requirement.
 Only after human approval does `manual_responses_once.py` read `SEEKERX`.
 It verifies the lock and each request/context/profile hash, endpoint, selected
 Sol tariff, reservation, source commit, source expiry and latest complete market
-session. The existing create-only protected remote claims reserve both the new
+session. It also binds `context.code` to the locked symbol and both `context.date`
+and `context.today.date` to the locked session. Before any claim or POST, the
+sender requires an existing date table that exactly matches the context through
+the same `qualify_session_references()` validator used in preparation.
+The loader's default historical inspection mode can read the first consumed
+bundle without a date table; execution always requires the table and does not
+inherit that exception. The existing create-only protected remote claims reserve both the new
 batch and request; reservations are never reused or released after ambiguity.
 
 The sender makes one direct Responses POST using zero transport retries and
 no redirects/fallback. Raw response bytes are retained with credential redaction.
 Only a `response.completed` event with completed status supplies successful text;
 failed, incomplete, missing or duplicate terminal events stop without retry.
+The completed response must also report the exact frozen requested model.
+A missing or different model stops report generation after preserving the
+raw response, model text, usage and cost estimate; that attempt remains consumed.
 Usage is saved as returned; cached input is a subset of total input, and
 reasoning is not added to output a second time. Unknown usage stays unknown.
 The CNY cost estimate uses the user-selected external tariff, not a supplier bill
@@ -94,7 +103,7 @@ provider migration or an automated research schedule.
 
 ### Prepared follow-up with two saved media summaries
 
-The next unapproved batch is
+The consumed follow-up batch is
 `f1f3e8dbc009e1eb0798bb397147c511cf5f8904f6ef64d7acb365bd26e908c4`
 at `.github/frozen/sol-aapl-news-20261020`. It preserves the completed-session
 quote date, original source collection time and material expiry of the earlier
@@ -108,11 +117,20 @@ and a SHA256 of the saved summary text. Publication is not event effective time.
 --financial-audit FILE` validates and attaches the packet with the existing
 saved-news adapter, then rebuilds the native user prompt using the fixed
 formatter and context pack. It replaces old missing-news prose rather than
-appending contradictory new information. Original non-user messages and
-financial/quote fields remain intact; financial qualification, independent
+appending contradictory new information. Financial/quote fields remain intact;
+financial qualification, independent
 financial/dividend evidence and the explicit session-date table are reapplied.
 Only the selected legacy formatter overrides are used; no native model client,
 Router or dispatch is initialized during preparation.
+
+New candidates replace one exact known Chinese legacy system sentence about
+US market rules. The replacement distinguishes account-dependent intraday
+trading from the usual T+1 settlement cycle, and mentions LULD price bands and
+trading pauses as well as market circuit breakers. Other system text and all
+quoted user evidence remain unchanged. Migration status explicitly records
+`known_US_market_rule_qualified`; it does not claim the system message is
+byte-identical when this correction applies. Already-consumed prompts are
+never rewritten.
 
 The registered paid job maps each accepted exact batch hash to its own folder,
 and the old DeepSeek selector excludes both Sol hashes. The sender also verifies
@@ -120,6 +138,35 @@ the news packet hash, equality with accepted context evidence, summary hashes
 and origin, aware times and cutoff before any remote claim or POST. As with the
 first batch, a new human authorization and Environment approval are required;
 adding this frozen bundle on review does not authorize or dispatch it.
+
+### Final AAPL approval candidate
+
+Batch `02d2f25f67487581f9111ac7924b020c9ed708ea04c104c3cb4105c9f2746d87`
+maps only to `.github/frozen/sol-aapl-final-20261020`. The legacy DeepSeek
+selector excludes this batch as well as both historical Sol batches.
+New free capture Run `39409811997` collected the material at
+`2026-10-20T10:43:27.631609+00:00`, with completed session `2026-10-19`.
+Its deadline remains `2026-10-20T20:00:00+00:00`. News is the previously saved
+two-summary packet with its original publication/fetch times; the separate
+news cutoff does not claim a new search or extend quote expiry.
+The request hash is
+`6f12da708a464d19256d40d0037dc7cf6aa78cd69f504d4244db42e8aefdbf92`.
+The new lock requires the date table and records the market-rule correction.
+
+This candidate remains one AAPL call, high reasoning, 32768 output tokens
+including reasoning, with a CNY 0.05 reservation, no retries or fallback.
+It needs its own exact-batch authorization and manual Environment approval.
+The two historical Sol requests are consumed and their remote claims are
+never removed. The last test must preserve completed output, usage, raw text,
+all model fields, program facts and QA; success does not auto-publish a report.
+After completion, close the manual workflow/Actions and review the saved
+artifacts before declaring the tested manual path ready for use.
+
+The tested use path is owner-operated AAPL research with per-batch review and
+approval. A final single-symbol test does not migrate the default provider,
+validate every watchlist symbol, authorize recurring charges, or configure
+production notification and scheduling. Any broader launch needs that scope
+and its actual entry points to be specified and validated.
 
 ## Prepare, without a model call
 
@@ -132,7 +179,8 @@ positive and internally ordered. A bilingual date table with each bar's
 open/high/low/close is appended once; conflicting or stale appended tables are
 refused. Instructions ask the model to use the absolute session date rather
 than unanchored "yesterday" or "previous day" references. Original context
-precision and all preexisting message text remain intact.
+precision is preserved; the known market-rule system sentence is corrected
+separately as described above.
 
 This changes future request hashes and does not modify already-consumed locks,
 responses or their authorization. The low-level converter still accepts no

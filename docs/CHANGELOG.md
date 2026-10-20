@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > For user-friendly release highlights, see the [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) page.
 
 ## [Unreleased]
+- [修复] Sol发送前绑定冻结目标日、上下文标的/日期及已存在的日线对照表，拒绝重新计算哈希仍存在语义错配的材料；未来候选规范日内交易、T+1交收与LULD表述，不改已消费提示词。
+- [修复] Sol单次发送器核对completed响应模型与冻结请求一致；模型缺失或不匹配时保留原始响应及Usage并拒绝生成成功，不重试已消费请求。
 - [修复] Sol冻结材料禁用Git换行转换，保留已审阅新闻包的原字节及哈希；回归验证Git索引与Linux风格导出产物，避免Windows本机通过而Runner在POST前拒绝。
 - [新功能] 已保存新闻支持明确标注的人工摘要；Responses候选复用原生formatter重建新闻段、保留系统消息与财务日期边界，并冻结未授权AAPL双报道候选；执行前核对新闻包/摘要哈希与截止时点，不把条目数当独立来源数。
 - [修复] Responses候选准备追加带绝对日期的两日OHLC对照并拒绝倒置/冲突上下文，独立QA同步展示日期与高低点；不重写已消费请求或模型原文，不将离线通过称为真实模型修复。

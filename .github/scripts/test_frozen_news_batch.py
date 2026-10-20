@@ -13,6 +13,7 @@ from manual_responses_candidate import canonical
 ROOT = Path(__file__).resolve().parents[2]
 NEW = 'f1f3e8dbc009e1eb0798bb397147c511cf5f8904f6ef64d7acb365bd26e908c4'
 OLD = '3e23087e93c3ad203e1d2ef7ced882261b9c45872fc34d8a37740a4b79ee5223'
+FINAL = '02d2f25f67487581f9111ac7924b020c9ed708ea04c104c3cb4105c9f2746d87'
 FOLDER = ROOT / '.github/frozen/sol-aapl-news-20261020'
 
 
@@ -62,7 +63,7 @@ def test_rebound_bad_summary_hash_cannot_pass_structural_preflight(tmp_path):
         load_bundle(target, hashlib.sha256(raw).hexdigest())
 
 
-@pytest.mark.parametrize('digest', [NEW, OLD])
+@pytest.mark.parametrize('digest', [NEW, OLD, FINAL])
 def test_each_Sol_hash_selects_its_own_bundle_and_skips_legacy(digest):
     workflow = yaml.load((ROOT / '.github/workflows/04-nvda-free-preflight.yml').read_text('utf-8'), Loader=yaml.BaseLoader)
     inputs = SimpleNamespace(execute_live=True, mvp_three=True, comparison_modes=False,
@@ -78,5 +79,29 @@ def test_each_Sol_hash_selects_its_own_bundle_and_skips_legacy(digest):
     job = workflow['jobs']['sol_aapl_paid']
     expression = job['env']['SOL_BUNDLE'].removeprefix('${{').removesuffix('}}').strip().replace('&&', 'and').replace('||', 'or')
     bundle = eval(expression, {'__builtins__': {}}, dict(inputs=inputs))
-    assert bundle == ('.github/frozen/sol-aapl-news-20261020' if digest == NEW else '.github/frozen/sol-aapl-20261020')
+    assert bundle == {
+        NEW: '.github/frozen/sol-aapl-news-20261020',
+        OLD: '.github/frozen/sol-aapl-20261020',
+        FINAL: '.github/frozen/sol-aapl-final-20261020',
+    }[digest]
     assert job['environment'] == 'nvda-one-call-approval'
+
+
+def test_final_bundle_uses_actual_new_capture_and_strict_session_binding():
+    lock, request, context, _ = load_bundle(
+        ROOT / '.github/frozen/sol-aapl-final-20261020', FINAL, require_session_table=True)
+    old, old_request, _, _ = load_bundle(FOLDER, NEW)
+    assert lock['source_free_run'] == '39409811997'
+    assert lock['analysis_asof'] == '2026-10-20T10:43:27.631609+00:00'
+    assert lock['analysis_asof'] != old['analysis_asof']
+    assert lock['material_expires_at'] == old['material_expires_at']
+    assert lock['request_sha256'] != old['request_sha256']
+    assert lock['require_session_reference_table'] is True
+    assert lock['known_US_market_rule_qualified'] is True
+    assert context['code'] == 'AAPL' and context['date'] == lock['target_session']
+    assert context['saved_news_audit']['accepted'] == json.loads((FOLDER / 'NEWS_PACKET.json').read_bytes())['AAPL']
+    old_system = [m for m in old_request['input'] if m['role'] == 'system']
+    new_system = [m for m in request['input'] if m['role'] == 'system']
+    from manual_responses_candidate import qualify_us_market_rules
+    assert new_system == qualify_us_market_rules(dict(messages=old_system))['messages']
+    assert lock['max_total_POSTs'] == 1 and lock['authorize_paid_POST'] is False

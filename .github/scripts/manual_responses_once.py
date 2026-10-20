@@ -8,14 +8,14 @@ import os
 from pathlib import Path
 import sys
 
-from manual_responses_candidate import canonical, hosted_endpoint, budget_estimate
+from manual_responses_candidate import canonical, hosted_endpoint, budget_estimate, qualify_session_references
 
 
 def digest(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
-def load_bundle(bundle, expected):
+def load_bundle(bundle, expected, *, require_session_table=False):
     raw = (bundle / 'RESPONSES_LOCK.json').read_bytes()
     if digest(raw) != expected:
         raise ValueError('new_batch_hash_mismatch')
@@ -44,6 +44,13 @@ def load_bundle(bundle, expected):
         raise ValueError('selected_Sol_budget_required')
     if budget_estimate(request, profile)['pricing_ambiguity_blocks_live']:
         raise ValueError('budget_not_approved')
+    context = loaded['CONTEXT.json']
+    if (context.get('code') != lock['symbol'] or context.get('date') != lock.get('target_session')
+            or (context.get('today') or {}).get('date') != lock.get('target_session')):
+        raise ValueError('frozen_context_identity_or_session_mismatch')
+    checked = qualify_session_references(context, dict(messages=request['input']))
+    if (require_session_table or lock.get('require_session_reference_table')) and checked['messages'] != request['input']:
+        raise ValueError('frozen_session_reference_table_missing')
     if lock.get('news_packet_sha256'):
         news_raw = (bundle / 'NEWS_PACKET.json').read_bytes()
         if digest(news_raw) != lock['news_packet_sha256']:
@@ -143,7 +150,7 @@ def main():
                 or os.environ.get('GITHUB_REF') != 'refs/heads/deploy/phase2h-request-preparation'
                 or os.environ.get('GITHUB_ACTOR') != os.environ.get('GITHUB_REPOSITORY_OWNER')):
             raise ValueError('owner_first_attempt_deploy_and_key_required')
-        lock, request, context, profile = load_bundle(args.bundle, args.batch_sha)
+        lock, request, context, profile = load_bundle(args.bundle, args.batch_sha, require_session_table=True)
         if hosted_endpoint(os.environ.get('RESEARCH_API_BASE', '')) != lock['endpoint']:
             raise ValueError('public_endpoint_changed')
         if args.batch_sha not in os.environ.get('APPROVAL_REF', ''):
@@ -196,6 +203,8 @@ def main():
         result['cost_estimate'] = cost(response.get('usage'), profile)
         result['response_model'] = response.get('model')
         result['response_service_tier'] = response.get('service_tier')
+        if response.get('model') != request['model']:
+            raise ValueError('response_model_mismatch_no_retry')
         from src.analyzer import GeminiAnalyzer
         analyzer = object.__new__(GeminiAnalyzer)
         _, model = analyzer._extract_analysis_json_object(text)

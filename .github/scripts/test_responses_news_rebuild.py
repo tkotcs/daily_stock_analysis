@@ -8,7 +8,7 @@ import sys
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from manual_responses_candidate import rebuild_with_saved_news, build_request
+from manual_responses_candidate import rebuild_with_saved_news, build_request, qualify_us_market_rules
 
 ROOT = Path(__file__).resolve().parents[2]
 ASOF = datetime(2026, 10, 20, 10, tzinfo=timezone.utc)
@@ -50,7 +50,7 @@ def test_native_news_rebuild_replaces_missing_news_and_preserves_financial_and_s
     assert updated['saved_news_audit']['search_performed'] is False
     assert len(updated['saved_news_audit']['accepted']) == 1
     assert [m for m in result['input'] if m['role'] != 'user'] == [
-        m for m in chat['messages'] if m['role'] != 'user']
+        m for m in qualify_us_market_rules(chat)['messages'] if m['role'] != 'user']
     assert (chat, context, audit, packet) == before
 
 

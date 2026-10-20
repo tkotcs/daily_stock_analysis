@@ -16,6 +16,22 @@ def canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')
 
 
+LEGACY_US_MARKET_RULE = '- 美股无涨跌停限制（但有熔断机制），支持 T+0 交易和盘前盘后交易，需关注美元汇率、美联储政策及 SEC 监管动态。'
+QUALIFIED_US_MARKET_RULE = (
+    '- 美股通常不设固定每日涨跌幅上限，但个股存在 LULD 价格带及暂停交易机制，市场亦有熔断。'
+    '符合券商、账户及监管要求时可进行日内交易；多数适用证券交易的常规交收周期为 T+1。'
+    '盘前盘后需关注流动性、价差与成交风险，以及美元汇率、美联储政策和 SEC 监管动态。')
+
+
+def qualify_us_market_rules(packet):
+    """Correct the known legacy system line without changing supplied evidence."""
+    result = copy.deepcopy(packet)
+    for message in result.get('messages', []):
+        if message.get('role') == 'system' and isinstance(message.get('content'), str):
+            message['content'] = message['content'].replace(LEGACY_US_MARKET_RULE, QUALIFIED_US_MARKET_RULE)
+    return result
+
+
 def hosted_endpoint(base):
     parsed = urlsplit(base)
     if (parsed.scheme != 'https' or not parsed.hostname or parsed.username is not None
@@ -74,6 +90,7 @@ def qualify_session_references(context, packet):
 
 
 def build_request(chat_packet, profile, context=None):
+    chat_packet = qualify_us_market_rules(chat_packet)
     if context is not None:
         chat_packet = qualify_session_references(context, chat_packet)
     messages = chat_packet.get('messages')
@@ -261,6 +278,9 @@ def main():
             for old, new in zip(source_messages, request['input'])),
         source_system_messages_preserved=[m for m in source_messages if m['role'] != 'user'] == [
             m for m in request['input'] if m['role'] != 'user'],
+        known_US_market_rule_qualified=any(
+            m.get('role') == 'system' and LEGACY_US_MARKET_RULE in m.get('content', '')
+            for m in source_messages),
         news_user_prompt_rebuilt=bool(args.news_data),
         saved_news_packet_sha256=news_sha,
         news_cutoff=news_cutoff.isoformat() if news_cutoff else None,
