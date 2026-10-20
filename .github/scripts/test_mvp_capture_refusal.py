@@ -75,3 +75,18 @@ def test_successful_chart_keeps_existing_evidence_format(tmp_path, monkeypatch):
     trace=capture.install_capture_transport(tmp_path)
     curl.Session().get('https://query1.finance.yahoo.com/v8/finance/chart/NVDA')
     assert json.loads((tmp_path/trace[0]['response_file']).read_text())==payload
+
+
+@pytest.mark.parametrize('status', [403, 429])
+def test_financial_adapter_cannot_convert_terminal_refusal_to_a_data_gap(status):
+    def load(code):
+        raise FreeSafetyStop(f'Yahoo_HTTP_{status}_stop_no_retry')
+    with pytest.raises(FreeSafetyStop, match=f'Yahoo_HTTP_{status}'):
+        capture.capture_fundamentals(SimpleNamespace(get_fundamental_bundle=load), 'NVDA')
+
+
+def test_ordinary_financial_failure_still_keeps_explicit_missing_data():
+    def load(code):
+        raise ValueError('missing financial table')
+    result=capture.capture_fundamentals(SimpleNamespace(get_fundamental_bundle=load), 'NVDA')
+    assert result=={'earnings':{},'errors':['ValueError']}

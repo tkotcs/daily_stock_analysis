@@ -46,6 +46,17 @@ def install_serial_download(yf):
     yf.download=download
 
 
+def capture_fundamentals(adapter, code):
+    """Keep ordinary financial gaps, but never swallow a terminal network guard."""
+    from phase2j_free_guard import FreeSafetyStop
+    try:
+        return adapter.get_fundamental_bundle(code)
+    except FreeSafetyStop:
+        raise
+    except BaseException as error:
+        return {'earnings':{},'errors':[type(error).__name__]}
+
+
 def save(path,value):
     path.write_text(json.dumps(value,ensure_ascii=False,indent=2,default=str),encoding='utf-8')
 
@@ -176,8 +187,7 @@ def run_symbol(source,out,code,offline=None,inject=False,research_data=None,news
         # valuation providers or paid search are needed for this narrow MVP.
         def fundamental(*a,**k):
             from data_provider.yfinance_fundamental_adapter import YfinanceFundamentalAdapter
-            try:bundle=YfinanceFundamentalAdapter().get_fundamental_bundle(code)
-            except BaseException as e:bundle={'earnings':{},'errors':[type(e).__name__]}
+            bundle=capture_fundamentals(YfinanceFundamentalAdapter(),code)
             save(out/'YAHOO_ADAPTER_BUNDLE.json',bundle)
             ctx=manager.build_not_supported_fundamental_context(code,'MVP仅启用Yahoo财务；其他模块未配置')
             ctx['earnings']=manager._build_fundamental_block('partial' if bundle.get('earnings') else 'failed',bundle.get('earnings',{}),bundle.get('source_chain',[]),bundle.get('errors',[]))
