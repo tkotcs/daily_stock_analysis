@@ -44,6 +44,28 @@ def load_bundle(bundle, expected):
         raise ValueError('selected_Sol_budget_required')
     if budget_estimate(request, profile)['pricing_ambiguity_blocks_live']:
         raise ValueError('budget_not_approved')
+    if lock.get('news_packet_sha256'):
+        news_raw = (bundle / 'NEWS_PACKET.json').read_bytes()
+        if digest(news_raw) != lock['news_packet_sha256']:
+            raise ValueError('frozen_news_packet_hash_mismatch')
+        audit = loaded['CONTEXT.json'].get('saved_news_audit') or {}
+        entries = json.loads(news_raw).get(lock['symbol'])
+        if (not entries or entries != audit.get('accepted') or audit.get('rejected')
+                or audit.get('search_performed') is not False or audit.get('asof') != lock.get('research_evidence_cutoff')):
+            raise ValueError('frozen_news_context_mismatch')
+        cutoff = datetime.fromisoformat(audit['asof'])
+        if cutoff.utcoffset() is None or cutoff > datetime.now(timezone.utc):
+            raise ValueError('frozen_news_cutoff_invalid')
+        for entry in entries:
+            published = datetime.fromisoformat(entry['published_at'])
+            fetched = datetime.fromisoformat(entry['fetched_at'])
+            if (published.utcoffset() is None or fetched.utcoffset() is None
+                    or not cutoff - timedelta(days=3) <= published <= fetched <= cutoff):
+                raise ValueError('frozen_news_timestamp_invalid')
+            if entry.get('content_kind') == 'summary' and (
+                    entry.get('summary_origin') != 'operator_paraphrase'
+                    or digest(entry['text'].encode('utf-8')) != entry.get('content_sha256')):
+                raise ValueError('frozen_summary_hash_or_origin_invalid')
     check_time(lock)
     return lock, request, loaded['CONTEXT.json'], profile
 

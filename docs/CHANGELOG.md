@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > For user-friendly release highlights, see the [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) page.
 
 ## [Unreleased]
+- [新功能] 已保存新闻支持明确标注的人工摘要；Responses候选复用原生formatter重建新闻段、保留系统消息与财务日期边界，并冻结未授权AAPL双报道候选；执行前核对新闻包/摘要哈希与截止时点，不把条目数当独立来源数。
 - [修复] Responses候选准备追加带绝对日期的两日OHLC对照并拒绝倒置/冲突上下文，独立QA同步展示日期与高低点；不重写已消费请求或模型原文，不将离线通过称为真实模型修复。
 - [新功能] 按用户选定Sol外推价冻结AAPL单次Responses测试，复用本人Environment和不可复用远端预留；精确哈希路由与旧DeepSeek互斥，端点/期限/预算锁定，失败或截断不重试，输出保留原文及人民币用量估算。
 - [改进] Sol草稿按用户截图逐类别外推6.1价格并保留Astra参照差异，预算不足时明确阻断真实执行；凭据名对齐仓库已有SEEKERX，不读取Secret值。

@@ -84,6 +84,35 @@ invoked. Failure artifacts remain inspectable. A separate credential scan must
 pass before artifact upload. This is a one-off test, not a global analyzer
 provider migration or an automated research schedule.
 
+### Prepared follow-up with two saved media summaries
+
+The next unapproved batch is
+`f1f3e8dbc009e1eb0798bb397147c511cf5f8904f6ef64d7acb365bd26e908c4`
+at `.github/frozen/sol-aapl-news-20261020`. It preserves the completed-session
+quote date, original source collection time and material expiry of the earlier
+capture; the separate `research_evidence_cutoff` records the saved-news cutoff.
+The two articles share one publisher, have timezone-aware publication times,
+and remain media claims rather than issuer confirmation or comprehensive news.
+The packet uses `content_kind=summary`, `summary_origin=operator_paraphrase`,
+and a SHA256 of the saved summary text. Publication is not event effective time.
+
+`manual_responses_candidate.py --news-data FILE --source FIXED_CHECKOUT
+--financial-audit FILE` validates and attaches the packet with the existing
+saved-news adapter, then rebuilds the native user prompt using the fixed
+formatter and context pack. It replaces old missing-news prose rather than
+appending contradictory new information. Original non-user messages and
+financial/quote fields remain intact; financial qualification, independent
+financial/dividend evidence and the explicit session-date table are reapplied.
+Only the selected legacy formatter overrides are used; no native model client,
+Router or dispatch is initialized during preparation.
+
+The registered paid job maps each accepted exact batch hash to its own folder,
+and the old DeepSeek selector excludes both Sol hashes. The sender also verifies
+the news packet hash, equality with accepted context evidence, summary hashes
+and origin, aware times and cutoff before any remote claim or POST. As with the
+first batch, a new human authorization and Environment approval are required;
+adding this frozen bundle on review does not authorize or dispatch it.
+
 ## Prepare, without a model call
 
 ### Absolute session references in future Responses drafts
@@ -342,8 +371,11 @@ existing semantics.
 The existing `mvp_three.py` preparation CLI accepts optional `--news-data FILE`.
 The UTF-8 JSON maps symbols to lists of saved evidence. Each item requires
 `source`, HTTPS `url`, `title`, timezone-aware `published_at` and `fetched_at`,
-and `content_kind` (`metadata_only` or `full_text`). Only saved full text may
-include `text`; its optional `content_sha256` is checked against UTF-8 text bytes,
+and `content_kind` (`metadata_only`, `full_text`, or `summary`). Full text and
+operator summaries may include `text`; summaries additionally require
+`summary_origin=operator_paraphrase` and are explicitly labeled as summaries,
+not publisher full text or automatic issuer confirmation. The optional
+`content_sha256` is checked against UTF-8 saved text bytes,
 not the original HTTP body. Publication must fall within three days of the new
 preparation cutoff; collection must follow publication and not exceed cutoff.
 Invalid items are excluded with reasons in `SAVED_NEWS_AUDIT.json`.

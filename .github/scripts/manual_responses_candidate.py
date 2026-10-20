@@ -98,6 +98,53 @@ def build_request(chat_packet, profile, context=None):
         service_tier=profile['service_tier'])
 
 
+def rebuild_with_saved_news(chat, context, news_packet, asof, source, financial_audit):
+    """Reformat the native user prompt with news, rather than append to old missing-news prose."""
+    import subprocess
+    import sys
+    if subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, text=True).strip() != '577624ad8459871630c690e5760ae504ac6f2b9f':
+        raise ValueError('reviewed_native_source_required')
+    sys.path.insert(0, str(source.resolve()))
+    from src.analyzer import GeminiAnalyzer
+    from src.services.analysis_context_builder import PipelineAnalysisArtifacts, AnalysisContextBuilder
+    from src.analysis_context_pack_prompt import format_analysis_context_pack_prompt_section
+    from saved_news import attach_saved_news_context
+    from nvda_research_materials import format_financial_evidence, format_dividend_announcements
+    from watchlist_mode import qualify_financial_fields
+    artifacts = PipelineAnalysisArtifacts(
+        code=context['code'], stock_name=context.get('stock_name', context['code']),
+        market='us', phase=None, base_context=copy.deepcopy(context), enhanced_context=copy.deepcopy(context),
+        realtime_quote=None, trend_result=None, chip_data=None,
+        fundamental_context=copy.deepcopy(context.get('fundamental_context')),
+        news_context=None, news_result_count=None, metadata={})
+    prepared = attach_saved_news_context(artifacts, news_packet, asof)
+    if not prepared.enhanced_context['saved_news_audit']['accepted']:
+        raise ValueError('new_request_requires_at_least_one_accepted_saved_news_item')
+    pack = AnalysisContextBuilder.build(prepared)
+    summary = format_analysis_context_pack_prompt_section(pack, report_language='zh')
+    # Formatting only: explicit supported overrides select the original legacy scaffold.
+    # No Config, Router, SDK client, dispatch or network is initialized.
+    analyzer = object.__new__(GeminiAnalyzer)
+    analyzer._skill_instructions_override = ''
+    analyzer._default_skill_policy_override = ''
+    analyzer._use_legacy_default_prompt_override = True
+    prompt = analyzer._format_prompt(prepared.enhanced_context, artifacts.stock_name,
+        news_context=prepared.news_context, report_language='zh', analysis_context_pack_summary=summary)
+    prompt += format_financial_evidence(prepared.enhanced_context, 'zh')
+    prompt += format_dividend_announcements(prepared.enhanced_context, 'zh')
+    prompt += ('\n消息材料截止时间（带时区）：' + asof.isoformat() +
+               '\n行情与盘前阶段仍沿用原采集时刻；不以新闻采集时间替换行情日期或假装是当前实时报价。'
+               '新闻条目数量不等于独立来源数，按各条标明的出版社核对来源集中度；不代表综合新闻覆盖，'
+               '文章中的产品预期/原因推断必须保留媒体或传闻归属，不当作发行人确认、实际需求或收入结论。\n')
+    packet = copy.deepcopy(chat)
+    indices = [i for i, message in enumerate(packet['messages']) if message.get('role') == 'user']
+    if len(indices) != 1:
+        raise ValueError('one_native_user_prompt_required')
+    packet['messages'][indices[0]]['content'] = prompt
+    updated, packet = qualify_financial_fields(prepared.enhanced_context, packet, financial_audit, 'USD')
+    return updated, packet
+
+
 def budget_estimate(request, profile):
     pricing = profile['pricing']
     if pricing.get('unit') != 'CNY_per_1M_text_tokens':
@@ -162,6 +209,9 @@ def main():
     parser.add_argument('--source-bundle', type=Path, required=True)
     parser.add_argument('--profile', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--news-data', type=Path)
+    parser.add_argument('--source', type=Path)
+    parser.add_argument('--financial-audit', type=Path)
     args = parser.parse_args()
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=False)
@@ -179,7 +229,22 @@ def main():
         raise ValueError('source_context_hash_mismatch')
     chat = json.loads(raw)
     profile = json.loads(args.profile.read_text('utf-8'))
-    request = build_request(chat, profile, context=json.loads(context_raw))
+    context = json.loads(context_raw)
+    news_sha = None
+    news_cutoff = None
+    source_messages = copy.deepcopy(chat['messages'])
+    if args.news_data:
+        if not args.source or not args.financial_audit:
+            raise ValueError('saved_news_requires_native_source_and_financial_audit')
+        news_raw = args.news_data.read_bytes()
+        news_sha = hashlib.sha256(news_raw).hexdigest()
+        news_cutoff = datetime.now(timezone.utc)
+        context, chat = rebuild_with_saved_news(
+            chat, context, json.loads(news_raw), news_cutoff, args.source.resolve(),
+            json.loads(args.financial_audit.read_text('utf-8')))
+        (out / 'SAVED_NEWS_AUDIT.json').write_text(json.dumps(context['saved_news_audit'], ensure_ascii=False, indent=2), encoding='utf-8')
+        (out / 'PREPARED_CONTEXT.json').write_bytes(canonical(context))
+    request = build_request(chat, profile, context=context)
     result = dict(
         status='draft_waiting_for_public_API_base_and_credential_setup',
         model=profile['model'], wire_api='responses', authorize_paid_POST=False,
@@ -189,11 +254,16 @@ def main():
         profile_sha256=hashlib.sha256(canonical(profile)).hexdigest(),
         source_analysis_asof=member['analysis_asof'],
         source_material_expires_at=member['material_expires_at'],
-        native_messages_preserved=request['input'] == chat['messages'],
+        native_messages_preserved=request['input'] == source_messages,
         session_reference_table_added=True,
         original_message_text_retained=all(
             new['role'] == old['role'] and new['content'].startswith(old['content'])
-            for old, new in zip(chat['messages'], request['input'])),
+            for old, new in zip(source_messages, request['input'])),
+        source_system_messages_preserved=[m for m in source_messages if m['role'] != 'user'] == [
+            m for m in request['input'] if m['role'] != 'user'],
+        news_user_prompt_rebuilt=bool(args.news_data),
+        saved_news_packet_sha256=news_sha,
+        news_cutoff=news_cutoff.isoformat() if news_cutoff else None,
         api_base_env=profile['api_base_env'], api_key_env=profile['api_key_env'],
         public_endpoint=None, budget=budget_estimate(request, profile))
     if result['budget']['pricing_ambiguity_blocks_live']:

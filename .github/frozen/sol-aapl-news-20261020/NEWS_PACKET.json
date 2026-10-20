@@ -1,0 +1,34 @@
+{
+  "AAPL": [
+    {
+      "source": "MacRumors（同一媒体的两篇报道，非独立交叉核验）",
+      "url": "https://www.macrumors.com/2026/10/19/apple-pro-and-tell/",
+      "title": "Apple Announcing New Products Next Week: 'Pro and Tell'",
+      "published_at": "2026-10-19T16:05:07+00:00",
+      "fetched_at": "2026-10-20T09:27:20.138471+00:00",
+      "content_kind": "summary",
+      "summary_origin": "operator_paraphrase",
+      "text": "MacRumors报道，苹果营销负责人在社交平台预告下一周将有专业产品相关公布，媒体获邀参加10月28日洛杉矶体验活动。具体Mac/iPad型号、OLED配置、11月上市时间是报道中的传闻或预期，本轮未取得发行人直接公告确认。仅作带归属的未来事件观察，不据此确认产品、订单或营收。报道发布时间不等于未来活动发生时间。",
+      "content_sha256": "da8d540050f5d0c7c6a2ed07227b1c112a2ac31bff3c509144151757004e525c",
+      "original_HTTP_sha256": "f294031221b4f37214b5db2665b5ac46c4c43cf5fd372ecb7bc77fab0687fe1a",
+      "publication_time_evidence": "matching NewsArticle.datePublished and visible time datetime attribute",
+      "publisher": "MacRumors",
+      "issuer_confirmation": false
+    },
+    {
+      "source": "MacRumors（同一媒体的两篇报道，非独立交叉核验）",
+      "url": "https://www.macrumors.com/2026/10/19/iphone-duo-order-limit-us/",
+      "title": "Apple Limiting U.S. iPhone Duo Orders to Two Per Customer",
+      "published_at": "2026-10-19T23:42:13+00:00",
+      "fetched_at": "2026-10-20T09:27:21.460377+00:00",
+      "content_kind": "summary",
+      "summary_origin": "operator_paraphrase",
+      "text": "MacRumors观察到美国Apple网站/Apple Store应用存在每位客户最多购买两部iPhone Duo的提示。文章明确无法确认该限制是否在10月16日预售开始时就已存在，因此不能写成10月19日新政策生效。本轮未独立复核商店限制、销量、库存或原因；限购本身不足以证明需求强劲、供货短缺或收入增长。发布时间是媒体报道的公开时点，不能替代政策起始时间。",
+      "content_sha256": "f086523ffcfc9dc642c10577d4dac173c19f6a61ac15d23e7d032737962f9653",
+      "original_HTTP_sha256": "dbdac4078ea6cb9fb99fb0efe538610f6bfee91c29772d906e03564d4cbc169c",
+      "publication_time_evidence": "matching NewsArticle.datePublished and visible time datetime attribute",
+      "publisher": "MacRumors",
+      "issuer_confirmation": false
+    }
+  ]
+}

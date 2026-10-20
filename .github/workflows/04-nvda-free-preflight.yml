@@ -49,7 +49,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   sol_aapl_paid:
-    if: ${{ inputs.execute_live && inputs.mvp_three && !inputs.comparison_modes && inputs.mvp_universe == 'single_mode_watchlist' && inputs.request_sha256 == '3e23087e93c3ad203e1d2ef7ced882261b9c45872fc34d8a37740a4b79ee5223' && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    if: ${{ inputs.execute_live && inputs.mvp_three && !inputs.comparison_modes && inputs.mvp_universe == 'single_mode_watchlist' && (inputs.request_sha256 == '3e23087e93c3ad203e1d2ef7ced882261b9c45872fc34d8a37740a4b79ee5223' || inputs.request_sha256 == 'f1f3e8dbc009e1eb0798bb397147c511cf5f8904f6ef64d7acb365bd26e908c4') && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
     environment: nvda-one-call-approval
     permissions:
       contents: write
@@ -64,6 +64,7 @@ jobs:
       BATCH_SHA: ${{ inputs.request_sha256 }}
       APPROVAL_REF: ${{ inputs.authorization_reference }}
       RESEARCH_API_BASE: ${{ vars.RESEARCH_API_BASE }}
+      SOL_BUNDLE: ${{ inputs.request_sha256 == 'f1f3e8dbc009e1eb0798bb397147c511cf5f8904f6ef64d7acb365bd26e908c4' && '.github/frozen/sol-aapl-news-20261020' || '.github/frozen/sol-aapl-20261020' }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -85,7 +86,7 @@ jobs:
         env:
           SEEKERX: ${{ secrets.SEEKERX }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: python .github/scripts/manual_responses_once.py --source upstream-fixed --bundle .github/frozen/sol-aapl-20261020 --out sol-report --batch-sha "$BATCH_SHA"
+        run: python .github/scripts/manual_responses_once.py --source upstream-fixed --bundle "$SOL_BUNDLE" --out sol-report --batch-sha "$BATCH_SHA"
       - name: Scan output credentials before upload
         if: always()
         id: sol_scan
@@ -155,7 +156,7 @@ jobs:
             aapl-capture/*-process.log
             aapl-preparation/
   single_mode_watchlist:
-    if: ${{ inputs.request_sha256 != '3e23087e93c3ad203e1d2ef7ced882261b9c45872fc34d8a37740a4b79ee5223' && inputs.mvp_universe == 'single_mode_watchlist' && inputs.mvp_three && !inputs.comparison_modes && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    if: ${{ inputs.request_sha256 != '3e23087e93c3ad203e1d2ef7ced882261b9c45872fc34d8a37740a4b79ee5223' && inputs.request_sha256 != 'f1f3e8dbc009e1eb0798bb397147c511cf5f8904f6ef64d7acb365bd26e908c4' && inputs.mvp_universe == 'single_mode_watchlist' && inputs.mvp_three && !inputs.comparison_modes && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
     permissions:
       contents: write
       actions: read

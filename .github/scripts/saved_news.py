@@ -27,13 +27,15 @@ def attach_saved_news_context(artifacts, packet, asof):
             if not asof - timedelta(days=3) <= published <= asof or not published <= fetched <= asof:
                 raise ValueError('news_outside_cutoff_window')
             kind, text = item.get('content_kind'), item.get('text')
-            if kind not in ('metadata_only', 'full_text'):
+            if kind not in ('metadata_only', 'full_text', 'summary'):
                 raise ValueError('news_content_kind_required')
             if kind == 'metadata_only' and text not in (None, ''):
                 raise ValueError('news_metadata_must_not_claim_text')
-            if kind == 'full_text' and (not isinstance(text, str) or not text.strip()):
+            if kind in ('full_text', 'summary') and (not isinstance(text, str) or not text.strip()):
                 raise ValueError('news_full_text_missing')
-            digest = hashlib.sha256(text.encode('utf-8')).hexdigest() if kind == 'full_text' else None
+            if kind == 'summary' and item.get('summary_origin') != 'operator_paraphrase':
+                raise ValueError('news_operator_summary_origin_required')
+            digest = hashlib.sha256(text.encode('utf-8')).hexdigest() if kind in ('full_text', 'summary') else None
             if item.get('content_sha256') not in (None, digest):
                 raise ValueError('news_saved_text_sha256_mismatch')
             accepted.append(dict(item, content_sha256=digest))
@@ -47,7 +49,13 @@ def attach_saved_news_context(artifacts, packet, asof):
     if accepted or sections:
         sections.append(note)
     for item in accepted:
-        sections.append(f"来源：{item['source']}\n标题：{item['title']}\n原始链接：{item['url']}\n发布时间：{item['published_at']}\n采集时间：{item['fetched_at']}\n内容类型：{item['content_kind']}\n" + (f"已保存正文（未独立事实核验）：\n{item['text']}" if item['content_kind'] == 'full_text' else '仅提供标题与元数据，未提供新闻全文，不推断未给出的细节。'))
+        if item['content_kind'] == 'full_text':
+            content = f"已保存正文（未独立事实核验）：\n{item['text']}"
+        elif item['content_kind'] == 'summary':
+            content = f"已保存人工摘要（不是新闻全文，不自动视为发行人确认；媒体发布时间不等于事件生效日）：\n{item['text']}"
+        else:
+            content = '仅提供标题与元数据，未提供新闻全文，不推断未给出的细节。'
+        sections.append(f"来源：{item['source']}\n标题：{item['title']}\n原始链接：{item['url']}\n发布时间：{item['published_at']}\n采集时间：{item['fetched_at']}\n内容类型：{item['content_kind']}\n" + content)
     return replace(artifacts, enhanced_context=enhanced, news_context='\n\n'.join(sections) or None, news_result_count=None)
 
 
