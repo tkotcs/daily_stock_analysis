@@ -52,3 +52,16 @@ def test_official_feed_configuration_is_limited_and_preserves_missing_coverage()
     feeds = json.loads((ROOT / '.github/research/daily-news-feeds.json').read_bytes())
     assert feeds['max_GETs_per_feed'] == 1 and feeds['max_items_per_symbol'] == 3
     assert [f['symbol'] for f in feeds['feeds']] == ['NVDA', 'MSFT', 'AAPL']
+
+
+def test_registered_free_capture_has_no_paid_or_email_stage():
+    spec=yaml.load((ROOT/'.github/workflows/01-free-market-validation.yml').read_text('utf-8'),
+                   Loader=yaml.BaseLoader)
+    assert set(spec['on'])=={'workflow_dispatch'}
+    assert spec['on']['workflow_dispatch']['inputs']['scope']['default']=='nvda'
+    assert spec['permissions']=={'contents':'read'}
+    assert set(spec['jobs'])=={'capture'}
+    text=json.dumps(spec)
+    assert 'secrets.' not in text and 'generate --' not in text and 'daily_briefing_mail.py' not in text
+    assert '577624ad8459871630c690e5760ae504ac6f2b9f' in text
+    assert 'valid>0' in text

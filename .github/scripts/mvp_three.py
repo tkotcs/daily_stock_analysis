@@ -7,6 +7,44 @@ sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
 from free_market_validation import WATCHLIST,ETFS,NAMES
 NOTICE='模拟模型响应，仅验证流水线；行情为本次注明的数据来源，不是已通过验收的真实AI研报。'
 
+def install_capture_transport(out, *, offline=False):
+    """Keep terminal Yahoo refusals outside the native provider retry loops."""
+    import curl_cffi.requests as curl
+    from phase2j_free_guard import FreeSafetyStop, free_yahoo_get
+    trace=[];restricted=False
+    def persist():save(out/'HTTP_TRACE.json',trace)
+    import atexit;atexit.register(persist)
+    original=curl.Session.request
+    def request(session,method,url,*a,**kw):
+        nonlocal restricted
+        if offline or restricted or not free_yahoo_get(method,url):
+            raise FreeSafetyStop('MVP_non_free_network_or_mail_forbidden')
+        kw['timeout']=15;kw['allow_redirects']=False
+        row={'at':dt.datetime.now(dt.timezone.utc).isoformat(),'method':method,
+             'host':urlsplit(str(url)).hostname,'path':urlsplit(str(url)).path}
+        try:
+            response=original(session,method,url,*a,**kw);row['status']=response.status_code
+            if response.status_code in (403,429):
+                restricted=True
+                # BaseException intentionally escapes native Exception retries.
+                raise FreeSafetyStop(f'Yahoo_HTTP_{response.status_code}_stop_no_retry')
+            if '/finance/chart/' in row['path']:
+                name='chart-'+str(len(trace))+'.json';save(out/name,response.json());row['response_file']=name
+            return response
+        except Exception as e:row['error']=type(e).__name__;raise
+        finally:trace.append(row);persist()
+    curl.Session.request=request
+    return trace
+
+
+def install_serial_download(yf):
+    """A terminal guard must escape on the caller, not strand a download worker."""
+    original=yf.download
+    def download(*args,**kwargs):
+        kwargs['threads']=False
+        return original(*args,**kwargs)
+    yf.download=download
+
 
 def save(path,value):
     path.write_text(json.dumps(value,ensure_ascii=False,indent=2,default=str),encoding='utf-8')
@@ -50,9 +88,7 @@ def fixture(code,context):
 def run_symbol(source,out,code,offline=None,inject=False,research_data=None,news_data=None,prompt_only=False):
     if prompt_only and not offline:
         raise ValueError('prompt_only_requires_offline_fixture')
-    out.mkdir(parents=True,exist_ok=False);start=time.monotonic();trace=[];restricted=False
-    def persist():save(out/'HTTP_TRACE.json',trace)
-    import atexit;atexit.register(persist)
+    out.mkdir(parents=True,exist_ok=False);start=time.monotonic()
     for k in list(os.environ):
         if any(x in k for x in ('API_KEY','PASSWORD','ACCESS_TOKEN','WEBHOOK')) or k in ('GH_TOKEN','GITHUB_TOKEN','LLM_CHANNELS','LITELLM_CONFIG','OPENAI_BASE_URL'):os.environ.pop(k,None)
     os.environ.update(DEEPSEEK_API_KEY='mvp-simulation-placeholder',LITELLM_MODEL='deepseek/deepseek-flash',
@@ -67,24 +103,11 @@ def run_symbol(source,out,code,offline=None,inject=False,research_data=None,news
     assert not (source/'.env').exists()
     sys.path[:0]=[str(pathlib.Path(__file__).resolve().parent),str(source)]
     import httpx,requests,curl_cffi.requests as curl,yfinance as yf,pandas as pd
-    from phase2j_free_guard import free_yahoo_get
     from deepseek_post_guard import GuardStop,OnePostGuard
     def deny(*a,**k):raise GuardStop('MVP_non_free_network_or_mail_forbidden')
-    original=curl.Session.request
-    def request(session,method,url,*a,**kw):
-        nonlocal restricted
-        if offline or restricted or not free_yahoo_get(method,url):return deny()
-        kw['timeout']=15;kw['allow_redirects']=False
-        row={'at':dt.datetime.now(dt.timezone.utc).isoformat(),'method':method,'host':urlsplit(str(url)).hostname,'path':urlsplit(str(url)).path}
-        try:
-            response=original(session,method,url,*a,**kw);row['status']=response.status_code
-            if response.status_code in (403,429):restricted=True
-            if '/finance/chart/' in row['path']:
-                name='chart-'+str(len(trace))+'.json';save(out/name,response.json());row['response_file']=name
-            return response
-        except Exception as e:row['error']=type(e).__name__;raise
-        finally:trace.append(row);persist()
-    curl.Session.request=request;requests.Session.request=deny
+    trace=install_capture_transport(out,offline=bool(offline))
+    install_serial_download(yf)
+    requests.Session.request=deny
     original_connect=socket.socket.connect
     def connect(sock,address):
         if isinstance(address,tuple) and address[0] in ('127.0.0.1','::1'):return original_connect(sock,address)
@@ -280,12 +303,12 @@ def main():
             out.mkdir(parents=True,exist_ok=True);status={'symbol':a.child,'status':'failed','error':type(e).__name__+':'+str(e),'real_POSTs':0}
             import traceback;(out/'ERROR.txt').write_text(traceback.format_exc(),encoding='utf-8')
         save(out/'STATUS.json',status);return
-    out.mkdir(parents=True,exist_ok=False);rows=[];rate_limited=False
+    out.mkdir(parents=True,exist_ok=False);rows=[];refused_status=None
     symbols=a.only.split(',') if a.only else WATCHLIST if a.universe=='watchlist35' else SYMBOLS
     assert len(symbols)==len(set(symbols)) and all(c in WATCHLIST for c in symbols)
     for code in symbols:
-        if rate_limited:
-            (out/code).mkdir();row={'symbol':code,'status':'failed','error':'Yahoo_429_batch_circuit_open_no_more_requests','real_POSTs':0};save(out/code/'STATUS.json',row);rows.append(row);continue
+        if refused_status:
+            (out/code).mkdir();row={'symbol':code,'status':'failed','error':f'Yahoo_{refused_status}_batch_circuit_open_no_more_requests','real_POSTs':0};save(out/code/'STATUS.json',row);rows.append(row);continue
         env={k:v for k,v in os.environ.items() if not any(x in k for x in ('API_KEY','PASSWORD','ACCESS_TOKEN','WEBHOOK')) and k not in ('GH_TOKEN','GITHUB_TOKEN','PYTHONPATH')}
         cmd=[sys.executable,'-I',str(pathlib.Path(__file__).resolve()),'--source',str(source),'--out',str(out/code),'--child',code]
         if offline:cmd+=['--offline-data',str(offline)]
@@ -300,7 +323,8 @@ def main():
             (out/code).mkdir(exist_ok=True);row={'symbol':code,'status':'failed','error':type(e).__name__,'real_POSTs':0};save(out/code/'STATUS.json',row)
         rows.append(row)
         trace=out/code/'HTTP_TRACE.json'
-        if trace.exists():rate_limited=any(r.get('status')==429 for r in json.loads(trace.read_text('utf-8')))
+        if trace.exists():
+            refused_status=next((r['status'] for r in json.loads(trace.read_text('utf-8')) if r.get('status') in (403,429)),None)
     save(out/'RESULTS.json',{'run_id':os.getenv('GITHUB_RUN_ID'),'commit':os.getenv('GITHUB_SHA'),'business_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True).strip(),'mode':'OFFLINE_saved' if offline else 'LIVE_FREE_DATA_MOCK_MODEL','symbols':rows,'real_POSTs':0,'new_model_cost_USD':'0','mail_sent':0})
     text=f'<h1>DSA {len(rows)}标的MVP</h1><p>'+NOTICE+'</p><ul>'
     for row in rows:
