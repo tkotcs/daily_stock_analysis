@@ -6,6 +6,38 @@ The independent profile `manual_watchlist_mode_v1` uses business commit
 requests and approvals must never be reused. Each new batch needs its own
 reviewed material, hash, authorization and user Environment approval.
 
+## Selected next test: GPT-6.1 Sol Responses draft
+
+The user changed the next quality test target to `gpt-6.1-sol` on 2026-10-20.
+The existing DeepSeek snapshots remain historical records. The new reviewed
+configuration is `.github/research/gpt-6.1-sol-review-profile.json`: Responses
+wire format, high reasoning effort, 32768 total output tokens, standard service
+tier, one POST at most, no retries or fallback, and USD 0.03 reservation.
+
+`manual_responses_candidate.py` preserves the saved native messages as Responses
+`input`. It removes the old vendor `thinking`, `max_tokens`, `temperature` and
+`stream_options` fields, using `reasoning.effort` and `max_output_tokens` instead.
+The output is a draft, with no sender, batch authorization or model call.
+It retains source timestamps/expiry and verifies the source request/context
+hashes. Expired source data is refused rather than refreshed.
+
+The user-provided gateway multiplier is 0.0357 of the official model's standard
+text rates. The profile records the official reference and the multiplier's
+different provenance. Current derived USD/1M rates are input 0.0714, cached input
+0.00357, cache write 0.08925, and output 0.357. Estimates assume standard tier,
+inputs below the 272K pricing boundary and no regional surcharge; the gateway
+contract and bill have not been independently verified. Total output allowance
+includes reasoning; reasoning tokens must not be charged twice in accounting.
+The byte allowance is not a tokenizer measurement or provider spending cap.
+
+`RESEARCH_API_BASE` must identify the provider's upstream public HTTPS base.
+The current desktop Q-Pilot localhost proxy is not a GitHub Runner endpoint.
+The future live credential belongs in `RESEARCH_API_KEY` as a repository Secret;
+draft preparation neither reads it nor uploads a local desktop credential.
+Until the upstream connection is configured and a new exact batch is reviewed,
+this profile cannot be dispatched for a live test. Existing Environment and
+deploy-branch protections still apply.
+
 ## Prepare, without a model call
 
 Use the existing native free capture on the pinned business checkout when a new
@@ -74,11 +106,16 @@ uses the existing fail-closed pricing check, and freezes one nonthinking
 candidate with `authorize_paid_POST=false`. It checks the actual frozen AAPL
 messages for neutral vendor-income labels and preserved independent evidence.
 Capture/pricing/check failures preserve artifacts and stop without a paid call.
+Pricing uses the existing canonical `authorized_once.PRICING` URL, including
+its trailing slash. `GuardStop` failures are recorded and re-raised; they never
+leave a successful or authorized preparation status. A downloaded successful
+capture may be prepared locally while still fresh, without repeating capture.
 
 The candidate is an artifact for review, not a runnable paid authorization or an
 Environment approval request. Existing deploy entry points and historical
 bundles remain unchanged. A new live batch still needs its exact hash, current
 expiry, scoped authorization and the user's own Environment approval.
+
 
 The new workflow is `.github/workflows/05-manual-watchlist-mode.yml`.
 Its triggers are manual `workflow_dispatch` and reuse through `workflow_call`;

@@ -1,0 +1,29 @@
+{
+  "purpose": "single_AAPL_quality_test_candidate_not_live_authorization",
+  "model": "gpt-6.1-sol",
+  "wire_api": "responses",
+  "reasoning_effort": "high",
+  "max_output_tokens": 32768,
+  "service_tier": "default",
+  "api_base_env": "RESEARCH_API_BASE",
+  "api_key_env": "RESEARCH_API_KEY",
+  "max_total_POSTs": 1,
+  "automatic_retry": false,
+  "fallback": false,
+  "authorize_paid_POST": false,
+  "reservation_USD": "0.03",
+  "pricing": {
+    "official_source": "https://developers.openai.com/api/docs/models/gpt-6.1-sol",
+    "verified_date": "2026-10-20",
+    "unit": "USD_per_1M_text_tokens",
+    "official_standard_rates": {
+      "input": "2.00",
+      "cached_input": "0.10",
+      "cache_write": "2.50",
+      "output": "10.00"
+    },
+    "gateway_multiplier": "0.0357",
+    "multiplier_source": "user_statement_2026-10-20_not_independent_gateway_billing_verification",
+    "assumptions": "standard tier; input <=272K tokens; no regional or fast/ultrafast surcharge; all token categories receive the user multiplier"
+  }
+}

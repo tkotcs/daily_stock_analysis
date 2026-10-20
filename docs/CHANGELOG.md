@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > For user-friendly release highlights, see the [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) page.
 
 ## [Unreleased]
+- [改进] 下一次AAPL质量测试改为GPT-6.1 Sol Responses草稿，保留原生消息及来源期限，明确high推理、总输出上限和用户提供的0.0357计费系数；公网端点与Secret未就绪前不发送请求，不沿用DeepSeek授权。
+- [修复] 单标的免费准备复用既有带尾斜线的官方定价URL，并保留GuardStop失败状态，避免入门页被当作定价材料或失败停留在preparing状态。
 - [改进] 已注册手动入口增加仅review分支可选的AAPL免费准备，复用固定原生源和独立财务材料；成功后冻结未授权单标的候选并核对实际prompt，失败留证据停止，不改变旧付费批次或Environment保护。
 - [修复] 手动research-data可独立传递财务比较证据与累计相减CFO，累计期间按实际日期比较，保留供应商原值、期间和失败状态；controller追加中英文原生prompt段并保存程序事实，净利字段名不再冒充独立归母核验。
 - [修复] 随附未来分红仅通过独立审计说明接受状态，不再把原earnings失败状态覆盖为partial；父级财务状态、错误与来源链保持原义。

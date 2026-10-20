@@ -8,7 +8,8 @@ import sys
 from urllib.request import Request, urlopen
 
 from watchlist_mode import prepare, load_set
-from authorized_once import canonical_sha
+from authorized_once import canonical_sha, PRICING
+from deepseek_post_guard import GuardStop
 
 
 def check_comparison(context, before, packet):
@@ -42,7 +43,7 @@ def main():
         rows = capture['symbols']
         if len(rows) != 1 or rows[0]['symbol'] != 'AAPL' or rows[0]['status'] != 'success_simulated_model':
             raise ValueError('fresh_AAPL_capture_failed_no_pricing_GET_no_freeze')
-        url = 'https://api-docs.deepseek.com/quick_start/pricing'
+        url = PRICING
         receipt = dict(url=url, fetched_at=datetime.now(timezone.utc).isoformat(), retries=0)
         with urlopen(Request(url, headers={'User-Agent': 'DSA manual pricing review'}), timeout=25) as response:
             raw = response.read()
@@ -61,7 +62,7 @@ def main():
                       max_total_POSTs=lock['max_total_POSTs'],
                       reservation_USD=lock['total_reservation_USD'],
                       member=lock['members'][0], final_financial_comparison_check=True)
-    except Exception as error:
+    except (Exception, GuardStop) as error:
         result.update(status='blocked_before_paid_authorization', error_type=type(error).__name__, error=str(error))
         raise
     finally:
