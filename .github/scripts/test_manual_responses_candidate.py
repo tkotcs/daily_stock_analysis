@@ -38,18 +38,29 @@ def test_public_base_keeps_supplied_path_without_guessing_host():
     assert hosted_endpoint('https://example.test/custom/v1/') == 'https://example.test/custom/v1/responses'
 
 
-def test_direct_CNY_quote_is_not_discounted_or_converted_again():
+def test_Sol_category_extrapolation_is_not_discounted_or_converted_again():
     p = profile()
     request = build_request(dict(messages=[dict(role='user', content='SYNTHETIC')]), p)
     result = budget_estimate(request, p)
     rates = result['quoted_rates_CNY_per_1M']
-    assert rates == {'input': '0.50', 'cached_input': '0.05', 'output': '0.62'}
+    assert rates == {'input': '0.4998', 'cached_input': '0.02499', 'output': '0.62475'}
     assert result['currency'] == 'CNY'
     assert result['multiplier_applied'] is False and result['currency_conversion_applied'] is False
     assert result['reasoning_tokens_in_output_not_charged_twice']
     assert result['is_bill'] is False and result['is_provider_enforced_cap'] is False
+    assert result['pricing_ambiguity_blocks_live'] is True
+    assert result['proposed_reservation_sufficient_for_all_scenarios'] is False
+    p['pricing'].pop('alternative_astra_extrapolation_CNY_per_1M')
     p['proposed_reservation_CNY'] = '0.0001'
     with pytest.raises(ValueError, match='reservation_exceeded'):
+        budget_estimate(request, p)
+
+
+def test_bad_reference_ratio_is_rejected():
+    p = profile()
+    request = build_request(dict(messages=[dict(role='user', content='SYNTHETIC')]), p)
+    p['pricing']['rates']['cached_input'] = '0.05'
+    with pytest.raises(ValueError, match='extrapolation_mismatch'):
         budget_estimate(request, p)
 
 

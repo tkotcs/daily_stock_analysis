@@ -22,19 +22,28 @@ The output is a draft, with no sender, batch authorization or model call.
 It retains source timestamps/expiry and verifies the source request/context
 hashes. Expired source data is refused rather than refreshed.
 
-The latest user quote supersedes the earlier official-USD-price-times-0.0357
-estimate: CNY/1M tokens is input 0.50, cached input 0.05, and output 0.62.
-These are direct user-provided gateway prices, not independently verified bills.
-No multiplier or exchange rate is applied again. Estimates price all input as
-uncached and, separately, all input as cached; actual cost uses the eventual
-reported token split. Total output allowance includes reasoning, which is not
-charged twice. The byte allowance is not a tokenizer measurement, and the
-proposed reservation is not a provider-enforced spending cap. A profile hash
-records the pricing configuration separately from the request-body hash.
+The user's screenshot supersedes the rounded direct quote. Per category, the
+draft uses the Sol-family reference: screenshot gateway CNY rate multiplied by
+the target official USD rate and divided by the reference official USD rate.
+For input, cached input and output respectively, 5.6 Sol's screenshot rates are
+0.9996/0.09996/1.2495 CNY against official 4/0.4/20 USD. The official 6.1 Sol
+standard rates are 2/0.10/10 USD. The resulting estimated CNY/1M rates are
+0.4998/0.02499/0.62475, not a confirmed target gateway quote.
+
+The Astra card gives a different scenario: 0.4004/0.02002/2.002 CNY for the same
+target. These differences must remain visible: the shared 0.0357 badge does not
+establish a common category tariff. If either scenario exceeds the proposed
+reservation, the draft records the shortfall and blocks live use. Do not claim
+a cache-write tariff from screenshots that do not contain it. No multiplier or
+exchange rate is applied again.
+
+Total output includes reasoning, which is not charged twice. The byte allowance
+is not a tokenizer measurement or provider spending cap. A profile hash records
+pricing separately from the request-body hash.
 
 `RESEARCH_API_BASE` must identify the provider's upstream public HTTPS base.
 The current desktop Q-Pilot localhost proxy is not a GitHub Runner endpoint.
-The future live credential belongs in `RESEARCH_API_KEY` as a repository Secret;
+The user-created live credential is named `SEEKERX` as a repository Secret;
 draft preparation neither reads it nor uploads a local desktop credential.
 Until the upstream connection is configured and a new exact batch is reviewed,
 this profile cannot be dispatched for a live test. Existing Environment and

@@ -64,6 +64,15 @@ def budget_estimate(request, profile):
     rates = {name: Decimal(value) for name, value in pricing['rates'].items()}
     if any(not rate.is_finite() or rate < 0 for rate in rates.values()):
         raise ValueError('nonnegative_finite_quoted_rates_required')
+    if 'reference_official_USD_per_1M' in pricing:
+        for name, rate in rates.items():
+            official = Decimal(pricing['reference_official_USD_per_1M'][name])
+            target = Decimal(pricing['target_official_USD_per_1M'][name])
+            reference = Decimal(pricing['reference_gateway_CNY_per_1M'][name])
+            if (not all(value.is_finite() for value in (official, target, reference))
+                    or official <= 0 or target < 0 or reference < 0
+                    or reference * target / official != rate):
+                raise ValueError('category_specific_extrapolation_mismatch')
     # Byte allowance is an estimate, not a tokenizer measurement or billing cap.
     token_proxy = len(canonical(request['input'])) + 1024
     if token_proxy > 272000:
@@ -71,15 +80,29 @@ def budget_estimate(request, profile):
     output = Decimal(request['max_output_tokens']) * rates['output'] / 1000000
     uncached = Decimal(token_proxy) * rates['input'] / 1000000 + output
     all_cached = Decimal(token_proxy) * rates['cached_input'] / 1000000 + output
+    alternative_rates = {name: Decimal(value) for name, value in
+                         pricing.get('alternative_astra_extrapolation_CNY_per_1M', {}).items()}
+    alternative_cost = None
+    if alternative_rates:
+        if (set(alternative_rates) != set(rates)
+                or any(not rate.is_finite() or rate < 0 for rate in alternative_rates.values())):
+            raise ValueError('invalid_alternative_pricing_scenario')
+        alternative_cost = (Decimal(token_proxy) * max(alternative_rates['input'], alternative_rates['cached_input'])
+                            + Decimal(request['max_output_tokens']) * alternative_rates['output']) / 1000000
     reservation = Decimal(profile['proposed_reservation_CNY'])
     if not reservation.is_finite() or reservation <= 0:
         raise ValueError('positive_finite_CNY_reservation_required')
-    if max(uncached, all_cached) > reservation:
+    cost_upper = max(uncached, all_cached, alternative_cost or Decimal(0))
+    within_reservation = cost_upper <= reservation
+    if not within_reservation and alternative_cost is None:
         raise ValueError('estimated_reservation_exceeded')
     return dict(currency='CNY', quoted_rates_CNY_per_1M={k: str(v) for k, v in rates.items()},
                 input_byte_token_proxy=token_proxy, not_a_tokenizer_count=True,
                 full_output_uncached_input_estimate_CNY=str(uncached),
                 full_output_all_cached_input_estimate_CNY=str(all_cached),
+                alternative_astra_reference_estimate_CNY=str(alternative_cost) if alternative_cost is not None else None,
+                pricing_ambiguity_blocks_live=not within_reservation,
+                proposed_reservation_sufficient_for_all_scenarios=within_reservation,
                 proposed_reservation_CNY=str(reservation), reservation_authorized=False,
                 is_bill=False, is_provider_enforced_cap=False,
                 reasoning_tokens_in_output_not_charged_twice=True,
@@ -123,10 +146,13 @@ def main():
         native_messages_preserved=request['input'] == chat['messages'],
         api_base_env=profile['api_base_env'], api_key_env=profile['api_key_env'],
         public_endpoint=None, budget=budget_estimate(request, profile))
+    if result['budget']['pricing_ambiguity_blocks_live']:
+        result['status'] = 'draft_waiting_for_target_tariff_confirmation_and_public_API_setup'
     base = os.environ.get(profile['api_base_env'])
     if base:
         result['public_endpoint'] = hosted_endpoint(base)
-        result['status'] = 'draft_endpoint_configured_not_frozen_or_authorized'
+        if not result['budget']['pricing_ambiguity_blocks_live']:
+            result['status'] = 'draft_endpoint_configured_not_frozen_or_authorized'
     (out / 'RESPONSES_REQUEST_DRAFT.json').write_bytes(canonical(request))
     (out / 'MIGRATION_STATUS.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
     (out / 'PROFILE_NOT_AUTHORIZATION.json').write_text(json.dumps(profile, ensure_ascii=False, indent=2), encoding='utf-8')

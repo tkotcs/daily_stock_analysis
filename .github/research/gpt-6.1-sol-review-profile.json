@@ -6,7 +6,7 @@
   "max_output_tokens": 32768,
   "service_tier": "default",
   "api_base_env": "RESEARCH_API_BASE",
-  "api_key_env": "RESEARCH_API_KEY",
+  "api_key_env": "SEEKERX",
   "max_total_POSTs": 1,
   "automatic_retry": false,
   "fallback": false,
@@ -14,17 +14,25 @@
   "proposed_reservation_CNY": "0.05",
   "reservation_authorized": false,
   "pricing": {
-    "source": "user_quote_2026-10-20_not_independently_verified",
+    "source": "user_requested_category_specific_extrapolation_from_5.6_sol_screenshot_not_direct_6.1_sol_quote",
     "quoted_date": "2026-10-20",
     "unit": "CNY_per_1M_text_tokens",
     "rates": {
-      "input": "0.50",
-      "cached_input": "0.05",
-      "output": "0.62"
+      "input": "0.4998",
+      "cached_input": "0.02499",
+      "output": "0.62475"
     },
-    "supersedes": "official_USD_rates_times_0.0357",
+    "reference_official_USD_per_1M": {"input": "4", "cached_input": "0.4", "output": "20"},
+    "reference_gateway_CNY_per_1M": {"input": "0.9996", "cached_input": "0.09996", "output": "1.2495"},
+    "target_official_USD_per_1M": {"input": "2", "cached_input": "0.10", "output": "10"},
+    "formula": "reference_gateway_CNY * target_official_USD / reference_official_USD, separately per category",
+    "official_target_source": "https://developers.openai.com/api/docs/models/gpt-6.1-sol",
+    "reference_screenshot": "user_image_1_20261020",
+    "alternative_astra_extrapolation_CNY_per_1M": {"input": "0.4004", "cached_input": "0.02002", "output": "2.002"},
+    "reference_ratios_disagree": true,
+    "supersedes": "rounded_direct_CNY_quote_0.50_0.05_0.62",
     "currency_conversion_applied": false,
     "multiplier_applied": false,
-    "assumptions": "Use the user's three direct CNY unit prices only; actual upstream billing is not independently verified."
+    "assumptions": "Use the user-selected Sol-family reference separately per category; screenshots yield different factors across model families; target gateway tariff and bill are not independently verified. Budget checks also consider the Astra-derived scenario."
   }
 }

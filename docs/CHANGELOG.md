@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > For user-friendly release highlights, see the [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) page.
 
 ## [Unreleased]
+- [改进] Sol草稿按用户截图逐类别外推6.1价格并保留Astra参照差异，预算不足时明确阻断真实执行；凭据名对齐仓库已有SEEKERX，不读取Secret值。
 - [改进] 下一次AAPL质量测试改为GPT-6.1 Sol Responses草稿，保留原生消息及来源期限，明确high推理、总输出上限和用户提供的人民币单价，不叠加旧系数或汇率；公网端点与Secret未就绪前不发送请求，不沿用DeepSeek授权。
 - [修复] 单标的免费准备复用既有带尾斜线的官方定价URL，并保留GuardStop失败状态，避免入门页被当作定价材料或失败停留在preparing状态。
 - [改进] 已注册手动入口增加仅review分支可选的AAPL免费准备，复用固定原生源和独立财务材料；成功后冻结未授权单标的候选并核对实际prompt，失败留证据停止，不改变旧付费批次或Environment保护。
