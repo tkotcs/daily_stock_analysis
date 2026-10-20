@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from daily_briefing import read, save, sha, source_check
 
 
-def deliver(report, source, out, review_reference, *, send=False):
+def deliver(report, source, out, review_reference, *, send=False,automatic=False):
     out.mkdir(parents=True, exist_ok=False)
     result = dict(status='mail_preview_only', mail_attempts=0, automatic_retry=False,
                   model_POSTs=0, recipients_or_credentials_exported=False)
@@ -17,17 +17,31 @@ def deliver(report, source, out, review_reference, *, send=False):
         digest = sha(content)
         result['report_sha256'] = digest
         status = read(report.parent / 'STATUS.json')
-        if status.get('status') != 'generated_daily_preview_requires_review':
+        expected_status='generated_daily_automatic_validated' if automatic else 'generated_daily_preview_requires_review'
+        if status.get('status') != expected_status:
             raise ValueError('successful_generated_daily_report_required')
         authorization = read(report.parent / 'AUTHORIZATION_USED.json')
         if not send:
             return result
         if digest not in review_reference:
             raise ValueError('exact_report_hash_review_required_before_mail')
-        if (os.environ.get('GITHUB_RUN_ATTEMPT') != '1'
-                or os.environ.get('GITHUB_ACTOR') != os.environ.get('GITHUB_REPOSITORY_OWNER')
-                or os.environ.get('GITHUB_REF') != 'refs/heads/deploy/phase2h-request-preparation'):
-            raise ValueError('owner_first_attempt_deploy_required_for_mail')
+        if automatic and review_reference!=digest:
+            raise ValueError('exact_automatic_report_hash_required')
+        from daily_execution_policy import execution_authority
+        authority=execution_authority(automatic=automatic)
+        if automatic:
+            from manual_responses_once import check_time
+            if (authorization.get('execution_authority')!=authority
+                    or authorization.get('run_id')!=os.environ.get('GITHUB_RUN_ID')
+                    or status.get('program_validation_passed') is not True
+                    or status.get('report_sha256')!=digest):
+                raise ValueError('automatic_current_run_validated_report_required')
+            lock=read(report.parent/'DAILY_LOCK.json')
+            if (lock.get('execution_policy_id')!=authority['policy_id']
+                    or sha((report.parent/'DAILY_LOCK.json').read_bytes())!=authorization['batch_sha256']):
+                raise ValueError('automatic_mail_lock_binding_required')
+            check_time(lock)
+        result['execution_authority']=authority
         sender, password, receivers = [os.environ.get(key, '').strip()
                                         for key in ('EMAIL_SENDER', 'EMAIL_PASSWORD', 'EMAIL_RECEIVERS')]
         if not sender or not password or not receivers:
@@ -70,10 +84,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('report', 'source', 'out'):
         parser.add_argument('--' + name, required=True, type=Path)
-    parser.add_argument('--review-reference', default='')
+    parser.add_argument('--review-reference','--report-sha256', default='')
     parser.add_argument('--send', action='store_true')
+    parser.add_argument('--automatic',action='store_true')
     args = parser.parse_args()
-    result = deliver(args.report, args.source, args.out, args.review_reference, send=args.send)
+    result = deliver(args.report, args.source, args.out, args.review_reference, send=args.send,
+                     automatic=args.automatic)
     print(json.dumps(result))
     if result['status'] not in ('mail_preview_only', 'delivered'):
         raise SystemExit(1)

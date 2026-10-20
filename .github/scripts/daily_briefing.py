@@ -218,8 +218,11 @@ def load_capture(data, session, now):
     return rows, contexts, omitted, inputs
 
 
-def prepare(data, source, profile_path, out, session, *, historical=False, now=None):
+def prepare(data, source, profile_path, out, session, *, historical=False, now=None, automatic=False):
     now = now or datetime.now(timezone.utc)
+    if automatic:
+        from daily_execution_policy import execution_authority
+        authority=execution_authority(automatic=True)
     source_check(source)
     out.mkdir(parents=True, exist_ok=False)
     rows, contexts, omitted, provenance = load_capture(data, session, now)
@@ -298,6 +301,7 @@ def prepare(data, source, profile_path, out, session, *, historical=False, now=N
         endpoint=endpoint,
         model=request['model'], max_total_POSTs=1, retry=False, fallback=False,
         reservation_CNY=profile['proposed_reservation_CNY'], authorize_paid_POST=False,
+        execution_policy_id=authority['policy_id'] if automatic else None,
         historical_preview=historical, blockers=blockers, budget=budget,
         files={name: sha((out / name).read_bytes()) for name in
                ('REQUEST.json', 'FOCUS_CONTEXT.json', 'PROFILE.json', 'DAILY_FACTS.json', 'CONTEXTS.json')})
@@ -305,7 +309,8 @@ def prepare(data, source, profile_path, out, session, *, historical=False, now=N
     digest = sha((out / 'DAILY_LOCK.json').read_bytes())
     (out / 'BATCH_SHA256.txt').write_bytes((digest + '\n').encode())
     save(out / 'PREPARATION_STATUS.json', dict(
-        status='historical_preview_only' if historical else 'blocked' if blockers else 'ready_for_Environment_review',
+        status='historical_preview_only' if historical else 'blocked' if blockers else
+               'ready_for_automatic_generation' if automatic else 'ready_for_Environment_review',
         batch_sha256=digest, focus=focus, blockers=blockers, baseline_model_POSTs=0,
         max_total_model_POSTs=1, new_model_POSTs=0, budget=budget))
     return lock
@@ -363,10 +368,11 @@ def validate_sections(model, facts, contexts):
     return sections
 
 
-def render_report(out, facts, model=None):
+def render_report(out, facts, model=None, *, automatic=False):
     """One document/email: deterministic watchlist table plus optional generated sections."""
     md = '# 美股科技投资与技术观察日报｜' + facts['session'] + '\n\n'
-    md += '> 内部研究参考；' + ('已保存模型解释，待人工审阅。' if model else '程序事实预览，尚未调用模型。')
+    explanation=('模型解读通过程序检查，按用户授权自动发送。' if automatic else '已保存模型解释，待人工审阅。')
+    md += '> 内部研究参考；' + (explanation if model else '程序事实预览，尚未调用模型。')
     md += ' 历史收盘不是实时报价；观察位不等于支撑有效或交易指令。\n\n'
     if facts.get('historical_preview'):
         md += '> 历史材料回放，禁止作为当前日报发送；原采集时间未刷新。\n\n'
@@ -502,7 +508,7 @@ def load_live_bundle(bundle, expected):
     return lock, request, context, profile, facts, contexts
 
 
-def generate(bundle, expected, source, out, authorization):
+def generate(bundle, expected, source, out, authorization, *, automatic=False):
     out.mkdir(parents=True, exist_ok=False)
     result = dict(status='blocked_before_POST', actual_model_POST_attempts=0,
                   automatic_retry=False, fallback=False, published=False, quality_accepted=False,
@@ -512,12 +518,18 @@ def generate(bundle, expected, source, out, authorization):
         text = json.dumps(value, ensure_ascii=False, indent=2)
         (out / name).write_text(text.replace(key, '[REDACTED]') if key else text, 'utf-8')
     try:
-        if (not key or not authorization.strip() or os.environ.get('GITHUB_RUN_ATTEMPT') != '1'
-                or os.environ.get('GITHUB_ACTOR') != os.environ.get('GITHUB_REPOSITORY_OWNER')
-                or os.environ.get('GITHUB_REF') != 'refs/heads/deploy/phase2h-request-preparation'):
-            raise ValueError('daily_owner_first_attempt_deploy_approval_required')
+        from daily_execution_policy import execution_authority,require_mail_configuration
+        authority=execution_authority(automatic=automatic)
+        if not key or not authorization.strip():
+            raise ValueError('daily_key_and_authorization_required')
+        if automatic:
+            require_mail_configuration()
         source_check(source)
         lock, request, context, profile, facts, contexts = load_live_bundle(bundle, expected)
+        if automatic and (lock.get('execution_policy_id')!=authority['policy_id']
+                or lock['max_total_POSTs']!=authority['max_model_POSTs']
+                or lock['reservation_CNY']!=authority['reservation_CNY']):
+            raise ValueError('automatic_bundle_policy_mismatch')
         from src.core.trading_calendar import get_effective_trading_date
         if get_effective_trading_date('us', current_time=datetime.now(timezone.utc)).isoformat() != lock['target_session']:
             raise ValueError('daily_latest_completed_session_changed')
@@ -540,7 +552,9 @@ def generate(bundle, expected, source, out, authorization):
             run_id=os.environ['GITHUB_RUN_ID'], authorization_reference=authorization,
             request_sha256=request_sha, reservation_CNY=lock['reservation_CNY'],
             focus_symbol=lock['focus_symbol'], target_session=lock['target_session'],
-            approval='this run Environment review after preparation summary; not prior test approval'))
+            execution_authority=authority,
+            approval='user_authorized_scheduled_generation_and_mail' if automatic else
+                     'this run Environment review after preparation summary; not prior test approval'))
         _, text = perform_post_once(request, profile, lock['endpoint'], key, out, result, persist, expected)
         from src.analyzer import GeminiAnalyzer
         analyzer = object.__new__(GeminiAnalyzer)
@@ -557,8 +571,11 @@ def generate(bundle, expected, source, out, authorization):
         focused.mkdir()
         save_full_report(focused, lock['focus_symbol'], focus_model, context,
                          analyzer._format_computed_quote_facts(context), False)
-        render_report(out, facts, model)
-        result['status'] = 'generated_daily_preview_requires_review'
+        render_report(out, facts, model,automatic=automatic)
+        result.update(status='generated_daily_automatic_validated' if automatic else
+                             'generated_daily_preview_requires_review',
+                      program_validation_passed=True,human_review_performed=False,
+                      report_sha256=sha((out/'DAILY_REPORT.md').read_bytes()))
     except BaseException as error:
         result.update(status='failed_no_retry' if result['actual_model_POST_attempts'] else 'blocked_before_POST',
                       error_category=type(error).__name__,
@@ -581,11 +598,13 @@ def main():
         prep.add_argument('--' + name, type=Path, required=True)
     prep.add_argument('--session', required=True)
     prep.add_argument('--historical-preview', action='store_true')
+    prep.add_argument('--automatic',action='store_true')
     live = subs.add_parser('generate')
     for name in ('source', 'bundle', 'out'):
         live.add_argument('--' + name, type=Path, required=True)
     live.add_argument('--batch-sha', required=True)
     live.add_argument('--authorization-reference', required=True)
+    live.add_argument('--automatic',action='store_true')
     args = parser.parse_args()
     if args.command == 'gate':
         source_check(args.source)
@@ -597,7 +616,7 @@ def main():
             parser.error('new_output_directory_required')
         try:
             lock = prepare(args.data, args.source, args.profile, args.out, args.session,
-                           historical=args.historical_preview)
+                           historical=args.historical_preview,automatic=args.automatic)
         except BaseException as error:
             args.out.mkdir(parents=True, exist_ok=True)
             state = dict(status='blocked_before_POST', new_model_POSTs=0,
@@ -608,9 +627,10 @@ def main():
             raise SystemExit(1)
         print(json.dumps(dict(status='prepared' if lock else 'no_eligible_focus', paid_POSTs=0)))
     else:
-        result = generate(args.bundle, args.batch_sha, args.source, args.out, args.authorization_reference)
+        result = generate(args.bundle, args.batch_sha, args.source, args.out, args.authorization_reference,
+                          automatic=args.automatic)
         print(json.dumps(result, ensure_ascii=False))
-        if result['status'] != 'generated_daily_preview_requires_review':
+        if result['status'] not in ('generated_daily_preview_requires_review','generated_daily_automatic_validated'):
             raise SystemExit(1)
 
 

@@ -66,10 +66,11 @@ def fixture_capture(folder):
     return folder
 
 
-def bundle(tmp_path, *, historical=False):
+def bundle(tmp_path, *, historical=False,automatic=False):
     data = fixture_capture(tmp_path / 'capture')
     target = tmp_path / 'prepared'
-    daily.prepare(data, SOURCE, PROFILE, target, SESSION, historical=historical, now=NOW)
+    daily.prepare(data, SOURCE, PROFILE, target, SESSION, historical=historical, now=NOW,
+                  automatic=automatic)
     return data, target, (target / 'BATCH_SHA256.txt').read_text().strip()
 
 
@@ -263,11 +264,18 @@ def github_env(monkeypatch):
 
 
 @pytest.mark.parametrize('outcome', ['success', 'bad_sections', 'transport_failure'])
-def test_daily_generation_uses_single_shared_transport_keeps_failure_evidence(tmp_path, monkeypatch, outcome):
-    _, target, digest = bundle(tmp_path)
+@pytest.mark.parametrize('automatic',[False,True])
+def test_daily_generation_uses_single_shared_transport_keeps_failure_evidence(tmp_path, monkeypatch, outcome,automatic):
     github_env(monkeypatch)
+    if automatic:
+        from test_daily_automatic import automatic_env
+        automatic_env(tmp_path,monkeypatch)
+    _, target, digest = bundle(tmp_path,automatic=automatic)
     # The synthetic capture clock is fixed; transport tests do not weaken production clocks.
     monkeypatch.setattr(daily, 'check_time', lambda lock: None)
+    from datetime import date
+    import src.core.trading_calendar as calendar
+    monkeypatch.setattr(calendar,'get_effective_trading_date',lambda *a,**k:date.fromisoformat(SESSION))
     import remote_execution_claim as remote
     events = []
     class Claim:
@@ -313,13 +321,18 @@ def test_daily_generation_uses_single_shared_transport_keeps_failure_evidence(tm
             events.append('POST')
             return Response()
     monkeypatch.setattr(httpx, 'Client', Client)
-    result = daily.generate(target, digest, SOURCE, tmp_path / 'real', 'SYNTHETIC Environment review')
+    result = daily.generate(target, digest, SOURCE, tmp_path / 'real', 'SYNTHETIC authorization',
+                            automatic=automatic)
     assert events == ['reserve', 'before_send', 'POST']
     assert result['actual_model_POST_attempts'] == 1
     assert (tmp_path / 'real/RAW_RESPONSE_BODY.bin').exists()
-    assert result['status'] == ('generated_daily_preview_requires_review' if outcome == 'success' else 'failed_no_retry')
+    expected='generated_daily_automatic_validated' if automatic else 'generated_daily_preview_requires_review'
+    assert result['status'] == (expected if outcome == 'success' else 'failed_no_retry')
     if outcome == 'success':
         assert (tmp_path / 'real/DAILY_REPORT.md').exists()
+        assert result['report_sha256']==daily.sha((tmp_path/'real/DAILY_REPORT.md').read_bytes())
+        if automatic:
+            assert '按用户授权自动发送' in (tmp_path/'real/DAILY_REPORT.md').read_text('utf-8')
     elif outcome == 'bad_sections':
         assert result['usage']['input_tokens'] == 20
         assert (tmp_path / 'real/PARSED_MODEL_JSON.json').exists()
