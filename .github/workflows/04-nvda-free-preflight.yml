@@ -24,6 +24,7 @@ on:
         type: boolean
         default: false
       request_sha256:
+        description: "Exact frozen batch SHA256 (legacy field name; not REQUEST.json file hash)"
         type: string
         required: true
       analysis_asof:
@@ -156,7 +157,7 @@ jobs:
             aapl-capture/*-process.log
             aapl-preparation/
   single_mode_watchlist:
-    if: ${{ inputs.request_sha256 != '3e23087e93c3ad203e1d2ef7ced882261b9c45872fc34d8a37740a4b79ee5223' && inputs.request_sha256 != 'f1f3e8dbc009e1eb0798bb397147c511cf5f8904f6ef64d7acb365bd26e908c4' && inputs.request_sha256 != '02d2f25f67487581f9111ac7924b020c9ed708ea04c104c3cb4105c9f2746d87' && inputs.mvp_universe == 'single_mode_watchlist' && inputs.mvp_three && !inputs.comparison_modes && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    if: ${{ inputs.request_sha256 == 'bf7c3b89f955f50a7836d68c0adc31602a5943f8d3b4bb45bb7263a9228abbc3' && inputs.mvp_universe == 'single_mode_watchlist' && inputs.mvp_three && !inputs.comparison_modes && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
     permissions:
       contents: write
       actions: read

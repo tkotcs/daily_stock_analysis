@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > For user-friendly release highlights, see the [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) page.
 
 ## [Unreleased]
+- [修复] 旧DeepSeek手动入口改为精确批次白名单，拒绝未知、空或误填的请求文件哈希；派发输入说明明确其承载冻结batch哈希。
 - [修复] Sol发送前绑定冻结目标日、上下文标的/日期及已存在的日线对照表，拒绝重新计算哈希仍存在语义错配的材料；未来候选规范日内交易、T+1交收与LULD表述，不改已消费提示词。
 - [修复] Sol单次发送器核对completed响应模型与冻结请求一致；模型缺失或不匹配时保留原始响应及Usage并拒绝生成成功，不重试已消费请求。
 - [修复] Sol冻结材料禁用Git换行转换，保留已审阅新闻包的原字节及哈希；回归验证Git索引与Linux风格导出产物，避免Windows本机通过而Runner在POST前拒绝。

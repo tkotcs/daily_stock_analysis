@@ -105,3 +105,21 @@ def test_final_bundle_uses_actual_new_capture_and_strict_session_binding():
     from manual_responses_candidate import qualify_us_market_rules
     assert new_system == qualify_us_market_rules(dict(messages=old_system))['messages']
     assert lock['max_total_POSTs'] == 1 and lock['authorize_paid_POST'] is False
+
+
+@pytest.mark.parametrize('live', [False, True])
+@pytest.mark.parametrize('digest', ['', 'unknown-not-an-approved-batch',
+                                   '6f12da708a464d19256d40d0037dc7cf6aa78cd69f504d4244db42e8aefdbf92'])
+def test_unknown_or_request_file_hash_cannot_select_a_watchlist_job(live, digest):
+    workflow = yaml.load((ROOT / '.github/workflows/04-nvda-free-preflight.yml').read_text('utf-8'), Loader=yaml.BaseLoader)
+    inputs = SimpleNamespace(execute_live=live, mvp_three=True, comparison_modes=False,
+                             mvp_universe='single_mode_watchlist', request_sha256=digest)
+    github = SimpleNamespace(actor='owner', repository_owner='owner',
+                             ref='refs/heads/deploy/phase2h-request-preparation')
+    selected = []
+    for name, job in workflow['jobs'].items():
+        expression = job['if'].removeprefix('${{').removesuffix('}}').strip().replace('&&', 'and').replace('||', 'or').replace('!inputs.', 'not inputs.')
+        if eval(expression, {'__builtins__': {}}, dict(inputs=inputs, github=github)):
+            selected.append(name)
+    assert selected == []
+    assert 'batch SHA256' in workflow['on']['workflow_dispatch']['inputs']['request_sha256']['description']

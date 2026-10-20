@@ -158,7 +158,7 @@ def test_registered_dispatch_selects_only_the_requested_profile(execute_live):
     assert route['with']['bundle_path'] == '.github/frozen/manual-watchlist-approved-bf7c3b89'
     github = SimpleNamespace(actor='tkotcs', repository_owner='tkotcs', ref='refs/heads/deploy/phase2h-request-preparation')
     for universe in ('three', 'watchlist35', 'single_mode_watchlist'):
-        inputs = SimpleNamespace(execute_live=execute_live, mvp_universe=universe, mvp_three=True, comparison_modes=False, request_sha256='approved-new-batch')
+        inputs = SimpleNamespace(execute_live=execute_live, mvp_universe=universe, mvp_three=True, comparison_modes=False, request_sha256='bf7c3b89f955f50a7836d68c0adc31602a5943f8d3b4bb45bb7263a9228abbc3')
         enabled = []
         for name, job in workflow['jobs'].items():
             expression = job['if'].removeprefix('${{').removesuffix('}}').strip().replace('&&', 'and').replace('||', 'or').replace('!inputs.', 'not inputs.')

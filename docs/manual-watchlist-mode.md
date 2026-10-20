@@ -143,7 +143,11 @@ adding this frozen bundle on review does not authorize or dispatch it.
 
 Batch `02d2f25f67487581f9111ac7924b020c9ed708ea04c104c3cb4105c9f2746d87`
 maps only to `.github/frozen/sol-aapl-final-20261020`. The legacy DeepSeek
-selector excludes this batch as well as both historical Sol batches.
+selector now accepts only its exact historical batch
+`bf7c3b89f955f50a7836d68c0adc31602a5943f8d3b4bb45bb7263a9228abbc3`.
+Empty, unknown and request-file hashes cannot enter that route.
+The workflow field `request_sha256` retains its legacy name but explicitly
+asks for the frozen **batch** SHA256, not the `REQUEST.json` file digest.
 New free capture Run `39409811997` collected the material at
 `2026-10-20T10:43:27.631609+00:00`, with completed session `2026-10-19`.
 Its deadline remains `2026-10-20T20:00:00+00:00`. News is the previously saved
