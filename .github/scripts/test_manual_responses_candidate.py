@@ -48,8 +48,10 @@ def test_Sol_category_extrapolation_is_not_discounted_or_converted_again():
     assert result['multiplier_applied'] is False and result['currency_conversion_applied'] is False
     assert result['reasoning_tokens_in_output_not_charged_twice']
     assert result['is_bill'] is False and result['is_provider_enforced_cap'] is False
-    assert result['pricing_ambiguity_blocks_live'] is True
-    assert result['proposed_reservation_sufficient_for_all_scenarios'] is False
+    assert result['pricing_ambiguity_blocks_live'] is False
+    assert result['alternative_reference_is_disclosure_only'] is True
+    p['pricing'].pop('selected_reference')
+    assert budget_estimate(request, p)['pricing_ambiguity_blocks_live'] is True
     p['pricing'].pop('alternative_astra_extrapolation_CNY_per_1M')
     p['proposed_reservation_CNY'] = '0.0001'
     with pytest.raises(ValueError, match='reservation_exceeded'):

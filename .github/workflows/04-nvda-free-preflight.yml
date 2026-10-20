@@ -48,6 +48,64 @@ concurrency:
   group: nvda-manual-preflight
   cancel-in-progress: false
 jobs:
+  sol_aapl_paid:
+    if: ${{ inputs.execute_live && inputs.mvp_three && !inputs.comparison_modes && inputs.mvp_universe == 'single_mode_watchlist' && inputs.request_sha256 == '3e23087e93c3ad203e1d2ef7ced882261b9c45872fc34d8a37740a4b79ee5223' && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    environment: nvda-one-call-approval
+    permissions:
+      contents: write
+      actions: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONIOENCODING: utf-8
+      LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+      CUSTOM_TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+      TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+      BATCH_SHA: ${{ inputs.request_sha256 }}
+      APPROVAL_REF: ${{ inputs.authorization_reference }}
+      RESEARCH_API_BASE: ${{ vars.RESEARCH_API_BASE }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        with:
+          ref: 577624ad8459871630c690e5760ae504ac6f2b9f
+          path: upstream-fixed
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Prepare parser dependencies after human approval
+        run: |
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          python -m pip install -r upstream-fixed/requirements.txt litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6
+          python .github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR"
+      - name: Exactly one frozen Sol Responses attempt
+        env:
+          SEEKERX: ${{ secrets.SEEKERX }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python .github/scripts/manual_responses_once.py --source upstream-fixed --bundle .github/frozen/sol-aapl-20261020 --out sol-report --batch-sha "$BATCH_SHA"
+      - name: Scan output credentials before upload
+        if: always()
+        id: sol_scan
+        env:
+          SEEKERX: ${{ secrets.SEEKERX }}
+        run: |
+          python - <<'PY'
+          import os,pathlib
+          key=os.environ.get('SEEKERX','').encode()
+          root=pathlib.Path('sol-report')
+          assert key and root.is_dir()
+          assert not any(key in p.read_bytes() for p in root.rglob('*') if p.is_file())
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write('safe=true\n')
+          PY
+      - uses: actions/upload-artifact@v6
+        if: ${{ always() && steps.sol_scan.outputs.safe == 'true' }}
+        with:
+          name: sol-aapl-real-${{ github.run_id }}
+          path: sol-report/
+          retention-days: 14
   aapl_free_prepare:
     if: ${{ !inputs.execute_live && !inputs.mvp_three && !inputs.comparison_modes && inputs.request_sha256 == 'AAPL_NEW_FREE_PREP_20261020' && github.actor == github.repository_owner && github.ref == 'refs/heads/review/phase2t-hosted-preflight' }}
     runs-on: ubuntu-latest
@@ -97,7 +155,7 @@ jobs:
             aapl-capture/*-process.log
             aapl-preparation/
   single_mode_watchlist:
-    if: ${{ inputs.mvp_universe == 'single_mode_watchlist' && inputs.mvp_three && !inputs.comparison_modes && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    if: ${{ inputs.request_sha256 != '3e23087e93c3ad203e1d2ef7ced882261b9c45872fc34d8a37740a4b79ee5223' && inputs.mvp_universe == 'single_mode_watchlist' && inputs.mvp_three && !inputs.comparison_modes && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
     permissions:
       contents: write
       actions: read

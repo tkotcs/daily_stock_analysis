@@ -49,6 +49,39 @@ Until the upstream connection is configured and a new exact batch is reviewed,
 this profile cannot be dispatched for a live test. Existing Environment and
 deploy-branch protections still apply.
 
+### Reviewed single Responses test
+
+The user selected the Sol-derived tariff for the next paid approval. The
+`sol_aapl_paid` job in the registered 04 manual workflow selects only batch
+`3e23087e93c3ad203e1d2ef7ced882261b9c45872fc34d8a37740a4b79ee5223`,
+with `execute_live=true`, `mvp_three=true`, `comparison_modes=false` and
+`mvp_universe=single_mode_watchlist`. Its material is
+`.github/frozen/sol-aapl-20261020`. The legacy watchlist job explicitly excludes
+this hash, preventing the consumed DeepSeek bundle from being selected.
+
+This job retains `environment: nvda-one-call-approval`, repository-owner checks,
+the existing deploy branch restriction, and a first-attempt-only requirement.
+Only after human approval does `manual_responses_once.py` read `SEEKERX`.
+It verifies the lock and each request/context/profile hash, endpoint, selected
+Sol tariff, reservation, source commit, source expiry and latest complete market
+session. The existing create-only protected remote claims reserve both the new
+batch and request; reservations are never reused or released after ambiguity.
+
+The sender makes one direct Responses POST using zero transport retries and
+no redirects/fallback. Raw response bytes are retained with credential redaction.
+Only a `response.completed` event with completed status supplies successful text;
+failed, incomplete, missing or duplicate terminal events stop without retry.
+Usage is saved as returned; cached input is a subset of total input, and
+reasoning is not added to output a second time. Unknown usage stays unknown.
+The CNY cost estimate uses the user-selected external tariff, not a supplier bill
+or an enforceable spending cap.
+
+The native JSON extractor and existing full-field/program-facts writer produce
+unpublished previews; no integrity-repair generation, mail or notification is
+invoked. Failure artifacts remain inspectable. A separate credential scan must
+pass before artifact upload. This is a one-off test, not a global analyzer
+provider migration or an automated research schedule.
+
 ## Prepare, without a model call
 
 Use the existing native free capture on the pinned business checkout when a new

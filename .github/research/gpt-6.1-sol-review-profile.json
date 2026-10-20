@@ -30,6 +30,8 @@
     "reference_screenshot": "user_image_1_20261020",
     "alternative_astra_extrapolation_CNY_per_1M": {"input": "0.4004", "cached_input": "0.02002", "output": "2.002"},
     "reference_ratios_disagree": true,
+    "selected_reference": "sol",
+    "selection_authority": "user_explicit_request_2026-10-20_create_paid_approval_using_Sol_extrapolation",
     "supersedes": "rounded_direct_CNY_quote_0.50_0.05_0.62",
     "currency_conversion_applied": false,
     "multiplier_applied": false,

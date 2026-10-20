@@ -92,7 +92,8 @@ def budget_estimate(request, profile):
     reservation = Decimal(profile['proposed_reservation_CNY'])
     if not reservation.is_finite() or reservation <= 0:
         raise ValueError('positive_finite_CNY_reservation_required')
-    cost_upper = max(uncached, all_cached, alternative_cost or Decimal(0))
+    selected_sol = pricing.get('selected_reference') == 'sol' and bool(pricing.get('selection_authority'))
+    cost_upper = max(uncached, all_cached, Decimal(0) if selected_sol else alternative_cost or Decimal(0))
     within_reservation = cost_upper <= reservation
     if not within_reservation and alternative_cost is None:
         raise ValueError('estimated_reservation_exceeded')
@@ -102,7 +103,9 @@ def budget_estimate(request, profile):
                 full_output_all_cached_input_estimate_CNY=str(all_cached),
                 alternative_astra_reference_estimate_CNY=str(alternative_cost) if alternative_cost is not None else None,
                 pricing_ambiguity_blocks_live=not within_reservation,
-                proposed_reservation_sufficient_for_all_scenarios=within_reservation,
+                selected_reference='sol' if selected_sol else 'all_scenarios',
+                alternative_reference_is_disclosure_only=selected_sol,
+                proposed_reservation_sufficient_for_selected_scenario=within_reservation,
                 proposed_reservation_CNY=str(reservation), reservation_authorized=False,
                 is_bill=False, is_provider_enforced_cap=False,
                 reasoning_tokens_in_output_not_charged_twice=True,
