@@ -12,7 +12,8 @@ The user changed the next quality test target to `gpt-6.1-sol` on 2026-10-20.
 The existing DeepSeek snapshots remain historical records. The new reviewed
 configuration is `.github/research/gpt-6.1-sol-review-profile.json`: Responses
 wire format, high reasoning effort, 32768 total output tokens, standard service
-tier, one POST at most, no retries or fallback, and USD 0.03 reservation.
+tier, one POST at most, no retries or fallback, and a proposed CNY 0.05
+reservation that is not an authorization.
 
 `manual_responses_candidate.py` preserves the saved native messages as Responses
 `input`. It removes the old vendor `thinking`, `max_tokens`, `temperature` and
@@ -21,14 +22,15 @@ The output is a draft, with no sender, batch authorization or model call.
 It retains source timestamps/expiry and verifies the source request/context
 hashes. Expired source data is refused rather than refreshed.
 
-The user-provided gateway multiplier is 0.0357 of the official model's standard
-text rates. The profile records the official reference and the multiplier's
-different provenance. Current derived USD/1M rates are input 0.0714, cached input
-0.00357, cache write 0.08925, and output 0.357. Estimates assume standard tier,
-inputs below the 272K pricing boundary and no regional surcharge; the gateway
-contract and bill have not been independently verified. Total output allowance
-includes reasoning; reasoning tokens must not be charged twice in accounting.
-The byte allowance is not a tokenizer measurement or provider spending cap.
+The latest user quote supersedes the earlier official-USD-price-times-0.0357
+estimate: CNY/1M tokens is input 0.50, cached input 0.05, and output 0.62.
+These are direct user-provided gateway prices, not independently verified bills.
+No multiplier or exchange rate is applied again. Estimates price all input as
+uncached and, separately, all input as cached; actual cost uses the eventual
+reported token split. Total output allowance includes reasoning, which is not
+charged twice. The byte allowance is not a tokenizer measurement, and the
+proposed reservation is not a provider-enforced spending cap. A profile hash
+records the pricing configuration separately from the request-body hash.
 
 `RESEARCH_API_BASE` must identify the provider's upstream public HTTPS base.
 The current desktop Q-Pilot localhost proxy is not a GitHub Runner endpoint.

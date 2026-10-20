@@ -38,15 +38,24 @@ def test_public_base_keeps_supplied_path_without_guessing_host():
     assert hosted_endpoint('https://example.test/custom/v1/') == 'https://example.test/custom/v1/responses'
 
 
-def test_user_multiplier_matches_reviewed_rates_and_reasoning_not_double_counted():
+def test_direct_CNY_quote_is_not_discounted_or_converted_again():
     p = profile()
     request = build_request(dict(messages=[dict(role='user', content='SYNTHETIC')]), p)
     result = budget_estimate(request, p)
-    rates = result['discounted_rates_USD_per_1M']
-    assert rates['input'] == '0.071400' and rates['cached_input'] == '0.003570'
-    assert rates['output'] == '0.357000'
+    rates = result['quoted_rates_CNY_per_1M']
+    assert rates == {'input': '0.50', 'cached_input': '0.05', 'output': '0.62'}
+    assert result['currency'] == 'CNY'
+    assert result['multiplier_applied'] is False and result['currency_conversion_applied'] is False
     assert result['reasoning_tokens_in_output_not_charged_twice']
     assert result['is_bill'] is False and result['is_provider_enforced_cap'] is False
-    p['reservation_USD'] = '0.0001'
+    p['proposed_reservation_CNY'] = '0.0001'
     with pytest.raises(ValueError, match='reservation_exceeded'):
+        budget_estimate(request, p)
+
+
+def test_USD_tariff_cannot_silently_enter_CNY_budget():
+    p = profile()
+    request = build_request(dict(messages=[dict(role='user', content='SYNTHETIC')]), p)
+    p['pricing']['unit'] = 'USD_per_1M_text_tokens'
+    with pytest.raises(ValueError, match='direct_CNY_unit_prices_required'):
         budget_estimate(request, p)

@@ -57,30 +57,34 @@ def build_request(chat_packet, profile):
 
 def budget_estimate(request, profile):
     pricing = profile['pricing']
-    multiplier = Decimal(pricing['gateway_multiplier'])
-    if not multiplier.is_finite() or not 0 < multiplier <= 1:
-        raise ValueError('finite_positive_discount_multiplier_required')
-    rates = {name: Decimal(value) * multiplier
-             for name, value in pricing['official_standard_rates'].items()}
+    if pricing.get('unit') != 'CNY_per_1M_text_tokens':
+        raise ValueError('direct_CNY_unit_prices_required')
+    if set(pricing.get('rates', {})) != {'input', 'cached_input', 'output'}:
+        raise ValueError('three_quoted_CNY_rates_required')
+    rates = {name: Decimal(value) for name, value in pricing['rates'].items()}
     if any(not rate.is_finite() or rate < 0 for rate in rates.values()):
-        raise ValueError('nonnegative_finite_official_rates_required')
+        raise ValueError('nonnegative_finite_quoted_rates_required')
     # Byte allowance is an estimate, not a tokenizer measurement or billing cap.
     token_proxy = len(canonical(request['input'])) + 1024
     if token_proxy > 272000:
         raise ValueError('long_context_requires_new_pricing_review')
     output = Decimal(request['max_output_tokens']) * rates['output'] / 1000000
-    standard = Decimal(token_proxy) * rates['input'] / 1000000 + output
-    cache_write_allowance = Decimal(token_proxy) * max(rates['input'], rates['cache_write']) / 1000000 + output
-    if cache_write_allowance > Decimal(profile['reservation_USD']):
+    uncached = Decimal(token_proxy) * rates['input'] / 1000000 + output
+    all_cached = Decimal(token_proxy) * rates['cached_input'] / 1000000 + output
+    reservation = Decimal(profile['proposed_reservation_CNY'])
+    if not reservation.is_finite() or reservation <= 0:
+        raise ValueError('positive_finite_CNY_reservation_required')
+    if max(uncached, all_cached) > reservation:
         raise ValueError('estimated_reservation_exceeded')
-    return dict(discounted_rates_USD_per_1M={k: str(v) for k, v in rates.items()},
+    return dict(currency='CNY', quoted_rates_CNY_per_1M={k: str(v) for k, v in rates.items()},
                 input_byte_token_proxy=token_proxy, not_a_tokenizer_count=True,
-                full_output_standard_estimate_USD=str(standard),
-                full_output_with_cache_write_allowance_USD=str(cache_write_allowance),
-                reservation_USD=profile['reservation_USD'],
+                full_output_uncached_input_estimate_CNY=str(uncached),
+                full_output_all_cached_input_estimate_CNY=str(all_cached),
+                proposed_reservation_CNY=str(reservation), reservation_authorized=False,
                 is_bill=False, is_provider_enforced_cap=False,
                 reasoning_tokens_in_output_not_charged_twice=True,
-                multiplier_independently_verified=False,
+                quoted_prices_independently_verified=False,
+                multiplier_applied=False, currency_conversion_applied=False,
                 assumptions=pricing['assumptions'])
 
 
@@ -113,6 +117,7 @@ def main():
         new_model_POSTs=0, source_batch_not_reused_as_authorization=True,
         source_model=chat['model'], source_request_sha256=member['request_sha256'],
         draft_request_sha256=hashlib.sha256(canonical(request)).hexdigest(),
+        profile_sha256=hashlib.sha256(canonical(profile)).hexdigest(),
         source_analysis_asof=member['analysis_asof'],
         source_material_expires_at=member['material_expires_at'],
         native_messages_preserved=request['input'] == chat['messages'],
