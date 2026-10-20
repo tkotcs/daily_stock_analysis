@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > For user-friendly release highlights, see the [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) page.
 
 ## [Unreleased]
+
+- [新功能] 增加用户授权的北京时间09:00美股交易日日报自动生成及发信；邮箱配置前置校验，默认分支固定版本启动，保留每日单次调用和邮件去重。
+- [修复] 免费原生采集在Yahoo 403/429后立即保存原因并退出，串行下载避免后台线程等待导致超时，剩余标的统一熔断且不追加请求。
+- [新功能] 恢复全清单Python扫描与每日一只精写的综合日报，复用原生采集、单次Sol传输、风险计算和邮件模块；新增有限官方RSS元数据、MD/HTML/EML预览及默认停用工作流，不新增逐股收费调用。
 - [修复] 旧DeepSeek手动入口改为精确批次白名单，拒绝未知、空或误填的请求文件哈希；派发输入说明明确其承载冻结batch哈希。
 - [修复] Sol发送前绑定冻结目标日、上下文标的/日期及已存在的日线对照表，拒绝重新计算哈希仍存在语义错配的材料；未来候选规范日内交易、T+1交收与LULD表述，不改已消费提示词。
 - [修复] Sol单次发送器核对completed响应模型与冻结请求一致；模型缺失或不匹配时保留原始响应及Usage并拒绝生成成功，不重试已消费请求。
