@@ -571,6 +571,15 @@ def generate(bundle, expected, source, out, authorization, *, automatic=False):
         focused.mkdir()
         save_full_report(focused, lock['focus_symbol'], focus_model, context,
                          analyzer._format_computed_quote_facts(context), False)
+        if automatic:
+            review=read(focused/'QA_FINDINGS.json')
+            counts=review['evidence_status_counts']
+            blocking=counts['CONFIRMED_CONTRADICTION']+counts['SOURCE_BLOCKER']
+            persist('AUTOMATIC_VALIDATION.json',dict(
+                scope=review['scope'],confirmed_blockers=blocking,
+                evidence_status_counts=counts,natural_language_fully_verified=False))
+            if blocking:
+                raise ValueError('automatic_confirmed_quality_blocker_no_mail_no_retry')
         render_report(out, facts, model,automatic=automatic)
         result.update(status='generated_daily_automatic_validated' if automatic else
                              'generated_daily_preview_requires_review',
