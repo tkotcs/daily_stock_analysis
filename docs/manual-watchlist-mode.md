@@ -53,6 +53,14 @@ deploy-branch protections still apply.
 
 ### Reviewed single Responses test
 
+Sol frozen bundles use `.gitattributes` with `-text`: the lock hashes exact
+bytes, so Git must preserve line endings for every file in these bundles.
+Before dispatch, verify the Git index and an archive exported with
+`core.autocrlf=false`, not only the Windows working copy. A news packet hash
+mismatch stops before remote claims and before the model POST. Preserve the
+failed run; any corrected execution uses a new run and fresh Environment
+approval, without extending material expiry or relaxing hash checks.
+
 The user selected the Sol-derived tariff for the next paid approval. The
 `sol_aapl_paid` job in the registered 04 manual workflow selects only batch
 `3e23087e93c3ad203e1d2ef7ced882261b9c45872fc34d8a37740a4b79ee5223`,

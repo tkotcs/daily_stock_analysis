@@ -51,3 +51,6 @@ tests/fixtures/mvp_real_three/** -text
 
 .github/frozen/mvp-three-v3/** -text
 .github/frozen/mode-comparison-v1/** -text
+
+# Sol locks hash exact bytes, including saved news packet line endings.
+.github/frozen/sol-*/** -text whitespace=cr-at-eol
