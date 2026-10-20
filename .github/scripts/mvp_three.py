@@ -174,10 +174,10 @@ def run_symbol(source,out,code,offline=None,inject=False,research_data=None,news
     if news_data or research_data:
         news_packet = json.loads(news_data.read_text('utf-8')) if news_data else None
         research_packet = json.loads(research_data.read_text('utf-8')) if research_data else None
-        from nvda_research_materials import attach_reviewed_materials, format_dividend_announcements
+        from nvda_research_materials import attach_reviewed_materials, format_dividend_announcements, format_financial_evidence
         native_format_prompt = analyzer._format_prompt
         def format_material_prompt(context, name, news_context=None, report_language='zh', analysis_context_pack_summary=None):
-            return native_format_prompt(context,name,news_context=news_context,report_language=report_language,analysis_context_pack_summary=analysis_context_pack_summary) + format_dividend_announcements(context,report_language)
+            return native_format_prompt(context,name,news_context=news_context,report_language=report_language,analysis_context_pack_summary=analysis_context_pack_summary) + format_financial_evidence(context,report_language) + format_dividend_announcements(context,report_language)
         analyzer._format_prompt = format_material_prompt
         original_pack_outputs = pipeline._build_analysis_context_pack_outputs
         def prepare_material_pack(artifacts, **kwargs):
@@ -267,7 +267,7 @@ def run_symbol(source,out,code,offline=None,inject=False,research_data=None,news
 def main():
     p=argparse.ArgumentParser();p.add_argument('--source',required=True,type=pathlib.Path);p.add_argument('--out',required=True,type=pathlib.Path)
     p.add_argument('--child',choices=WATCHLIST);p.add_argument('--offline-data',type=pathlib.Path);p.add_argument('--inject-failure',choices=WATCHLIST)
-    p.add_argument('--research-data',type=pathlib.Path,help='Reviewed release and/or separate dividend_announcements by symbol; no fetching')
+    p.add_argument('--research-data',type=pathlib.Path,help='Reviewed release, independent financial_evidence and/or dividend_announcements by symbol; no fetching')
     p.add_argument('--news-data',type=pathlib.Path,help='Saved news evidence by symbol; no fetching or financial replacement')
     p.add_argument('--offline-prompt-only',action='store_true',help='Offline fixture prompt and simulated report; no model dispatch or final request')
     p.add_argument('--universe',choices=('three','watchlist35'),default='three');p.add_argument('--only',help='Free recovery subset; use a NEW output directory')

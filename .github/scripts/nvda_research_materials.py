@@ -17,11 +17,20 @@ def attach_reviewed_materials(artifacts, packet, asof, out):
         raise ValueError('research_ticker_object_required')
     enhanced, supplied = artifacts.enhanced_context, None
     if 'values' in item:
-        release = {key: value for key, value in item.items() if key != 'dividend_announcements'}
+        release = {key: value for key, value in item.items() if key not in ('dividend_announcements', 'financial_evidence')}
         enhanced, supplied = attach_reviewed_release(enhanced, {artifacts.code: release}, asof, out)
-    elif set(item) - {'dividend_announcements'}:
+    elif set(item) - {'dividend_announcements', 'financial_evidence'}:
         raise ValueError('research_material_type_unknown')
     enhanced = copy.deepcopy(enhanced)
+    if 'financial_evidence' in item:
+        if artifacts.enhanced_context.get('is_index_etf'):
+            raise ValueError('financial_evidence_not_applicable_ETF')
+        evidence = validate_financial_evidence(item['financial_evidence'], asof)
+        enhanced['financial_evidence'] = evidence
+        (out/'FINANCIAL_EVIDENCE_USED.json').write_text(json.dumps(dict(
+            supplied_material_not_automatically_authenticated=True,
+            does_not_replace_vendor_financials=True, asof=asof.isoformat(),
+            evidence=evidence), ensure_ascii=False, indent=2), encoding='utf-8')
     provided = 'dividend_announcements' in item
     entries = item.get('dividend_announcements', [])
     accepted, rejected = [], []
@@ -83,6 +92,94 @@ def attach_reviewed_materials(artifacts, packet, asof, out):
     (out/'DIVIDEND_ANNOUNCEMENT_AUDIT.json').write_text(json.dumps(audit,ensure_ascii=False,indent=2),encoding='utf-8')
     return replace(artifacts, enhanced_context=enhanced, fundamental_context=enhanced.get('fundamental_context'),
                    news_context=supplied or artifacts.news_context)
+
+
+def validate_financial_evidence(evidence, asof):
+    """Check a supplied three-field comparison, without authenticating its sources."""
+    if asof.utcoffset() is None or not isinstance(evidence, dict):
+        raise ValueError('financial_evidence_object_and_aware_cutoff_required')
+    sources = evidence.get('sources')
+    fields = evidence.get('fields')
+    if not isinstance(sources, dict) or not sources or not isinstance(fields, dict) or not fields:
+        raise ValueError('financial_evidence_sources_and_fields_required')
+    if set(fields) - {'revenue', 'net_income', 'operating_cash_flow'}:
+        raise ValueError('financial_evidence_field_not_supported')
+    for source in sources.values():
+        parsed = urlsplit(source['url'])
+        if parsed.scheme != 'https' or not parsed.hostname or parsed.username is not None or parsed.password is not None:
+            raise ValueError('financial_evidence_https_source_required')
+        if not re.fullmatch('[0-9a-f]{64}', source['sha256']):
+            raise ValueError('financial_evidence_source_hash_required')
+        fetched = datetime.fromisoformat(source['fetched_at'])
+        if fetched.utcoffset() is None or fetched > asof:
+            raise ValueError('financial_evidence_fetched_at_invalid')
+        period = date.fromisoformat(source['period_end'])
+        published = date.fromisoformat(source['published_date'])
+        if not period <= published <= fetched.astimezone(timezone.utc).date():
+            raise ValueError('financial_evidence_publication_or_period_invalid')
+        if (type(source['page_count']) is not int or source['page_count'] < 1
+                or type(source['duration_months']) is not int or source['duration_months'] not in (3, 6, 9, 12)
+                or type(source['fiscal_year']) is not int):
+            raise ValueError('financial_evidence_source_dimensions_invalid')
+        if (not isinstance(source['currency'], str) or not re.fullmatch('[A-Z]{3}', source['currency'])
+                or source['unit'] not in ('units', 'thousands', 'millions', 'billions')):
+            raise ValueError('financial_evidence_currency_or_unit_invalid')
+
+    def row_source(row):
+        source = sources[row['source_id']]
+        if (type(row['page']) is not int or not 1 <= row['page'] <= source['page_count']
+                or not isinstance(row['statement_label'], str) or not row['statement_label'].strip()):
+            raise ValueError('financial_evidence_page_or_statement_label_invalid')
+        if type(row['value']) not in (int, float) or not math.isfinite(row['value']):
+            raise ValueError('financial_evidence_finite_value_required')
+        if row['currency'] != source['currency'] or row['unit'] != source['unit']:
+            raise ValueError('financial_evidence_currency_or_unit_mismatch')
+        if row['period_end'] != source['period_end']:
+            raise ValueError('financial_evidence_period_mismatch')
+        return source
+
+    for name, field in fields.items():
+        if type(field['value']) not in (int, float) or not math.isfinite(field['value']):
+            raise ValueError('financial_evidence_finite_value_required')
+        if field['kind'] == 'direct_quarter':
+            if row_source(field)['duration_months'] != 3:
+                raise ValueError('financial_evidence_direct_quarter_required')
+        elif field['kind'] == 'derived_from_ytd_difference':
+            if name != 'operating_cash_flow' or len(field['operands']) != 2:
+                raise ValueError('financial_evidence_CFO_two_operands_required')
+            left, right = field['operands']
+            a, b = row_source(left), row_source(right)
+            if (a['fiscal_year'] != b['fiscal_year'] or a['duration_months'] - b['duration_months'] != 3
+                    or not date.fromisoformat(b['period_end']) < date.fromisoformat(a['period_end'])
+                    or field['period_end'] != a['period_end']
+                    or left['currency'] != right['currency'] or left['unit'] != right['unit']
+                    or field['currency'] != left['currency'] or field['unit'] != left['unit']
+                    or left['statement_label'] != right['statement_label']):
+                raise ValueError('financial_evidence_CFO_period_or_basis_mismatch')
+            if not math.isclose(left['value'] - right['value'], field['value'], rel_tol=1e-12, abs_tol=1e-9):
+                raise ValueError('financial_evidence_CFO_difference_mismatch')
+        else:
+            raise ValueError('financial_evidence_kind_invalid')
+    return copy.deepcopy(evidence)
+
+
+def format_financial_evidence(context, report_language='zh'):
+    evidence = context.get('financial_evidence')
+    if not evidence:
+        return ''
+    if report_language == 'en':
+        heading = 'Supplied independent financial comparison evidence'
+        limit = ('Separate source comparison, not a replacement of vendor fields or financial statuses. '
+                 'Net income does not verify parent-attributable income; CFO marked derived_from_ytd_difference '
+                 'is calculated from two cumulative periods, not a directly disclosed quarter row. '
+                 'Not recent news, a forecast, or a validation of ROE, dividends or valuation. '
+                 'Source identity and hashes are supplied, not automatically authenticated.')
+    else:
+        heading = '随附独立财务比较证据'
+        limit = ('独立比较材料，不覆盖供应商原字段、期间键或财务状态。Net income不等于已独立核验归母归属；'
+                 '标记derived_from_ytd_difference的CFO为两个累计期间相减，不是直接披露的季度行。'
+                 '不是近三日新闻、盈利预测或ROE/分红/估值验证。来源身份及哈希为随附材料，不自动认证。')
+    return f'\n### {heading}\n{limit}\n{json.dumps(evidence, ensure_ascii=False, indent=2)}\n'
 
 
 def format_dividend_announcements(context, report_language='zh'):

@@ -102,7 +102,7 @@ def save_full_report(directory, symbol, model, context, computed_facts, simulate
         sections.append('<section><h2>' + html.escape(field) + '</h2><pre>' + html.escape(text) + '</pre></section>')
     (directory / 'MODEL_ALL_FIELDS.html').write_text(page(symbol, ''.join(sections)), encoding='utf-8')
     (directory / 'MODEL_COMPLETE.html').write_text(page(symbol, '<h1>完整模型 JSON</h1><p>' + label + '</p><pre>' + html.escape(model_text) + '</pre>'), encoding='utf-8')
-    facts = {'computed_quote_facts': computed_facts, 'fundamental_context': context.get('fundamental_context'), 'official_research': context.get('official_research'), 'financial_field_provenance': context.get('financial_field_provenance'), 'financial_input_restriction': context.get('financial_input_restriction')}
+    facts = {'computed_quote_facts': computed_facts, 'fundamental_context': context.get('fundamental_context'), 'official_research': context.get('official_research'), 'financial_field_provenance': context.get('financial_field_provenance'), 'financial_input_restriction': context.get('financial_input_restriction'), 'independent_financial_evidence': context.get('financial_evidence')}
     if 'saved_news_audit' in context:
         facts['saved_news_evidence'] = context['saved_news_audit']
     if 'dividend_announcement_audit' in context:

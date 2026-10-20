@@ -58,6 +58,28 @@ cannot be authorized live.
 
 ## Execute only after new batch approval
 
+### One AAPL hosted free preparation
+
+The registered `04-nvda-free-preflight.yml` has a separate free selector:
+`request_sha256=AAPL_NEW_FREE_PREP_20261020`, with `execute_live=false`,
+`mvp_three=false`, and `comparison_modes=false`, on the existing
+`review/phase2t-hosted-preflight` branch only. It requires repository-owner
+dispatch. This selector is not a request hash or paid authorization.
+
+The job has read-only contents permission, no model Secret and no Environment.
+It captures only AAPL through the existing native free capture and fake model
+transport, using the saved `aapl-independent-20261020.json` comparison packet.
+After a successful fresh capture it downloads the official pricing page once,
+uses the existing fail-closed pricing check, and freezes one nonthinking
+candidate with `authorize_paid_POST=false`. It checks the actual frozen AAPL
+messages for neutral vendor-income labels and preserved independent evidence.
+Capture/pricing/check failures preserve artifacts and stop without a paid call.
+
+The candidate is an artifact for review, not a runnable paid authorization or an
+Environment approval request. Existing deploy entry points and historical
+bundles remain unchanged. A new live batch still needs its exact hash, current
+expiry, scoped authorization and the user's own Environment approval.
+
 The new workflow is `.github/workflows/05-manual-watchlist-mode.yml`.
 Its triggers are manual `workflow_dispatch` and reuse through `workflow_call`;
 `execute_live` defaults to false. The
@@ -172,6 +194,44 @@ advice can legitimately have different scopes. Watch/hold alone is not a conflic
 No natural-language trigger is treated as programmatically confirmed; buy plans
 remain conditional and unpublished. These rules do not evaluate arbitrary trigger
 language, invent scenarios, rewrite model labels, or regenerate accepted sidecars.
+
+### Independent financial comparison evidence
+
+The existing `--research-data FILE` accepts a per-symbol `financial_evidence`
+object separately from the legacy `values` replacement and
+`dividend_announcements`. This comparison does not replace Yahoo fields,
+dates, parent/earnings statuses, errors, source chains, dividends or news.
+It is appended by the controller around the pinned native formatter in both
+Chinese and English and preserved as `independent_financial_evidence` in
+`PROGRAM_FACTS.json`. No pinned business-source change or model call is implied.
+
+The object contains `sources` keyed by source ID and `fields` keyed by
+`revenue`, `net_income`, or `operating_cash_flow`. Each source requires an HTTPS
+`url`, lowercase SHA256, aware `fetched_at`, `published_date`, `period_end`,
+`page_count`, `duration_months`, `fiscal_year`, `currency`, and `unit`.
+Each `direct_quarter` field contains its `kind`, numeric finite `value`,
+`statement_label`, `source_id`, one-based `page`, `period_end`, `currency`,
+and `unit`; the selected source duration must be three months.
+One PDF may supply multiple source IDs for different table durations.
+
+A `derived_from_ytd_difference` CFO contains its value/basis/period and exactly
+two `operands` with the same row metadata. The first cumulative duration minus
+the second must be three months, the fiscal year and currency/unit must match,
+and the periods must increase. The value must equal the first operand minus
+the second. Period ordering compares parsed calendar dates, including mixed
+ISO extended/basic representations, rather than strings. Invalid dimensions or arithmetic stop preparation. This is
+structural validation, not a general financial parser or source authenticator;
+row transcription, source hashes and accounting comparability still require
+operator review. Optional `vendor_period_key` and `notes` preserve comparison
+context without rewriting the original vendor period.
+
+`Net income` is separate from the original `net_profit_parent` field; amount
+agreement does not certify parent attribution. The paid packet qualifier labels
+the vendor income row accordingly. Financial comparison evidence is not recent
+news and does not validate ROE, dividends, valuation, guidance or report quality.
+`FINANCIAL_EVIDENCE_USED.json` records what was supplied. Missing evidence leaves
+the existing behavior unchanged; legacy `values` replacement retains its
+existing semantics.
 
 ### Saved news evidence (free preparation only)
 

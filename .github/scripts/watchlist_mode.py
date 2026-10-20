@@ -69,6 +69,8 @@ def qualify_financial_fields(context, packet, audit, quote_currency=None):
             if classification == 'not_applicable_ETF':
                 warning = 'ETF企业财务不适用'
         notes[field] = dict(value=value, classification=classification, period_end=period, adapter_report_date=report.get('report_date'), currency=report.get('currency'), source_url=source, independently_official_verified=False, limitation=warning)
+        if field == 'net_profit_parent':
+            notes[field]['limitation'] += '；供应商字段名不证明已独立核验归母归属'
         if quarantine:
             notes[field].update(value=None, classification='quarantined_currency_and_receipt_basis', period_end=None, limitation=restriction)
     counts = {field: 0 for field in labels}
@@ -86,7 +88,8 @@ def qualify_financial_fields(context, packet, audit, quote_currency=None):
                     raise GuardStop('financial_prompt_value_mismatch')
                 counts[field] += 1
                 detail = f"期间={note['period_end'] or '未知/不适用'}；{note['classification']}；{note['limitation']}；来源={note['source_url']}"
-                return f"| {label} | {'N/A' if quarantine else expected} | {detail} |"
+                display_label = '净利润（供应商字段，归母归属未独立核验）' if field == 'net_profit_parent' else label
+                return f"| {display_label} | {'N/A' if quarantine else expected} | {detail} |"
             text = re.sub(r'(?m)^\| ' + re.escape(label) + r' \| ([^|\n]*) \|[^\n]*$', replace_row, text)
         if quarantine:
             message_dividend_count = 0
