@@ -86,6 +86,13 @@ def save_quality_review(directory, symbol, model, context, additional_findings=(
     markdown = '# ' + symbol + ' 独立质量审核\n\n> 未发布。原始模型文字不变；检查无发现不等于事实全部正确。此页不是新模型研究或新Usage。\n\n'
     markdown += '均线数值升序（相等值不代表严格小于）：' + '，'.join(f'{name}={value:g}' for name, value in averages) + '\n\n'
     markdown += '日线OHLCV不能证明尾盘路径、主动买卖方向或抛压是否出尽。财务解释只在期间、币种、来源及非估算口径均有证据时成立。\n\n'
+    session_rows = []
+    for bar in (context.get('today') or {}, context.get('yesterday') or {}):
+        if bar.get('date') and all(type(bar.get(key)) in (int, float) for key in ('high', 'low')):
+            session_rows.append(f"| {bar['date']} | {bar['high']:.2f} | {bar['low']:.2f} |")
+    if session_rows:
+        markdown += '日线日期对照（引用高低点时请写具体日期；不推定其他历史高低点或支撑有效性）：\n\n'
+        markdown += '| 交易日 | 最高 | 最低 |\n|---|---:|---:|\n' + '\n'.join(session_rows) + '\n\n'
     markdown += '```json\n' + text + '\n```\n'
     (directory / 'QUALITY_REVIEW.md').write_text(markdown, encoding='utf-8')
     (directory / 'QUALITY_REVIEW.html').write_text(page(symbol + ' 独立质量审核', '<h1>独立审核，不改写模型原文</h1><p>未发布；条件性计划并非即时指令。检查无发现不等于事实全部正确。</p><pre>' + html.escape(markdown) + '</pre>'), encoding='utf-8')

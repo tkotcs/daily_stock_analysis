@@ -16,7 +16,9 @@ tier, one POST at most, no retries or fallback, and a proposed CNY 0.05
 reservation that is not an authorization.
 
 `manual_responses_candidate.py` preserves the saved native messages as Responses
-`input`. It removes the old vendor `thinking`, `max_tokens`, `temperature` and
+`input`, appending an explicitly dated session-reference table to the last user
+message when saved context is supplied. It removes the old vendor `thinking`,
+`max_tokens`, `temperature` and
 `stream_options` fields, using `reasoning.effort` and `max_output_tokens` instead.
 The output is a draft, with no sender, batch authorization or model call.
 It retains source timestamps/expiry and verifies the source request/context
@@ -83,6 +85,27 @@ pass before artifact upload. This is a one-off test, not a global analyzer
 provider migration or an automated research schedule.
 
 ## Prepare, without a model call
+
+### Absolute session references in future Responses drafts
+
+The current Responses candidate CLI supplies the saved context to
+`build_request`. It validates that the two daily bars have ordered dates, that
+the target date matches the analysis context and that OHLC values are finite,
+positive and internally ordered. A bilingual date table with each bar's
+open/high/low/close is appended once; conflicting or stale appended tables are
+refused. Instructions ask the model to use the absolute session date rather
+than unanchored "yesterday" or "previous day" references. Original context
+precision and all preexisting message text remain intact.
+
+This changes future request hashes and does not modify already-consumed locks,
+responses or their authorization. The low-level converter still accepts no
+context for historical schema-only tests; only context-aware preparation
+provides the date-table guarantee. This is an input clarity fix, not proof
+that future model prose will obey it.
+
+New independent QA sidecars also display the supplied session dates and highs/
+lows beside existing review findings, without rewriting model text or upgrading
+quality acceptance. Existing historical sidecars are not regenerated.
 
 Use the existing native free capture on the pinned business checkout when a new
 batch is actually requested. Do not rerun it merely to repeat migration checks.

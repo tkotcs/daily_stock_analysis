@@ -6,6 +6,7 @@ from decimal import Decimal
 import hashlib
 import ipaddress
 import json
+import math
 import os
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -32,7 +33,49 @@ def hosted_endpoint(base):
     return base.rstrip('/') + '/responses'
 
 
-def build_request(chat_packet, profile):
+def qualify_session_references(context, packet):
+    """Bind the two supplied daily bars to dates; never infer older extrema."""
+    from datetime import date
+    today, previous = context.get('today') or {}, context.get('yesterday') or {}
+    if not today or not previous:
+        raise ValueError('two_saved_daily_bars_required')
+    current_date = date.fromisoformat(today['date'])
+    previous_date = date.fromisoformat(previous['date'])
+    if previous_date >= current_date or context.get('date') != current_date.isoformat():
+        raise ValueError('ordered_session_dates_required')
+    rows = []
+    for bar, day in ((today, current_date), (previous, previous_date)):
+        values = [bar.get(k) for k in ('open', 'high', 'low', 'close')]
+        if any(type(value) not in (int, float) or not math.isfinite(value) or value <= 0 for value in values):
+            raise ValueError('finite_daily_OHLC_required')
+        op, hi, lo, cl = values
+        if not lo <= min(op, cl) <= max(op, cl) <= hi:
+            raise ValueError('daily_OHLC_order_invalid')
+        rows.append('| ' + day.isoformat() + ' | ' + ' | '.join(f'{value:.2f}' for value in values) + ' |')
+    marker = '### Session date references / 日线日期对照'
+    section = ('\n\n' + marker + '\n'
+               'Use the absolute session date when citing a high or low; avoid unanchored today/yesterday/previous-day labels.\n'
+               '引用高低点请写绝对交易日日期；目标日是已完成日线，不是运行时盘中日。不要用无日期锚点的本日、昨日或前日混指。\n'
+               '| Session date / 交易日 | Open / 开盘 | High / 最高 | Low / 最低 | Close / 收盘 |\n'
+               '|---|---:|---:|---:|---:|\n' + '\n'.join(rows) + '\n'
+               'Rounded display only; original numeric precision is preserved in context. '
+               '显示值保留两位小数，原始精度仍在上下文；本表不证明其他历史前低不存在，也不确认支撑有效。\n')
+    result = copy.deepcopy(packet)
+    user_messages = [m for m in result['messages'] if m.get('role') == 'user' and isinstance(m.get('content'), str)]
+    if not user_messages:
+        raise ValueError('user_text_message_required')
+    existing = [m for m in result['messages'] if marker in str(m.get('content', ''))]
+    if existing:
+        if len(existing) != 1 or existing[0]['content'].count(marker) != 1 or section not in existing[0]['content']:
+            raise ValueError('stale_or_ambiguous_session_reference_section')
+    else:
+        user_messages[-1]['content'] += section
+    return result
+
+
+def build_request(chat_packet, profile, context=None):
+    if context is not None:
+        chat_packet = qualify_session_references(context, chat_packet)
     messages = chat_packet.get('messages')
     if not isinstance(messages, list) or not messages:
         raise ValueError('saved_native_messages_required')
@@ -136,7 +179,7 @@ def main():
         raise ValueError('source_context_hash_mismatch')
     chat = json.loads(raw)
     profile = json.loads(args.profile.read_text('utf-8'))
-    request = build_request(chat, profile)
+    request = build_request(chat, profile, context=json.loads(context_raw))
     result = dict(
         status='draft_waiting_for_public_API_base_and_credential_setup',
         model=profile['model'], wire_api='responses', authorize_paid_POST=False,
@@ -147,6 +190,10 @@ def main():
         source_analysis_asof=member['analysis_asof'],
         source_material_expires_at=member['material_expires_at'],
         native_messages_preserved=request['input'] == chat['messages'],
+        session_reference_table_added=True,
+        original_message_text_retained=all(
+            new['role'] == old['role'] and new['content'].startswith(old['content'])
+            for old, new in zip(chat['messages'], request['input'])),
         api_base_env=profile['api_base_env'], api_key_env=profile['api_key_env'],
         public_endpoint=None, budget=budget_estimate(request, profile))
     if result['budget']['pricing_ambiguity_blocks_live']:
