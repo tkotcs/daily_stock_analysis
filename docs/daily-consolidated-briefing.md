@@ -1,0 +1,89 @@
+# 全清单扫描与每日一只精写
+
+本入口落实《设计研报Agent》原先的分层日报：全部标的由Python扫描，AI集中解释，形成一份中文日报。沿用当前35只美股及ETF清单，不将35只全部转换成每天一篇付费长文。
+
+固定业务仍为 `577624ad8459871630c690e5760ae504ac6f2b9f`。采集复用 `mvp_three.py` 的原生数据和技术计算，模型传输复用已验收的 `perform_post_once()`，邮件复用原生 `EmailSender`。没有迁回早期 `personal-tech-research` 原型，没有改变历史冻结包和已消费请求。
+
+## 内容与调用
+
+- 35只全部列出：有效行展示收盘、涨跌、四条均线、RSI12、多日均量比、上下方观察线和收盘与均线的新穿越。
+- MACD的DIF、DEA及柱值来自同一次原生技术结果，缺失保留未知，不由模型补算。
+- 采集失败、日期错配、不到60根技术窗口、身份或币种不符时保留明确缺口，不补旧价格。
+- 观察线使用均线和目标日高低点，明确不是已验证支撑、有效放量突破或即时交易指令。
+- 每天选择一只合格公司精写，与综合日报共用最多一次Sol请求；不是35次基础调用加一次精写。
+- 复用已选择的Sol profile：high、32768输出上限包含推理、预留人民币0.05元、零重试/零fallback。它是单次预留及估算约束，不是网关硬支出封顶或新收费授权。
+
+精写筛选把可用的近三日来源材料优先于已验证的均线穿越；都没有时，仅按绝对日变动选择写作对象，不当作投资排名。同层按绝对日变动和原清单顺序决定。ETF和带身份限制的标的不进入公司精写。如果没有合格公司，则只保留程序预览，不编造对象。
+
+这是把原方案“重点事件与变化优先”具体化的实现规则，不是声称原Chat已经写过这些精确评分或平局规则。没有增加固定轮换。
+
+保留原七节：今日最值得关注的3件事、重点公司动态、产业链关联分析、QQQ与SOXX市场观察、今天学一个投资概念、值得继续思考的问题、信息来源与数据截止时间。事件不足时不凑三件事。
+
+## 新闻覆盖
+
+`daily-news-feeds.json`只配置此前已保存过来源依据的NVIDIA官方RSS、微软官方博客RSS、Apple Newsroom RSS。每个feed一次GET，无重试、无重定向，最多保留三条近三日元数据；保存原始字节和哈希。RSS的updated修订时间不冒充发布时间，缺时间、过期、未来、重复及超出条数分别记录。
+
+这不是35家公司综合新闻搜索。没有配置feed的标的，以及feed失败或没有合格条目时，新闻均为未知。只传标题、原始链接、发布及获取时间，不把RSS描述或标题当作全文，不推出未提供的经营事实。来源覆盖不足是当前真实限制。
+
+汇总时再次核对新闻窗口，并复用原生formatter重建精写公司的user提示词，避免采集时合格、汇总时已过期的文章仍留在旧提示词里。日报路径显式允许空新闻，旧AAPL新闻候选仍默认要求至少一条。技术块使用已保存的真实TECHNICAL结果，不因重建提示词把已存在的技术结果标成缺失。
+
+## 本地准备
+
+先使用现有原生采集器准备**新目录**：
+
+```powershell
+python .github/scripts/daily_news.py --config .github/research/daily-news-feeds.json --out daily-news
+python .github/scripts/mvp_three.py --source ../dsa-mode-business-577 --out daily-capture --universe watchlist35 --news-data daily-news/NEWS_PACKET.json
+python .github/scripts/daily_briefing.py prepare --source ../dsa-mode-business-577 --data daily-capture --profile .github/research/gpt-6.1-sol-review-profile.json --out daily-ready --session YYYY-MM-DD
+```
+
+采集器中的模型传输是合成响应，仅用于取得原生请求；不使用真实供应商密钥。日报汇总只读取实际行情上下文、技术和身份审计，不使用合成模型报告当作研究结论。
+
+准备生成程序日报MD/HTML、邮件EML预览、全清单事实、每股原上下文、精写请求、profile、锁和哈希。`PREPARATION_STATUS.json`展示精写依据、预算、到期和阻断原因。历史材料加 `--historical-preview`，始终不能进入收费发送；此模式不刷新时间戳。
+
+## 收费与输出检查
+
+发送前必须同时满足：
+
+1. 最新完整交易日、前一交易日相邻、行情数值及标的一致。
+2. 请求、上下文、全清单事实和profile通过哈希及语义校验。
+3. profile与已审阅Sol配置一致、端点一致、未过期、估算满足预留。
+4. owner、首次Run attempt、既有deploy分支和本人Environment审批。
+
+按交易日创建稳定的远端消费标记；即使重新抓取或更换锁哈希，同一交易日也不能在此入口再调用一次。结果不明、失败、截断或格式不符都不发修复请求。此标记不影响旧单股测试记录。
+
+完整响应必须显式completed，返回模型等于请求模型。新增daily_sections必须有且只有七个规定章节，focus_symbol必须等于程序选择，引用ID只能来自已给事实或保存新闻。精写公司的结构化risk_plan由原生Python函数核算，缺失或非法时失败。原文、解析JSON、Usage和失败记录保留。
+
+这些验证不认证自然语言全部正确，也不证明新闻全面或交易策略有预测力。新综合prompt目前仅有离线测试，尚未进行额外真实付费测试；以前的单AAPL成功不冒充新综合prompt实测。
+
+## 邮件
+
+每份日报一个MD/HTML与一个EML，不为每只标的单独发送邮件。真实发送复用现有DSA SMTP模块。使用现有GitHub Secrets：
+
+- `EMAIL_SENDER`
+- `EMAIL_PASSWORD`（邮箱所需的授权凭据，不在聊天或报告中填写）
+- `EMAIL_RECEIVERS`
+
+邮件入口要求成功的日报状态和确切 `DAILY_REPORT.md` SHA256审核引用。在首次Run attempt、owner与deploy分支上才允许发送；发送前预留当日邮件标记，SMTP不明或失败后不自动重试。保存结果不包含地址或密码。
+
+```powershell
+python .github/scripts/daily_briefing_mail.py --source ../dsa-mode-business-577 --report daily-real/DAILY_REPORT.md --out mail-preview
+```
+
+上面只检查准备情况，不联系SMTP。真实发送需要另加 `--send --review-reference REPORT_SHA256`，并满足GitHub运行环境和Secret要求。此命令不是绕过用户审批的本地发信后门。
+
+## GitHub入口与定时状态
+
+提供 `.github/workflows/06-daily-consolidated.yml.disabled`，默认prepare；generate在材料准备完成后进入既有Environment；email针对已审阅的历史生成Run。三种操作互斥。免费扫描任务不注入模型或邮箱Secrets。
+
+模板当前为disabled后缀，无cron，不会被GitHub自动运行。原Chat的确切发送时刻未恢复，当前仓库也没有邮箱Secrets；不能自行填一个固定发送时间或声称邮件已上线。正式启用还需确定发信时刻、配置邮箱Secrets，并将模板注册为工作流。当前模板保留人工Environment审阅和发信前报告审核；如果目标是无人值守收费及自动发信，审批政策需要明确调整，不能仅靠给模板改名实现。
+
+交易日判断使用纽约市场日期及XNYS日历，不按北京时间星期一到五猜测，因此北京时间周六清晨可能仍对应美国周五。实际运行时间决定使用哪个最新完整交易日；模板不伪造尚未收盘的当日K线。
+
+## 验证与暂停
+
+定向测试覆盖合成新闻、缺失/异常行情、日期、focus、请求哈希、语义错配、单POST失败保存、原生风险计算和SMTP桩。测试不访问真实供应商、出版商或SMTP。
+
+历史真实采集可以离线汇总展示，但缺失的19只不能被标记为恢复；需要未来实际新采集结果。没有重跑已消费批次，也没有新增付费测试。
+
+暂停时禁用工作流，保留全部消费标记和输出；回滚代码使用普通后续提交，不删除消费记录。本文为新增中文操作说明；既有英文单股专题不复制一套日报说明，避免维护两份不同状态。

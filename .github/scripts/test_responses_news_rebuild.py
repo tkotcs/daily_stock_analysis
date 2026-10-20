@@ -60,3 +60,16 @@ def test_rebuild_refuses_empty_or_invalid_news_before_a_new_request():
     for rejected in ({'AAPL': []}, {'AAPL': [dict(packet['AAPL'][0], published_at='2026-09-01T00:00:00Z')]}):
         with pytest.raises(ValueError, match='at_least_one_accepted'):
             rebuild_with_saved_news(chat, context, rejected, ASOF, source, audit)
+
+
+def test_daily_explicit_empty_news_rebuild_removes_stale_user_prose_and_retains_saved_technical_result():
+    chat, context, profile, audit, _ = inputs()
+    chat['messages'][-1]['content'] += '\nSYNTHETIC_STALE_NEWS_SHOULD_NOT_SURVIVE\n'
+    updated, new_chat = rebuild_with_saved_news(
+        chat, context, {'AAPL': []}, ASOF, Path(os.environ['DSA_FIXED_SOURCE']), audit,
+        require_news=False, trend_result=dict(ma5=342.53, rsi_12=61.76))
+    text = '\n'.join(m['content'] for m in new_chat['messages'])
+    assert 'SYNTHETIC_STALE_NEWS_SHOULD_NOT_SURVIVE' not in text
+    assert updated['saved_news_audit']['accepted'] == []
+    assert 'trend_result_missing' not in text
+    assert updated['fundamental_context'] == context['fundamental_context']

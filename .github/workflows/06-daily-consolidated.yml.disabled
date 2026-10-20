@@ -1,0 +1,219 @@
+name: Consolidated daily watchlist and one focused company
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "prepare = zero paid calls; generate = one call after Environment approval; email = reviewed prior report"
+        type: choice
+        options: [prepare, generate, email]
+        default: prepare
+      authorization_reference:
+        description: "User authorization for this daily run; does not reuse a previous paid test"
+        type: string
+        required: true
+      source_run_id:
+        description: "email only: completed daily generation run ID"
+        type: string
+        default: ""
+      reviewed_report_sha256:
+        description: "email only: SHA256 of the reviewed DAILY_REPORT.md"
+        type: string
+        default: ""
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: consolidated-daily-research
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: ${{ inputs.operation != 'email' && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      ready: ${{ steps.freeze.outputs.ready }}
+      batch_sha: ${{ steps.freeze.outputs.batch_sha }}
+    env:
+      PYTHONIOENCODING: utf-8
+      LITELLM_LOCAL_MODEL_COST_MAP: "True"
+      TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+      CUSTOM_TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+      RESEARCH_API_BASE: ${{ vars.RESEARCH_API_BASE }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        with:
+          ref: 577624ad8459871630c690e5760ae504ac6f2b9f
+          path: upstream-fixed
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Prepare native dependencies without supplier or email credentials
+        run: |
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          python -m pip install -r upstream-fixed/requirements.txt litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6 markdown2
+          python .github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR"
+      - name: Trading-day gate in market timezone
+        id: calendar
+        run: |
+          python .github/scripts/daily_briefing.py gate --source upstream-fixed --out calendar.json
+          python - <<'PY'
+          import json,os
+          gate=json.load(open('calendar.json'))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('run='+str(gate['run']).lower()+'\n')
+              f.write('session='+gate['completed_session']+'\n')
+          PY
+      - name: Native 35-symbol data capture, synthetic model transport only
+        if: steps.calendar.outputs.run == 'true'
+        run: |
+          python .github/scripts/daily_news.py --config .github/research/daily-news-feeds.json --out daily-news
+          python .github/scripts/mvp_three.py --source upstream-fixed --out daily-capture --universe watchlist35 --news-data daily-news/NEWS_PACKET.json
+      - name: Deterministic table and one consolidated candidate
+        if: steps.calendar.outputs.run == 'true'
+        env:
+          TARGET_SESSION: ${{ steps.calendar.outputs.session }}
+        run: python .github/scripts/daily_briefing.py prepare --source upstream-fixed --data daily-capture --profile .github/research/gpt-6.1-sol-review-profile.json --out daily-ready --session "$TARGET_SESSION"
+      - name: Publish exact batch and price information for human review
+        if: always()
+        id: freeze
+        run: |
+          python - <<'PY'
+          import json,os,pathlib
+          path=pathlib.Path('daily-ready/PREPARATION_STATUS.json')
+          state=json.loads(path.read_text()) if path.exists() else {'status':'calendar_skip_or_preparation_failed','new_model_POSTs':0}
+          ready=state.get('status')=='ready_for_Environment_review'
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('ready='+str(ready).lower()+'\n')
+              f.write('batch_sha='+state.get('batch_sha256','')+'\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('# Consolidated daily candidate: 0 baseline model POSTs, at most 1 total\n\n```json\n'+json.dumps(state,ensure_ascii=False,indent=2)+'\n```\n')
+          PY
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: daily-ready-${{ github.run_id }}
+          retention-days: 14
+          path: |
+            calendar.json
+            daily-ready/
+            daily-capture/RESULTS.json
+            daily-capture/*/STATUS.json
+            daily-capture/*/PRICE_AUDIT.json
+            daily-capture/*/TECHNICAL.json
+            daily-capture/*/FINANCIAL_AUDIT.json
+            daily-news/NEWS_PACKET.json
+            daily-news/CAPTURES.json
+            daily-news/*.xml
+  generate:
+    needs: prepare
+    if: ${{ inputs.operation == 'generate' && needs.prepare.outputs.ready == 'true' && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    environment: nvda-one-call-approval
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+      actions: read
+    env:
+      PYTHONIOENCODING: utf-8
+      LITELLM_LOCAL_MODEL_COST_MAP: "True"
+      RESEARCH_API_BASE: ${{ vars.RESEARCH_API_BASE }}
+      BATCH_SHA: ${{ needs.prepare.outputs.batch_sha }}
+      APPROVAL_REFERENCE: ${{ inputs.authorization_reference }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        with:
+          ref: 577624ad8459871630c690e5760ae504ac6f2b9f
+          path: upstream-fixed
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r upstream-fixed/requirements.txt litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6 markdown2
+      - uses: actions/download-artifact@v5
+        with:
+          name: daily-ready-${{ github.run_id }}
+          path: prepared
+      - name: One reviewed daily Responses attempt
+        env:
+          SEEKERX: ${{ secrets.SEEKERX }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python .github/scripts/daily_briefing.py generate --source upstream-fixed --bundle prepared/daily-ready --out daily-real --batch-sha "$BATCH_SHA" --authorization-reference "$APPROVAL_REFERENCE"
+      - name: Credential scan before upload
+        if: always()
+        id: scan
+        env:
+          SEEKERX: ${{ secrets.SEEKERX }}
+        run: |
+          python - <<'PY'
+          import os,pathlib
+          root=pathlib.Path('daily-real');key=os.environ.get('SEEKERX','').encode()
+          assert key and root.is_dir()
+          assert not any(key in p.read_bytes() for p in root.rglob('*') if p.is_file())
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write('safe=true\n')
+          PY
+      - uses: actions/upload-artifact@v6
+        if: ${{ always() && steps.scan.outputs.safe == 'true' }}
+        with:
+          name: daily-real-${{ github.run_id }}
+          path: daily-real/
+          retention-days: 14
+  email:
+    if: ${{ inputs.operation == 'email' && github.actor == github.repository_owner && github.ref == 'refs/heads/deploy/phase2h-request-preparation' }}
+    environment: nvda-one-call-approval
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    env:
+      PYTHONIOENCODING: utf-8
+      LITELLM_LOCAL_MODEL_COST_MAP: "True"
+      SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+      REVIEWED_REPORT_SHA: ${{ inputs.reviewed_report_sha256 }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        with:
+          ref: 577624ad8459871630c690e5760ae504ac6f2b9f
+          path: upstream-fixed
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Validate reviewed email inputs without credentials
+        run: |
+          python - <<'PY'
+          import os,re
+          assert os.environ['GITHUB_RUN_ATTEMPT']=='1'
+          assert re.fullmatch(r'[0-9]+',os.environ['SOURCE_RUN_ID'])
+          assert re.fullmatch(r'[a-f0-9]{64}',os.environ['REVIEWED_REPORT_SHA'])
+          PY
+      - run: python -m pip install -r upstream-fixed/requirements.txt litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6 markdown2
+      - uses: actions/download-artifact@v5
+        with:
+          name: daily-real-${{ inputs.source_run_id }}
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+          path: reviewed
+      - name: Send exactly one reviewed email through native sender
+        env:
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECEIVERS: ${{ secrets.EMAIL_RECEIVERS }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python .github/scripts/daily_briefing_mail.py --source upstream-fixed --report reviewed/DAILY_REPORT.md --out mail-result --review-reference "$REVIEWED_REPORT_SHA" --send
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: daily-mail-${{ github.run_id }}
+          path: mail-result/
+          retention-days: 14

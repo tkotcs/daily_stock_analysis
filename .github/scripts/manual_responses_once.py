@@ -127,6 +127,41 @@ def cost(usage, profile):
                 missing_cache_assumed_uncached=c is None, reasoning_not_added_twice=True)
 
 
+def perform_post_once(request, profile, endpoint, key, out, result, save, batch_sha):
+    """Reuse the verified single transport after caller validation and claims."""
+    import httpx
+    raw = bytearray()
+    # Marker is persisted before transport. Every ambiguous result is consumed; never retry.
+    save('POST_ATTEMPT.json', dict(state='reserved_before_transport_may_be_charged', batch_sha256=batch_sha))
+    result['actual_model_POST_attempts'] = 1
+    try:
+        with httpx.Client(transport=httpx.HTTPTransport(retries=0), follow_redirects=False,
+                          trust_env=False, timeout=httpx.Timeout(600, connect=25)) as client:
+            with client.stream('POST', endpoint, headers={'Authorization': 'Bearer ' + key,
+                               'Content-Type': 'application/json'}, content=canonical(request)) as response:
+                result['HTTP_status'] = response.status_code
+                for chunk in response.iter_bytes():
+                    raw.extend(chunk)
+                    if len(raw) > 16000000:
+                        raise ValueError('response_size_limit_no_retry')
+    finally:
+        (out / 'RAW_RESPONSE_BODY.bin').write_bytes(bytes(raw).replace(key.encode(), b'[REDACTED]'))
+    if result['HTTP_status'] != 200:
+        raise ValueError('HTTP_failure_do_not_retry')
+    response, text = completed_response(bytes(raw))
+    response = json.loads(json.dumps(response, ensure_ascii=False).replace(key, '[REDACTED]'))
+    text = text.replace(key, '[REDACTED]')
+    save('RESPONSE_RESULT.json', response)
+    (out / 'MODEL_RAW_TEXT.txt').write_text(text, encoding='utf-8')
+    result['usage'] = response.get('usage')
+    result['cost_estimate'] = cost(response.get('usage'), profile)
+    result['response_model'] = response.get('model')
+    result['response_service_tier'] = response.get('service_tier')
+    if response.get('model') != request['model']:
+        raise ValueError('response_model_mismatch_no_retry')
+    return response, text
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--bundle', type=Path, required=True)
@@ -175,36 +210,7 @@ def main():
             run_id=os.environ['GITHUB_RUN_ID'], authorization_reference=os.environ['APPROVAL_REF'],
             secret_reference='repository Secret SEEKERX; user added it and requested this paid approval',
             reservation_CNY='0.05', pricing=profile['pricing'], material_expires_at=lock['material_expires_at']))
-        import httpx
-        raw = bytearray()
-        # Marker is persisted before transport. Every ambiguous result is consumed; never retry.
-        save('POST_ATTEMPT.json', dict(state='reserved_before_transport_may_be_charged', batch_sha256=args.batch_sha))
-        result['actual_model_POST_attempts'] = 1
-        try:
-            with httpx.Client(transport=httpx.HTTPTransport(retries=0), follow_redirects=False,
-                              trust_env=False, timeout=httpx.Timeout(600, connect=25)) as client:
-                with client.stream('POST', lock['endpoint'], headers={'Authorization': 'Bearer ' + key,
-                                   'Content-Type': 'application/json'}, content=canonical(request)) as response:
-                    result['HTTP_status'] = response.status_code
-                    for chunk in response.iter_bytes():
-                        raw.extend(chunk)
-                        if len(raw) > 16000000:
-                            raise ValueError('response_size_limit_no_retry')
-        finally:
-            (out / 'RAW_RESPONSE_BODY.bin').write_bytes(bytes(raw).replace(key.encode(), b'[REDACTED]'))
-        if result['HTTP_status'] != 200:
-            raise ValueError('HTTP_failure_do_not_retry')
-        response, text = completed_response(bytes(raw))
-        response = json.loads(json.dumps(response, ensure_ascii=False).replace(key, '[REDACTED]'))
-        text = text.replace(key, '[REDACTED]')
-        save('RESPONSE_RESULT.json', response)
-        (out / 'MODEL_RAW_TEXT.txt').write_text(text, encoding='utf-8')
-        result['usage'] = response.get('usage')
-        result['cost_estimate'] = cost(response.get('usage'), profile)
-        result['response_model'] = response.get('model')
-        result['response_service_tier'] = response.get('service_tier')
-        if response.get('model') != request['model']:
-            raise ValueError('response_model_mismatch_no_retry')
+        response, text = perform_post_once(request, profile, lock['endpoint'], key, out, result, save, args.batch_sha)
         from src.analyzer import GeminiAnalyzer
         analyzer = object.__new__(GeminiAnalyzer)
         _, model = analyzer._extract_analysis_json_object(text)

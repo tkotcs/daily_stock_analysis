@@ -115,7 +115,8 @@ def build_request(chat_packet, profile, context=None):
         service_tier=profile['service_tier'])
 
 
-def rebuild_with_saved_news(chat, context, news_packet, asof, source, financial_audit):
+def rebuild_with_saved_news(chat, context, news_packet, asof, source, financial_audit,
+                            *, require_news=True, trend_result=None):
     """Reformat the native user prompt with news, rather than append to old missing-news prose."""
     import subprocess
     import sys
@@ -131,11 +132,11 @@ def rebuild_with_saved_news(chat, context, news_packet, asof, source, financial_
     artifacts = PipelineAnalysisArtifacts(
         code=context['code'], stock_name=context.get('stock_name', context['code']),
         market='us', phase=None, base_context=copy.deepcopy(context), enhanced_context=copy.deepcopy(context),
-        realtime_quote=None, trend_result=None, chip_data=None,
+        realtime_quote=None, trend_result=copy.deepcopy(trend_result), chip_data=None,
         fundamental_context=copy.deepcopy(context.get('fundamental_context')),
         news_context=None, news_result_count=None, metadata={})
     prepared = attach_saved_news_context(artifacts, news_packet, asof)
-    if not prepared.enhanced_context['saved_news_audit']['accepted']:
+    if require_news and not prepared.enhanced_context['saved_news_audit']['accepted']:
         raise ValueError('new_request_requires_at_least_one_accepted_saved_news_item')
     pack = AnalysisContextBuilder.build(prepared)
     summary = format_analysis_context_pack_prompt_section(pack, report_language='zh')
