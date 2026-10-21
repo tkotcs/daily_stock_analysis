@@ -2,6 +2,7 @@ name: Daily research and email at 09 Beijing
 on:
   schedule:
     - cron: "0 1 * * 2-6"
+    - cron: "17 1 * * 2-6"
   workflow_dispatch:
     inputs:
       operation:
@@ -87,13 +88,21 @@ jobs:
               f.write('run='+str(gate['run']).lower()+'\n')
               f.write('session='+gate['completed_session']+'\n')
           PY
-      - name: Native watchlist capture without model or email credentials
+      - name: Skip a session already reserved by an earlier run
         if: steps.calendar.outputs.run == 'true'
+        id: session
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TARGET_SESSION: ${{ steps.calendar.outputs.session }}
+        run: |
+          python controller/.github/scripts/daily_session_check.py --session "$TARGET_SESSION" --out SESSION_STATUS.json
+      - name: Native watchlist capture without model or email credentials
+        if: steps.session.outputs.run == 'true'
         run: |
           python controller/.github/scripts/daily_news.py --config controller/.github/research/daily-news-feeds.json --out daily-news
           python controller/.github/scripts/mvp_three.py --source upstream-fixed --out daily-capture --universe watchlist35 --news-data daily-news/NEWS_PACKET.json
       - name: Freeze one consolidated request
-        if: steps.calendar.outputs.run == 'true'
+        if: steps.session.outputs.run == 'true'
         env:
           TARGET_SESSION: ${{ steps.calendar.outputs.session }}
         run: |
@@ -101,7 +110,7 @@ jobs:
           if [ "$AUTOMATIC_RUN" = true ]; then EXTRA=(--automatic); fi
           python controller/.github/scripts/daily_briefing.py prepare --source upstream-fixed --data daily-capture --profile controller/.github/research/gpt-6.1-sol-review-profile.json --out daily-ready --session "$TARGET_SESSION" "${EXTRA[@]}"
       - name: Check frozen readiness without supplier credentials
-        if: steps.calendar.outputs.run == 'true'
+        if: steps.session.outputs.run == 'true'
         id: ready
         run: |
           python - <<'PY'
@@ -144,7 +153,7 @@ jobs:
         run: |
           python - <<'PY'
           import json,os,pathlib
-          files=[pathlib.Path(n) for n in ('CONFIGURATION_STATUS.json','calendar.json')]
+          files=[pathlib.Path(n) for n in ('CONFIGURATION_STATUS.json','calendar.json','SESSION_STATUS.json')]
           for name in ('daily-news','daily-ready','daily-real','mail-result'):
               files.extend(p for p in pathlib.Path(name).rglob('*') if p.is_file())
           sensitive=[os.environ.get(k,'').strip() for k in ('SEEKERX','EMAIL_SENDER','EMAIL_PASSWORD','EMAIL_RECEIVERS')]
@@ -154,7 +163,7 @@ jobs:
               p=pathlib.Path(name)
               return json.loads(p.read_bytes()) if p.exists() else {}
           generated=read('daily-real/STATUS.json');mail=read('mail-result/MAIL_STATUS.json')
-          summary=dict(configuration=read('CONFIGURATION_STATUS.json'),calendar=read('calendar.json'),
+          summary=dict(configuration=read('CONFIGURATION_STATUS.json'),calendar=read('calendar.json'),session=read('SESSION_STATUS.json'),
               preparation=read('daily-ready/PREPARATION_STATUS.json'),generation=generated,mail=mail,
               timezone='Asia/Shanghai',scheduled_start='09:00',controller_commit='__CONTROLLER_COMMIT__',
               model_attempts=generated.get('actual_model_POST_attempts',int(pathlib.Path('daily-real/POST_ATTEMPT.json').exists())),
@@ -173,6 +182,7 @@ jobs:
             CONFIGURATION_STATUS.json
             DAILY_EXECUTION_SUMMARY.json
             calendar.json
+            SESSION_STATUS.json
             daily-ready/
             daily-real/
             mail-result/
