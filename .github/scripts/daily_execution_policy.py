@@ -30,7 +30,7 @@ def execution_authority(*, automatic=False):
     event=json.loads(event_path.read_bytes()) if event_path.is_file() else {}
     kind=os.environ.get('GITHUB_EVENT_NAME')
     if not (
-        kind=='schedule' and event.get('schedule')==policy['cron_UTC']
+        kind=='schedule' and event.get('schedule') in (policy['cron_UTC'],policy['catchup_cron_UTC'])
         or kind=='workflow_dispatch' and
         (event.get('inputs') or {}).get('operation')==policy['manual_paid_operation']
     ):

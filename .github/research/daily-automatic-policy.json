@@ -4,6 +4,7 @@
   "timezone": "Asia/Shanghai",
   "local_start_time": "09:00",
   "cron_UTC": "0 1 * * 2-6",
+  "catchup_cron_UTC": "17 1 * * 2-6",
   "default_branch": "main",
   "workflow_path": ".github/workflows/06-daily-consolidated.yml",
   "manual_paid_operation": "run_paid_daily",

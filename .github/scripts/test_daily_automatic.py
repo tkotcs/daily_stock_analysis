@@ -53,6 +53,8 @@ def test_automatic_authority_rejects_other_contexts(tmp_path,monkeypatch,change)
 def test_schedule_and_explicit_manual_production_share_one_user_policy(tmp_path,monkeypatch):
     automatic_env(tmp_path,monkeypatch)
     scheduled=execution_authority(automatic=True)
+    daily.save(tmp_path/'event.json',dict(schedule=POLICY['catchup_cron_UTC']))
+    assert execution_authority(automatic=True)==scheduled
     monkeypatch.setenv('GITHUB_EVENT_NAME','workflow_dispatch')
     daily.save(tmp_path/'event.json',dict(inputs=dict(operation='run_paid_daily')))
     assert execution_authority(automatic=True)==scheduled
@@ -170,7 +172,7 @@ def test_beijing_nine_resolves_actual_completed_US_session(timestamp,run,session
 
 def test_production_template_pins_controller_and_fails_before_paid_steps():
     spec=yaml.load(TEMPLATE.read_text('utf-8'),Loader=yaml.BaseLoader)
-    assert spec['on']['schedule']==[{'cron':POLICY['cron_UTC']}]
+    assert spec['on']['schedule']==[{'cron':POLICY['cron_UTC']},{'cron':POLICY['catchup_cron_UTC']}]
     assert spec['on']['workflow_dispatch']['inputs']['operation']['default']=='check_config'
     job=spec['jobs']['daily']
     assert 'environment' not in job and 'refs/heads/main' in job['if']
@@ -184,6 +186,7 @@ def test_production_template_pins_controller_and_fails_before_paid_steps():
     assert 'always()' not in steps[email]['if']
     assert not any('continue-on-error' in step for step in steps)
     free=next(s for s in steps if s.get('name','').startswith('Native watchlist capture'))
+    assert free['if']=="steps.session.outputs.run == 'true'"
     assert 'secrets.' not in json.dumps(free)
     assert 'GITHUB_REF' not in job['env']
     for step in steps:
