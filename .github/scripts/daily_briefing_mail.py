@@ -28,7 +28,8 @@ def deliver(report, source, out, review_reference, *, send=False,automatic=False
         if automatic and review_reference!=digest:
             raise ValueError('exact_automatic_report_hash_required')
         from daily_execution_policy import execution_authority
-        authority=execution_authority(automatic=automatic)
+        authority=execution_authority(automatic=automatic,
+                                     saved_response=bool(authorization.get('recovered_from_run')))
         if automatic:
             from manual_responses_once import check_time
             if (authorization.get('execution_authority')!=authority

@@ -30,6 +30,8 @@ def quality_findings(model, context):
                 chain = match.group()
                 before = re.split('[。；]', value[:match.start()])[-1]
                 after = re.split('[。；]', value[match.end():])[0]
+                if re.search(r'(?:必须|务必)(?:先)?(?:确认|满足|形成)\s*$', before):
+                    continue
                 if re.search('不满足|未满足|不成立|不符合|未形成|必要|条件|前提|要求|需|互斥|不将', before + after):
                     continue
                 names = re.findall(r'MA(?:5|10|20|60)', chain, re.I)
