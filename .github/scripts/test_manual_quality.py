@@ -2,9 +2,27 @@ import copy
 import json
 from pathlib import Path
 import sys
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from manual_reports import quality_findings, record_outputs, render_status_index, save_full_report, save_quality_review
+
+
+@pytest.mark.parametrize('text', [
+    '重新评估新增交易前，必须确认MA5>MA10>MA20、乖离率约束、收盘位置及量价配合；主动资金流未知时保持谨慎。',
+    '新增交易前务必先确认MA5>MA10>MA20。',
+])
+def test_future_confirmation_is_not_a_claim_of_current_MA_order(text):
+    assert not quality_findings(dict(dashboard=dict(phase_decision=dict(watch_conditions=[text]))),context())
+
+
+@pytest.mark.parametrize('text', [
+    '当前MA5>MA10>MA20。',
+    '必须确认目前已经MA5>MA10>MA20。',
+])
+def test_current_order_claim_in_watch_conditions_remains_blocking(text):
+    findings=quality_findings(dict(dashboard=dict(phase_decision=dict(watch_conditions=[text]))),context())
+    assert any(item['category']=='MA_ORDER_CONTRADICTION' for item in findings)
 
 
 def context():

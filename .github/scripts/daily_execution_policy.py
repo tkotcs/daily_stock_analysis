@@ -6,7 +6,7 @@ from pathlib import Path
 POLICY_PATH=Path(__file__).resolve().parents[1]/'research/daily-automatic-policy.json'
 
 
-def execution_authority(*, automatic=False):
+def execution_authority(*, automatic=False, saved_response=False):
     if (os.environ.get('GITHUB_RUN_ATTEMPT')!='1'
             or not os.environ.get('GITHUB_REPOSITORY_OWNER')
             or os.environ.get('GITHUB_ACTOR')!=os.environ['GITHUB_REPOSITORY_OWNER']):
@@ -32,7 +32,8 @@ def execution_authority(*, automatic=False):
     if not (
         kind=='schedule' and event.get('schedule') in (policy['cron_UTC'],policy['catchup_cron_UTC'])
         or kind=='workflow_dispatch' and
-        (event.get('inputs') or {}).get('operation')==policy['manual_paid_operation']
+        (event.get('inputs') or {}).get('operation')==
+        policy['saved_response_operation' if saved_response else 'manual_paid_operation']
     ):
         raise ValueError('automatic_schedule_or_explicit_paid_operation_required')
     return dict(mode='automatic',policy_id=policy['id'],human_review_required=False,

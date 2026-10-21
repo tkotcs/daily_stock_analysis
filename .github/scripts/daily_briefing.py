@@ -508,6 +508,38 @@ def load_live_bundle(bundle, expected):
     return lock, request, context, profile, facts, contexts
 
 
+def finish_report(out, lock, context, facts, contexts, text, result, persist, *, automatic):
+    from src.analyzer import GeminiAnalyzer
+    analyzer = object.__new__(GeminiAnalyzer)
+    _, model = analyzer._extract_analysis_json_object(text)
+    persist('PARSED_MODEL_JSON.json', model)
+    facts['evidence_cutoff'] = lock['evidence_cutoff']
+    validate_sections(model, facts, contexts)
+    from src.trade_plan import calculate_risk_plan
+    rows, cap, errors = calculate_risk_plan(model['dashboard']['battle_plan']['risk_plan'])
+    persist('RISK_PLAN_CHECK.json', dict(rows=rows, max_position_pct=cap, errors=errors,
+                                       hypothetical_only=True, execution_trigger_verified=False))
+    focus_model = {k: v for k, v in model.items() if k not in ('daily_sections', 'focus_symbol')}
+    focused = out / 'focus'
+    focused.mkdir()
+    save_full_report(focused, lock['focus_symbol'], focus_model, context,
+                     analyzer._format_computed_quote_facts(context), False)
+    if automatic:
+        review=read(focused/'QA_FINDINGS.json')
+        counts=review['evidence_status_counts']
+        blocking=counts['CONFIRMED_CONTRADICTION']+counts['SOURCE_BLOCKER']
+        persist('AUTOMATIC_VALIDATION.json',dict(
+            scope=review['scope'],confirmed_blockers=blocking,
+            evidence_status_counts=counts,natural_language_fully_verified=False))
+        if blocking:
+            raise ValueError('automatic_confirmed_quality_blocker_no_mail_no_retry')
+    render_report(out, facts, model,automatic=automatic)
+    result.update(status='generated_daily_automatic_validated' if automatic else
+                         'generated_daily_preview_requires_review',
+                  program_validation_passed=True,human_review_performed=False,
+                  report_sha256=sha((out/'DAILY_REPORT.md').read_bytes()))
+
+
 def generate(bundle, expected, source, out, authorization, *, automatic=False):
     out.mkdir(parents=True, exist_ok=False)
     result = dict(status='blocked_before_POST', actual_model_POST_attempts=0,
@@ -556,35 +588,7 @@ def generate(bundle, expected, source, out, authorization, *, automatic=False):
             approval='user_authorized_scheduled_generation_and_mail' if automatic else
                      'this run Environment review after preparation summary; not prior test approval'))
         _, text = perform_post_once(request, profile, lock['endpoint'], key, out, result, persist, expected)
-        from src.analyzer import GeminiAnalyzer
-        analyzer = object.__new__(GeminiAnalyzer)
-        _, model = analyzer._extract_analysis_json_object(text)
-        persist('PARSED_MODEL_JSON.json', model)
-        facts['evidence_cutoff'] = lock['evidence_cutoff']
-        validate_sections(model, facts, contexts)
-        from src.trade_plan import calculate_risk_plan
-        rows, cap, errors = calculate_risk_plan(model['dashboard']['battle_plan']['risk_plan'])
-        persist('RISK_PLAN_CHECK.json', dict(rows=rows, max_position_pct=cap, errors=errors,
-                                           hypothetical_only=True, execution_trigger_verified=False))
-        focus_model = {k: v for k, v in model.items() if k not in ('daily_sections', 'focus_symbol')}
-        focused = out / 'focus'
-        focused.mkdir()
-        save_full_report(focused, lock['focus_symbol'], focus_model, context,
-                         analyzer._format_computed_quote_facts(context), False)
-        if automatic:
-            review=read(focused/'QA_FINDINGS.json')
-            counts=review['evidence_status_counts']
-            blocking=counts['CONFIRMED_CONTRADICTION']+counts['SOURCE_BLOCKER']
-            persist('AUTOMATIC_VALIDATION.json',dict(
-                scope=review['scope'],confirmed_blockers=blocking,
-                evidence_status_counts=counts,natural_language_fully_verified=False))
-            if blocking:
-                raise ValueError('automatic_confirmed_quality_blocker_no_mail_no_retry')
-        render_report(out, facts, model,automatic=automatic)
-        result.update(status='generated_daily_automatic_validated' if automatic else
-                             'generated_daily_preview_requires_review',
-                      program_validation_passed=True,human_review_performed=False,
-                      report_sha256=sha((out/'DAILY_REPORT.md').read_bytes()))
+        finish_report(out, lock, context, facts, contexts, text, result, persist, automatic=automatic)
     except BaseException as error:
         result.update(status='failed_no_retry' if result['actual_model_POST_attempts'] else 'blocked_before_POST',
                       error_category=type(error).__name__,
