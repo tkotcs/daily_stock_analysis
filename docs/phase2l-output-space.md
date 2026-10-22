@@ -1,0 +1,11 @@
+# Phase 2L: isolated non-thinking preparation
+
+Business source remains f93a7609e569e3b6c6372e652a3d36a27225d783. No business framework, client, indicator algorithm, mandatory report key or historic response is changed. Use existing `LITELLM_CONFIG=.github/phase2l-deepseek.yaml` with one official deployment and `extra_body.thinking.type=disabled`; `DEEPSEEK_API_KEY` is only an environment reference, never a value in YAML.
+
+The original config loader reads `model_list`, not `router_settings`; the analyzer constructs a Router with two retries. The independent offline entry explicitly sets its Router retries to zero and uses the tested shared synchronous/asynchronous HTTPX one-POST boundary. Do not claim YAML alone disables retries. The paid workflow remains disabled and unchanged; it still pins the old controller/material and cannot authorize this new packet. Future paid workflow binding needs its own reviewed version and new user/hash plus Environment approval.
+
+The capture is a saved Phase 2K input replay, not a fresh price/news collection. Keep the original as-of and target session. The native client builds the HTTP body; first POST is intercepted before transmission. YAML/SDK capture proves parameter transport only, not actual server behavior or future report quality. Output remains `max_tokens=8192` on Chat Completions (native generation config name `max_output_tokens`), with `stream_options.include_usage=true`.
+
+Preparation removes only an actually contradicted bullish reason; real OHLCV, USD, official financial period and limited-news disclosure remain. Explain previous-day volume multiple separately from the native daily volume divided by previous-five-day mean. Pair each proposed entry with its own stop and loss calculation. Keep all required JSON keys; repeated trend/MA/volume/conclusion/risk text can be concise without deleting sections.
+
+Historical 2E/2H parse and render successfully but retain their manual quality failures; 2K truncation must not render a publishable default score. Copies are immutable and compared with source hashes. The manual-only free workflow receives no Secrets, permits no model POST or SMTP and never enables cron. English-only deployment note: the Chinese detailed audit is delivered separately rather than changing both project READMEs.

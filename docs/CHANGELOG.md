@@ -9,6 +9,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [修复] 日报增加可选Windows本机时钟补漏检查，远端调用/邮件标记、当日已有运行或不明读取均停止派发；仅在09:00至15:00、已收盘的美股交易日且无运行时派发原生产流程。
+- [修复] 均线质检区分“必须确认”的未来条件与当前事实；误拦报告可通过固定原运行及响应哈希、仍有效输入与原消费记录离线复验，再尝试首次发信，恢复入口不能授权模型POST。
+- [修复] 09:00日报增加09:17补漏调度，采集前只读检查永久交易日消费标记；已有标记正常跳过，读取不明停止，原子单次调用保护保持生效。
+- [修复] 无人值守日报复用既有精写质量检查，已确认矛盾或来源阻断时保留原响应并停止发信，不追加模型修复请求。
+- [新功能] 增加用户授权的北京时间09:00美股交易日日报自动生成及发信；邮箱配置前置校验，默认分支固定版本启动，保留每日单次调用和邮件去重。
+- [修复] 免费原生采集在Yahoo 403/429后立即保存原因并退出，串行下载避免后台线程等待导致超时，剩余标的统一熔断且不追加请求。
+- [新功能] 恢复全清单Python扫描与每日一只精写的综合日报，复用原生采集、单次Sol传输、风险计算和邮件模块；新增有限官方RSS元数据、MD/HTML/EML预览及默认停用工作流，不新增逐股收费调用。
+- [修复] 旧DeepSeek手动入口改为精确批次白名单，拒绝未知、空或误填的请求文件哈希；派发输入说明明确其承载冻结batch哈希。
+- [修复] Sol发送前绑定冻结目标日、上下文标的/日期及已存在的日线对照表，拒绝重新计算哈希仍存在语义错配的材料；未来候选规范日内交易、T+1交收与LULD表述，不改已消费提示词。
+- [修复] Sol单次发送器核对completed响应模型与冻结请求一致；模型缺失或不匹配时保留原始响应及Usage并拒绝生成成功，不重试已消费请求。
+- [修复] Sol冻结材料禁用Git换行转换，保留已审阅新闻包的原字节及哈希；回归验证Git索引与Linux风格导出产物，避免Windows本机通过而Runner在POST前拒绝。
+- [新功能] 已保存新闻支持明确标注的人工摘要；Responses候选复用原生formatter重建新闻段、保留系统消息与财务日期边界，并冻结未授权AAPL双报道候选；执行前核对新闻包/摘要哈希与截止时点，不把条目数当独立来源数。
+- [修复] Responses候选准备追加带绝对日期的两日OHLC对照并拒绝倒置/冲突上下文，独立QA同步展示日期与高低点；不重写已消费请求或模型原文，不将离线通过称为真实模型修复。
+- [新功能] 按用户选定Sol外推价冻结AAPL单次Responses测试，复用本人Environment和不可复用远端预留；精确哈希路由与旧DeepSeek互斥，端点/期限/预算锁定，失败或截断不重试，输出保留原文及人民币用量估算。
+- [改进] Sol草稿按用户截图逐类别外推6.1价格并保留Astra参照差异，预算不足时明确阻断真实执行；凭据名对齐仓库已有SEEKERX，不读取Secret值。
+- [改进] 下一次AAPL质量测试改为GPT-6.1 Sol Responses草稿，保留原生消息及来源期限，明确high推理、总输出上限和用户提供的人民币单价，不叠加旧系数或汇率；公网端点与Secret未就绪前不发送请求，不沿用DeepSeek授权。
+- [修复] 单标的免费准备复用既有带尾斜线的官方定价URL，并保留GuardStop失败状态，避免入门页被当作定价材料或失败停留在preparing状态。
+- [改进] 已注册手动入口增加仅review分支可选的AAPL免费准备，复用固定原生源和独立财务材料；成功后冻结未授权单标的候选并核对实际prompt，失败留证据停止，不改变旧付费批次或Environment保护。
+- [修复] 手动research-data可独立传递财务比较证据与累计相减CFO，累计期间按实际日期比较，保留供应商原值、期间和失败状态；controller追加中英文原生prompt段并保存程序事实，净利字段名不再冒充独立归母核验。
+- [修复] 随附未来分红仅通过独立审计说明接受状态，不再把原earnings失败状态覆盖为partial；父级财务状态、错误与来源链保持原义。
+- [新功能] 手动research-data支持独立未来分红公告，统一在pack前准备并通过controller包装原生prompt展示，保留历史TTM与财报；日期比较明确UTC日历，缺失/空集/拒绝不代表不存在公告，不改固定业务源或执行在线采集。
+- [修复] Yahoo分红TTM窗口同时限制起点与截止日，未来除息事件不再进入历史现金分红、事件数与股息率；保留原事件列表，不把未来公告改成已实付。
+- [测试] 免费准备增加必须配合本地夹具的离线prompt探针，验证单标的CLI新闻状态与报告传递，离线数据明确非本次新行情；不执行模型dispatch、不生成可收费冻结请求。
+- [修复] 已保存新闻状态区分未配置、有效随附和空/拒绝，并审计ticker缺项；回归锁定来源说明不被模拟报告前缀丢弃。
+- [新功能] 手动免费准备支持独立已保存新闻输入，复用原生上下文与提示词槽位，校验截止时间和内容类型、不替换财务、不宣称已搜索或启用真实采集。
+- [修复] 独立审核补充战术计划跨字段情景依赖与决策标签范围提示；空情景引用不再漏过，引用路径和持仓/新增仓位标签差异仅标候选，不补造情景或核准即时交易。
+- [改进] 独立审核记录区分自动规则与人工补充来源、四类证据状态及字段级计数；正常报告渲染支持显式人工审核补充，保持原文及未发布状态不变。
+- [修复] 手动研究新增独立质量侧车及目录入口，核对显式MA排序、低点日期与情景引用；未核验触发的buy仅作条件性计划，不改写历史模型原文或授予发布通过。
+- [修复] 已注册手动入口可复用新35股单模式工作流，默认免费、保留原Environment审批；与旧35股及已消费六请求入口互斥，不修改默认分支。
+- [修复] 财报与报价异币种且分红缺少逐事件依据时，隔离模型输入中的财务、ROE及分红数值，保留原始证据与技术行情，不猜测币种或ADR换算。
+- [修复] 新35股冻结请求逐字段标注财务期间、来源、估算与验证状态，防止TTM和推算利润被误作季度财报；原采集及到期时间不变，报告事实页同步保留来源。
+- [修复] 新35股手动工作流显式记录既有Secret授权来源，空引用在执行器启动前拒绝；引用不替代用户批次授权及Environment审批。
+- [新功能] 新增独立35标的单模式手动研究profile，固定577624a业务源码，支持Flash非Thinking与Thinking high并保留旧入口及消费记录；默认不收费。
+- [改进] 手动报告补齐完整模型字段、原文、独立程序事实、Markdown入口及批次Usage/费用估算；未知消费不按零处理，全部待人工审核。
+- [测试] 定向验证新profile的35标的参数、原生传输、失败继续、长报告完整性和Usage汇总，不重跑历史35股流水线。
+- [改进] 现有手动控制器兼容冻结六请求Flash双模式对照，按标的/模式独立消费并复用人工审批；默认免费，不启用收费或调度。
+- [测试] 准备同材料Flash非思考/思考配对请求并验证实际HTTP参数；仅适配reasoning_effort转发，不启用收费入口。
+- [改进] 按真实三股对照补充均线互穿事件、各均线相对收盘角色及原生量能分类阈值；不改写历史报告。
+- [修复] 手动研究费率核验允许官方页面仅静态资源URL变化；仍验证冻结快照、完整页面文字及全部费率。
+- [改进] 研究候选复用原版MA60上下文补齐前日均线、明确RSI原生阈值及数值排序；情景摘要从risk_plan确定性生成，免费准备可附带带期间与来源的官方财报证据。
+- [修复] 根据三股真实研究对照，消除旧JSON示例强制填写交易数字的提示冲突，明确MA60观察线相对位置及无法核实的穿越范围；保留原模型正文作为回归样本。
+- [chore] 将三股手动材料准备和执行入口固定到已验收的研究质量候选，不改变调用保护或自动调度。
+- [改进] 收敛研究提示词的均线比较、观望仓位与情景止损口径，移除要求模型重复计算风险比例的冲突指令；增加三股历史真实报告的小样本质量回归。
+
+- [改进] Reuse the guarded manual research adapter for approved subsets of the existing 35-symbol watchlist, with full batch binding, per-symbol failure isolation, raw usage and unpublished report indexes.
+
+- [修复] Clarify completed daily closes, pairwise MA facts and separate volume benchmarks; allow explicit watch plans and distinguish new exposure from existing holdings without changing saved model text.
+
+- [修复] Reserve three-stock paid batches and request hashes with protected create-only GitHub refs; reject cross-Runner reuse and unknown reservation outcomes before model transport.
+
+- [测试] Prepare an explicitly approved three-request manual test using the existing session/client/POST guard, per-symbol raw response and usage capture, with no dispatch or automatic publication.
+
+- [测试] Reuse the existing 35-symbol watchlist for free native MVP reports, ETF/ADR identity notes, partial-failure isolation and fresh three-request candidate freezing without paid execution.
+
+- [测试] Add a manual three-symbol MVP using native DSA pipelines, fresh Yahoo data and clearly labeled simulated SDK responses; preserve per-symbol reports and failures without model credentials or notifications.
+
+- [修复] Register the fixed native source before live-session material checks; cover actual controller startup in isolated processes with simulated success and sync/async failures, without model calls.
+
+- [测试] Allow an explicit Phase2U peak-rate test opt-in for the exact reviewed frozen request; retain default off-peak, material expiry, approval and one-POST protections.
+
+- [测试] Add a secret-free manual Runner preflight for the fixed 16K request, with full input/commit/expiry checks and first-POST interception; keep the paid job protected and disabled by default.
+
+- [修复] Bind the manual 16384 controller to the exact reviewed Phase 2R request and native business revision, require fresh scoped approval, and block research report rendering when risk_plan is invalid.
+
+- [改进] Make the native stock research output ceiling configurable at 16384 tokens, clarify scenario evidence, and display deterministic risk arithmetic and unabridged detailed research without changing paid controllers.
+
+- [测试] Bind the disabled one-call NVDA workflow to the verified Phase 2M frozen request and controller, with expiry checks before any paid request.
+
+- [测试] Refresh native NVDA inputs with reviewed non-thinking YAML and pre-transmission interception in a manual-only Phase 2M workflow.
+
+- [测试] Add isolated Phase 2L offline DeepSeek non-thinking capture, input clarification, and immutable historical failure replay.
+
+- [测试] Pin the manual NVDA controller to the accepted Phase 2J business commit and prepare a no-secret native SDK interception, without paid transmission or approval-policy changes.
+
+- [测试] Add a review-branch manual Ubuntu acceptance workflow for Phase 2I corrections, immutable response replay and guarded free Yahoo coverage; no paid credentials, model requests, SMTP or scheduling.
+
+- [修复] Clarify computed gap/MA state versus confirmed crossings, limited-news provenance and financial/risk assumptions in native research inputs; preserve original model narratives and disabled paid workflows.
+- [修复] Apply Yahoo class-share symbol conversion to the existing fundamental adapter as well as prices.
+
+- [测试] Prepare the separately authorized Phase 2H frozen NVDA request behind owner environment approval, pinned controller/business commits and a one-POST guard; no prompt or data refresh.
+- [测试] Pin manual NVDA request preparation and one-POST authorization to the accepted Phase 2G business commit; supply official RSS via native news_context with explicit financial period provenance, without model transmission.
+- [修复] Resolve quote currency separately from financial-statement currency for native research prompts and market snapshot tables; preserve raw historical model text.
+- [测试] Add a no-secret manual acceptance workflow with full upstream dependencies, offline replay and a read-only Yahoo fundamental probe.
+- [修复] Use the upstream no-argument notification renderer in the independent frozen NVDA test controller; replay saved responses offline without another model request.
+- [测试] Prepare explicitly approved frozen NVDA request execution without rebuilding prompts or refreshing research inputs; require manual environment approval.
+
+- [测试] Add controller-only streaming usage metadata, official terminal-usage fixtures, and a manual hosted preflight with a protected empty approval probe.
+
+- [测试] Prepare default-off single-call NVDA controller with explicit authorization binding, read-only account checks and raw streaming response capture; not deployed.
+
 - [测试] Add manual-only NVDA free preflight with shared sync/async one-POST transport guard and fixed business checkout.
 
 - [修复] Yahoo class-share request symbols use hyphens while canonical codes stay dotted; add manual original-API cold prefill and native CLI/MA60 acceptance.

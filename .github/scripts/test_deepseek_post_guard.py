@@ -2,6 +2,7 @@
 import asyncio,json,os,pathlib,sys,unittest
 from unittest.mock import patch
 import httpx
+os.environ['LITELLM_LOCAL_MODEL_COST_MAP']='True'
 sys.path.insert(0,str(pathlib.Path(os.getenv('DSA_FIXED_SOURCE',str(pathlib.Path(__file__).resolve().parents[2]))).resolve()))
 from deepseek_post_guard import OnePostGuard,GuardStop,PreflightIntercept,ENDPOINT
 

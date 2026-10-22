@@ -1,0 +1,10 @@
+{
+  "purpose": "limited official RSS metadata; not comprehensive news search",
+  "max_GETs_per_feed": 1,
+  "max_items_per_symbol": 3,
+  "feeds": [
+    {"symbol": "NVDA", "source": "NVIDIA Newsroom official RSS", "url": "https://nvidianews.nvidia.com/releases.xml"},
+    {"symbol": "MSFT", "source": "Official Microsoft Blog RSS", "url": "https://blogs.microsoft.com/feed/"},
+    {"symbol": "AAPL", "source": "Apple Newsroom official RSS", "url": "https://www.apple.com/newsroom/rss-feed.rss"}
+  ]
+}

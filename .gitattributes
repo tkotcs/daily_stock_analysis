@@ -41,3 +41,16 @@ Makefile text eol=lf
 *.crt binary
 *.key binary
 *.p12 binary
+
+# Immutable real-call regression evidence: keep exact bytes across platforms.
+tests/fixtures/phase2p/* -text
+.github/frozen/phase2r/* -text
+.github/frozen/mvp-three/** -text
+tests/fixtures/mvp_real_three/** -text
+.github/frozen/mvp-*-v2/** -text
+
+.github/frozen/mvp-three-v3/** -text
+.github/frozen/mode-comparison-v1/** -text
+
+# Sol locks hash exact bytes, including saved news packet line endings.
+.github/frozen/sol-*/** -text whitespace=cr-at-eol

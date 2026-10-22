@@ -1,0 +1,10 @@
+# Existing upstream LITELLM_CONFIG entry; no key value, single deployment only.
+model_list:
+  - model_name: deepseek/deepseek-flash
+    litellm_params:
+      model: deepseek/deepseek-flash
+      api_base: https://api.deepseek.com
+      api_key: os.environ/DEEPSEEK_API_KEY
+      extra_body:
+        thinking:
+          type: disabled

@@ -24,6 +24,7 @@ from typing import List, Dict, Any, Optional, Tuple, TYPE_CHECKING
 from enum import Enum
 
 from src.config import Config, get_config
+from src.trade_plan import format_risk_plan
 from src.enums import ReportType
 from src.market_phase_summary import format_public_market_status_line, format_public_phase_pack_excerpt
 from src.notification_routing import (
@@ -986,6 +987,13 @@ class NotificationService(
                 self._append_market_snapshot(report_lines, result)
 
                 # 核心看点
+                facts = (getattr(result, 'market_snapshot', None) or {}).get('computed_quote_facts')
+                if facts:
+                    report_lines.extend([facts, ''])
+                daily_battle = (getattr(result, 'dashboard', None) or {}).get('battle_plan') or {}
+                if 'risk_plan' in daily_battle:
+                    report_lines.extend([format_risk_plan(daily_battle['risk_plan'], english=report_language == 'en'), ''])
+
                 if hasattr(result, 'key_points') and result.key_points:
                     report_lines.extend([
                         f"**🎯 核心看点**：{result.key_points}",
@@ -1394,6 +1402,7 @@ class NotificationService(
                 one_sentence = core.get('one_sentence', result.analysis_summary)
                 time_sense = core.get('time_sensitivity', labels['default_time_sensitivity'])
                 pos_advice = core.get('position_advice', {})
+                has_risk_plan = 'risk_plan' in (dashboard.get('battle_plan') or {})
 
                 report_lines.extend([
                     f"### 📌 {labels['core_conclusion_heading']}",
@@ -1406,7 +1415,7 @@ class NotificationService(
                     "",
                 ])
                 # 持仓分类建议
-                if pos_advice:
+                if pos_advice and not has_risk_plan:
                     report_lines.extend([
                         f"| {labels['position_status_label']} | {labels['action_advice_label']} |",
                         "|---------|---------|",
@@ -1416,6 +1425,9 @@ class NotificationService(
                     ])
 
                 self._append_market_snapshot(report_lines, result)
+                facts = (getattr(result, 'market_snapshot', None) or {}).get('computed_quote_facts')
+                if facts:
+                    report_lines.extend([facts, ''])
 
                 # ========== 数据透视 ==========
                 data_persp = dashboard.get('data_perspective', {}) if dashboard else {}
@@ -1492,13 +1504,15 @@ class NotificationService(
                 # ========== 作战计划 ==========
                 battle = dashboard.get('battle_plan', {}) if dashboard else {}
                 if battle:
+                    if has_risk_plan:
+                        report_lines.extend([format_risk_plan(battle['risk_plan'], english=report_language == 'en'), ''])
                     report_lines.extend([
                         f"### 🎯 {labels['battle_plan_heading']}",
                         "",
                     ])
                     # 狙击点位
                     sniper = battle.get('sniper_points', {})
-                    if sniper:
+                    if sniper and not has_risk_plan:
                         report_lines.extend([
                             f"**📍 {labels['action_points_heading']}**",
                             "",
@@ -1512,7 +1526,7 @@ class NotificationService(
                         ])
                     # 仓位策略
                     position = battle.get('position_strategy', {})
-                    if position:
+                    if position and not has_risk_plan:
                         report_lines.extend([
                             f"**💰 {labels['suggested_position_label']}**: {position.get('suggested_position', 'N/A')}",
                             f"- {labels['entry_plan_label']}: {position.get('entry_plan', 'N/A')}",
@@ -1566,6 +1580,7 @@ class NotificationService(
 
                 # 财务摘要 / 股东回报 / 关联板块（数据缺失时自动隐藏对应小节）
                 self._append_fundamental_blocks(report_lines, result)
+                self._append_research_body(report_lines, result, report_language)
 
                 # 如果没有 dashboard，显示传统格式
                 if not dashboard:
@@ -1992,6 +2007,14 @@ class NotificationService(
             lines.extend([excerpt, ""])
 
         self._append_market_snapshot(lines, result)
+        facts = (getattr(result, 'market_snapshot', None) or {}).get('computed_quote_facts')
+        if facts:
+            lines.extend([facts, ''])
+        if 'risk_plan' in battle:
+            lines.extend([format_risk_plan(battle['risk_plan'], english=report_language == 'en'), ''])
+        else:
+            lines.extend(['Legacy model price/position prose below is unverified; no deterministic risk plan was supplied.' if report_language == 'en' else
+                          '以下旧式模型点位/仓位文案未经确定性风险核验；未提供结构化风险计划。', ''])
 
         # 核心决策（一句话）
         one_sentence = core.get('one_sentence', result.analysis_summary) if core else result.analysis_summary
@@ -2017,14 +2040,14 @@ class NotificationService(
                     lines.append(f"### 📰 {labels['info_heading']}")
                     lines.append("")
                     info_added = True
-                lines.append(f"📊 **{labels['earnings_outlook_label']}**: {str(intel['earnings_outlook'])[:100]}")
+                lines.append(f"📊 **{labels['earnings_outlook_label']}**: {str(intel['earnings_outlook'])}")
 
             if intel.get('sentiment_summary'):
                 if not info_added:
                     lines.append(f"### 📰 {labels['info_heading']}")
                     lines.append("")
                     info_added = True
-                lines.append(f"💭 **{labels['sentiment_summary_label']}**: {str(intel['sentiment_summary'])[:80]}")
+                lines.append(f"💭 **{labels['sentiment_summary_label']}**: {str(intel['sentiment_summary'])}")
 
             # 风险警报
             risks = intel.get('risk_alerts', [])
@@ -2035,23 +2058,23 @@ class NotificationService(
                     info_added = True
                 lines.append("")
                 lines.append(f"🚨 **{labels['risk_alerts_label']}**:")
-                for risk in risks[:3]:
-                    lines.append(f"- {str(risk)[:60]}")
+                for risk in risks:
+                    lines.append(f"- {str(risk)}")
 
             # 利好催化
             catalysts = intel.get('positive_catalysts', [])
             if catalysts:
                 lines.append("")
                 lines.append(f"✨ **{labels['positive_catalysts_label']}**:")
-                for cat in catalysts[:3]:
-                    lines.append(f"- {str(cat)[:60]}")
+                for cat in catalysts:
+                    lines.append(f"- {str(cat)}")
 
         if info_added:
             lines.append("")
 
         # 狙击点位
         sniper = battle.get('sniper_points', {}) if battle else {}
-        if sniper:
+        if sniper and 'risk_plan' not in battle:
             lines.extend([
                 f"### 🎯 {labels['action_points_heading']}",
                 "",
@@ -2097,7 +2120,7 @@ class NotificationService(
 
         # 持仓建议
         pos_advice = core.get('position_advice', {}) if core else {}
-        if pos_advice:
+        if pos_advice and 'risk_plan' not in battle:
             lines.extend([
                 f"### 💼 {labels['position_advice_heading']}",
                 "",
@@ -2108,6 +2131,8 @@ class NotificationService(
 
         # 财务摘要 / 股东回报 / 关联板块（数据缺失时自动隐藏对应小节）
         self._append_fundamental_blocks(lines, result)
+        self._append_research_body(lines, result, report_language)
+        self._append_data_sources_line(lines, result, labels)
 
         lines.append("---")
         if self._should_show_llm_model():
@@ -2117,6 +2142,24 @@ class NotificationService(
         lines.append(f"*{labels['not_investment_advice']}*")
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _append_research_body(lines, result, language):
+        """Keep detailed native analysis visible; compact channel views stay compact."""
+        fields = (
+            ('short_term_outlook', '短期情景', 'Short-term scenarios'),
+            ('medium_term_outlook', '中期情景', 'Medium-term scenarios'),
+            ('ma_analysis', '均线解释（AI原文，以上程序事实为准）', 'MA narrative (computed facts take precedence)'),
+            ('volume_analysis', '量能与突破条件', 'Volume and breakout conditions'),
+            ('fundamental_analysis', '财务分析与期间', 'Financial analysis and period'),
+            ('sector_position', '行业位置', 'Industry position'),
+            ('company_highlights', '商业机制与风险', 'Business drivers and risks'),
+            ('news_summary', '新闻依据与限制', 'News evidence and limits'),
+        )
+        for field, zh, en in fields:
+            value = getattr(result, field, None)
+            if value:
+                lines.extend([f'### {en if language == "en" else zh}', '', str(value), ''])
 
     # Display name mapping for realtime data sources
     _SOURCE_DISPLAY_NAMES = {
@@ -2147,8 +2190,12 @@ class NotificationService(
         report_language = self._get_report_language(result)
         labels = get_report_labels(report_language)
 
+        currency = snapshot.get("quote_currency")
+        currency_note = f"报价币种：{currency or '未核实'}" if report_language == "zh" else f"Quote currency: {currency or 'unverified'}"
         lines.extend([
             f"### 📈 {labels['market_snapshot_heading']}",
+            "",
+            currency_note,
             "",
             f"| {labels['close_label']} | {labels['prev_close_label']} | {labels['open_label']} | {labels['high_label']} | {labels['low_label']} | {labels['change_pct_label']} | {labels['change_amount_label']} | {labels['amplitude_label']} | {labels['volume_label']} | {labels['amount_label']} |",
             "|------|------|------|------|------|-------|-------|------|--------|--------|",

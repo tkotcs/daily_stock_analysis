@@ -1,5 +1,5 @@
 """Test-process HTTPX transport boundary; no model client or budget database."""
-import hashlib,json,threading
+import hashlib,inspect,json,threading
 import httpx
 
 ENDPOINT='https://api.deepseek.com/chat/completions'
@@ -7,8 +7,9 @@ class GuardStop(BaseException):pass
 class PreflightIntercept(GuardStop):pass
 
 class OnePostGuard:
-    def __init__(self,*,preflight=True):
+    def __init__(self,*,preflight=True,before_send=None,on_response=None,on_error=None):
         self.preflight=preflight;self.lock=threading.Lock();self.attempts=0;self.allowed=0;self.blocked=0;self.captured=[];self.originals=[]
+        self.before_send=before_send;self.on_response=on_response;self.on_error=on_error
     def check(self,request,transport):
         if str(request.url)!=ENDPOINT or request.method!='POST':
             raise GuardStop('unexpected_HTTPX_endpoint_or_method')
@@ -22,6 +23,9 @@ class OnePostGuard:
             self.captured.append({'url':str(request.url),'method':request.method,'body':body,'raw_body_sha256':hashlib.sha256(raw).hexdigest(),'authorization_present':bool(request.headers.get('Authorization')),'network_sent':False})
             if self.preflight:
                 self.blocked+=1;raise PreflightIntercept('first_POST_intercepted_before_network')
+            if self.before_send:self.before_send(body)
+            self.captured[-1]['network_attempted']=True
+            self.captured[-1]['network_sent']=None  # Unknown until a response is received.
             self.allowed+=1
     def install(self):
         if self.originals:raise GuardStop('guard_already_installed')
@@ -48,11 +52,27 @@ class OnePostGuard:
             setattr(cls,method,send)
         original=httpx.HTTPTransport.handle_request;self.originals.append((httpx.HTTPTransport,'handle_request',original))
         def handle(transport,request):
-            self.check(request,transport);return original(transport,request)
+            self.check(request,transport)
+            try:response=original(transport,request)
+            except Exception as exc:
+                if self.on_error:self.on_error(type(exc).__name__)
+                raise
+            self.captured[-1]['network_sent']=True
+            if self.on_response:self.on_response(response,False)
+            return response
         httpx.HTTPTransport.handle_request=handle
         async_original=httpx.AsyncHTTPTransport.handle_async_request;self.originals.append((httpx.AsyncHTTPTransport,'handle_async_request',async_original))
         async def async_handle(transport,request):
-            self.check(request,transport);return await async_original(transport,request)
+            self.check(request,transport)
+            try:response=await async_original(transport,request)
+            except Exception as exc:
+                if self.on_error:self.on_error(type(exc).__name__)
+                raise
+            self.captured[-1]['network_sent']=True
+            if self.on_response:
+                result=self.on_response(response,True)
+                if inspect.isawaitable(result):await result
+            return response
         httpx.AsyncHTTPTransport.handle_async_request=async_handle
     def restore(self):
         for cls,method,original in reversed(self.originals):setattr(cls,method,original)

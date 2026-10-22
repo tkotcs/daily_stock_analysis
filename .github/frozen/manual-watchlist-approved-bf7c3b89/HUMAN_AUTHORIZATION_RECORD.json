@@ -1,0 +1,19 @@
+{
+  "record_type": "human_batch_confirmation_not_environment_approval",
+  "source": "Codex user conversation 01a14d99-d472-7af3-9310-4f7e71f6fa54",
+  "date_timezone": "2026-10-18 Asia/Shanghai",
+  "quoted_user_reply": "授权",
+  "scope": "User confirmation of the immediately preceding specific 16-symbol batch authorization request and preparation of its GitHub manual approval entry",
+  "batch_sha256": "bf7c3b89f955f50a7836d68c0adc31602a5943f8d3b4bb45bb7263a9228abbc3",
+  "model_mode": "Flash nonthinking, max_tokens 16384",
+  "symbols": ["NVDA", "MSFT", "AAPL", "GOOGL", "AMZN", "META", "TSLA", "SPCX", "SKHY", "MU", "SNDK", "QQQ", "SOXX", "AMD", "AVGO", "TSM"],
+  "max_total_POSTs": 16,
+  "max_POSTs_per_symbol": 1,
+  "automatic_retry": false,
+  "reservation_USD": "0.48",
+  "reservation_is_provider_hard_limit": false,
+  "earliest_expiry_UTC": "2026-10-19T09:57:31.860556+00:00",
+  "existing_secret_use": "User-authorized batch uses the existing repository Secret; no new key is read, uploaded or migrated",
+  "environment_approval": "Still required from the human user through nvda-one-call-approval; this record does not grant or substitute that approval",
+  "excluded": ["19 blocked symbols", "automatic retries", "historical consumed requests", "main branch changes", "Gmail", "production cron"]
+}

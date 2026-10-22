@@ -1,0 +1,14 @@
+{
+  "authorize_paid_post": false,
+  "authorization_reference": "PENDING_SEPARATE_USER_APPROVAL",
+  "secret_upload_approval_reference": "PENDING_SEPARATE_USER_APPROVAL",
+  "run_id": "PENDING_ACTUAL_GITHUB_RUN_ID",
+  "fixed_commit": "578fc55364bf32b7299e84eea7a630eb7e93e973",
+  "target_session": "2026-10-14",
+  "request_sha256": "REFRESH_AFTER_HOSTED_INCLUDE_USAGE_CAPTURE",
+  "analysis_asof": "REFRESH_FROM_CAPTURE_SUMMARY",
+  "pricing_sha256": "210f102275ccf1a6542f08a3bc9e4b4c7c83278cb74b35217bffa112df6363b2",
+  "reservation_usd": "0.03",
+  "expires_at": "2026-10-15T00:00:00+00:00",
+  "note": "Deliberately disabled and expired; not an authorization. Refresh material and pricing before requesting approval."
+}

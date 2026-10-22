@@ -1,0 +1,207 @@
+name: Daily research and email at 09 Beijing
+on:
+  schedule:
+    - cron: "0 1 * * 2-6"
+    - cron: "17 1 * * 2-6"
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "check_config = no collection or paid call; prepare = free inputs; run_paid_daily = one production generation and email"
+        type: choice
+        options: [check_config, prepare, run_paid_daily, deliver_saved_daily]
+        default: check_config
+permissions:
+  contents: read
+concurrency:
+  group: consolidated-daily-research
+  cancel-in-progress: false
+jobs:
+  daily:
+    if: ${{ github.actor == github.repository_owner && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+      actions: read
+    env:
+      PYTHONIOENCODING: utf-8
+      LITELLM_LOCAL_MODEL_COST_MAP: "True"
+      TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+      CUSTOM_TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+      RESEARCH_API_BASE: ${{ vars.RESEARCH_API_BASE }}
+      AUTOMATIC_RUN: ${{ github.event_name == 'schedule' || inputs.operation == 'run_paid_daily' || inputs.operation == 'deliver_saved_daily' }}
+      SAVED_RESPONSE: ${{ inputs.operation == 'deliver_saved_daily' }}
+      CONFIG_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'check_config' }}
+    steps:
+      - name: Checkout pinned daily controller
+        uses: actions/checkout@v5
+        with:
+          ref: __CONTROLLER_COMMIT__
+          path: controller
+          persist-credentials: false
+      - name: Check required delivery setup before any paid call
+        if: env.AUTOMATIC_RUN == 'true' || env.CONFIG_ONLY == 'true'
+        env:
+          SEEKERX: ${{ secrets.SEEKERX }}
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECEIVERS: ${{ secrets.EMAIL_RECEIVERS }}
+        run: |
+          python - <<'PY'
+          import json,os,pathlib,sys
+          sys.path.insert(0,'controller/.github/scripts')
+          from daily_execution_policy import require_mail_configuration,execution_authority
+          state=dict(status='configuration_ready',model_POSTs=0,SMTP_attempts=0)
+          try:
+              if os.environ['AUTOMATIC_RUN']=='true':execution_authority(automatic=True,saved_response=os.environ['SAVED_RESPONSE']=='true')
+              if not os.environ.get('SEEKERX','').strip():raise ValueError('SEEKERX_missing_before_POST')
+              values,receivers=require_mail_configuration()
+              for value in [*values.values(),*receivers]:
+                  print('::add-mask::'+value)
+          except ValueError as e:
+              state.update(status='configuration_missing_no_POST',reason=str(e))
+          pathlib.Path('CONFIGURATION_STATUS.json').write_text(json.dumps(state,indent=2))
+          assert state['status']=='configuration_ready',state.get('reason')
+          PY
+      - uses: actions/checkout@v5
+        if: env.CONFIG_ONLY != 'true'
+        with:
+          ref: 577624ad8459871630c690e5760ae504ac6f2b9f
+          path: upstream-fixed
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        if: env.CONFIG_ONLY != 'true'
+        with:
+          python-version: "3.12"
+      - name: Native dependencies and public tokenizer
+        if: env.CONFIG_ONLY != 'true'
+        run: |
+          python -m pip install -r upstream-fixed/requirements.txt litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6 markdown2
+          python controller/.github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR"
+      - name: US trading-session gate
+        if: env.CONFIG_ONLY != 'true' && env.SAVED_RESPONSE != 'true'
+        id: calendar
+        run: |
+          python controller/.github/scripts/daily_briefing.py gate --source upstream-fixed --out calendar.json
+          python - <<'PY'
+          import json,os
+          gate=json.load(open('calendar.json'))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('run='+str(gate['run']).lower()+'\n')
+              f.write('session='+gate['completed_session']+'\n')
+          PY
+      - name: Skip a session already reserved by an earlier run
+        if: steps.calendar.outputs.run == 'true'
+        id: session
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TARGET_SESSION: ${{ steps.calendar.outputs.session }}
+        run: |
+          python controller/.github/scripts/daily_session_check.py --session "$TARGET_SESSION" --out SESSION_STATUS.json
+      - name: Native watchlist capture without model or email credentials
+        if: steps.session.outputs.run == 'true'
+        run: |
+          python controller/.github/scripts/daily_news.py --config controller/.github/research/daily-news-feeds.json --out daily-news
+          python controller/.github/scripts/mvp_three.py --source upstream-fixed --out daily-capture --universe watchlist35 --news-data daily-news/NEWS_PACKET.json
+      - name: Freeze one consolidated request
+        if: steps.session.outputs.run == 'true'
+        env:
+          TARGET_SESSION: ${{ steps.calendar.outputs.session }}
+        run: |
+          EXTRA=()
+          if [ "$AUTOMATIC_RUN" = true ]; then EXTRA=(--automatic); fi
+          python controller/.github/scripts/daily_briefing.py prepare --source upstream-fixed --data daily-capture --profile controller/.github/research/gpt-6.1-sol-review-profile.json --out daily-ready --session "$TARGET_SESSION" "${EXTRA[@]}"
+      - name: Check frozen readiness without supplier credentials
+        if: steps.session.outputs.run == 'true'
+        id: ready
+        run: |
+          python - <<'PY'
+          import json,os,pathlib
+          state=json.load(open('daily-ready/PREPARATION_STATUS.json'))
+          ready=state['status'] in ('ready_for_automatic_generation','ready_for_Environment_review')
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('ready='+str(ready).lower()+'\n')
+          assert ready,'inputs_blocked_no_POST:'+state['status']
+          PY
+      - name: One authorized production Responses attempt
+        if: env.AUTOMATIC_RUN == 'true' && env.SAVED_RESPONSE != 'true' && steps.ready.outputs.ready == 'true'
+        env:
+          SEEKERX: ${{ secrets.SEEKERX }}
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECEIVERS: ${{ secrets.EMAIL_RECEIVERS }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          BATCH_SHA="$(cat daily-ready/BATCH_SHA256.txt)"
+          python controller/.github/scripts/daily_briefing.py generate --source upstream-fixed --bundle daily-ready --out daily-real --batch-sha "$BATCH_SHA" --authorization-reference daily_auto_0900_v1 --automatic
+      - name: Revalidate pinned saved response without a model credential
+        if: env.SAVED_RESPONSE == 'true'
+        env:
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECEIVERS: ${{ secrets.EMAIL_RECEIVERS }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          SOURCE_RUN="$(python -c "import json;print(json.load(open('controller/.github/research/daily-saved-response-recovery.json'))['source_run_id'])")"
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "daily-production-$SOURCE_RUN" --dir saved-source
+          python controller/.github/scripts/daily_saved_response.py --folder saved-source --source upstream-fixed --out daily-real
+      - name: Send this run's validated consolidated report
+        if: env.AUTOMATIC_RUN == 'true' && (steps.ready.outputs.ready == 'true' || env.SAVED_RESPONSE == 'true')
+        env:
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECEIVERS: ${{ secrets.EMAIL_RECEIVERS }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          REPORT_SHA="$(sha256sum daily-real/DAILY_REPORT.md | cut -d ' ' -f1)"
+          python controller/.github/scripts/daily_briefing_mail.py --source upstream-fixed --report daily-real/DAILY_REPORT.md --out mail-result --report-sha256 "$REPORT_SHA" --automatic --send
+      - name: Save execution state and scan before upload
+        if: always()
+        id: scan
+        env:
+          SEEKERX: ${{ secrets.SEEKERX }}
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECEIVERS: ${{ secrets.EMAIL_RECEIVERS }}
+        run: |
+          python - <<'PY'
+          import json,os,pathlib
+          files=[pathlib.Path(n) for n in ('CONFIGURATION_STATUS.json','calendar.json','SESSION_STATUS.json')]
+          for name in ('daily-news','daily-ready','daily-real','mail-result'):
+              files.extend(p for p in pathlib.Path(name).rglob('*') if p.is_file())
+          sensitive=[os.environ.get(k,'').strip() for k in ('SEEKERX','EMAIL_SENDER','EMAIL_PASSWORD','EMAIL_RECEIVERS')]
+          sensitive.extend(x.strip() for x in os.environ.get('EMAIL_RECEIVERS','').split(','))
+          assert not any(value.encode() in p.read_bytes() for value in sensitive if value for p in files if p.exists()),'credential_scan_failed_no_upload'
+          def read(name):
+              p=pathlib.Path(name)
+              return json.loads(p.read_bytes()) if p.exists() else {}
+          generated=read('daily-real/STATUS.json');mail=read('mail-result/MAIL_STATUS.json')
+          summary=dict(configuration=read('CONFIGURATION_STATUS.json'),calendar=read('calendar.json'),session=read('SESSION_STATUS.json'),
+              preparation=read('daily-ready/PREPARATION_STATUS.json'),generation=generated,mail=mail,
+              timezone='Asia/Shanghai',scheduled_start='09:00',controller_commit='__CONTROLLER_COMMIT__',
+              model_attempts=generated.get('actual_model_POST_attempts',int(pathlib.Path('daily-real/POST_ATTEMPT.json').exists())),
+              mail_attempts=mail.get('mail_attempts',int(pathlib.Path('mail-result/MAIL_ATTEMPT.json').exists())))
+          pathlib.Path('DAILY_EXECUTION_SUMMARY.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('# Daily generation and email at 09:00 Beijing\n\n```json\n'+json.dumps(summary,ensure_ascii=False,indent=2)+'\n```\n')
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write('safe=true\n')
+          PY
+      - uses: actions/upload-artifact@v6
+        if: ${{ always() && steps.scan.outputs.safe == 'true' }}
+        with:
+          name: daily-production-${{ github.run_id }}
+          retention-days: 14
+          path: |
+            CONFIGURATION_STATUS.json
+            DAILY_EXECUTION_SUMMARY.json
+            calendar.json
+            SESSION_STATUS.json
+            daily-ready/
+            daily-real/
+            mail-result/
+            daily-news/CAPTURES.json
+            daily-news/NEWS_PACKET.json
+            daily-capture/RESULTS.json
+            daily-capture/*/STATUS.json
+            daily-capture/*/HTTP_TRACE.json

@@ -1018,6 +1018,7 @@ class Config:
 
     # Unified temperature for all LLM calls (LLM_TEMPERATURE); legacy per-provider temps are fallback only
     llm_temperature: float = 0.7
+    stock_analysis_max_tokens: int = 16384  # Research ceiling, not an expected output size/cost cap
 
     # Provider prompt-cache controls. These do not control provider implicit cache.
     llm_prompt_cache_telemetry_enabled: bool = True
@@ -1939,6 +1940,7 @@ class Config:
             litellm_model=litellm_model,
             litellm_fallback_models=litellm_fallback_models,
             llm_temperature=resolve_unified_llm_temperature(litellm_model),
+            stock_analysis_max_tokens=parse_env_int(os.getenv('STOCK_ANALYSIS_MAX_TOKENS'), 16384, field_name='STOCK_ANALYSIS_MAX_TOKENS', minimum=256, maximum=16384),
             litellm_config_path=litellm_config_path,
             llm_models_source=llm_models_source,
             llm_channels=llm_channels,

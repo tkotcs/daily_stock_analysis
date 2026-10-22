@@ -12,6 +12,28 @@ from typing import Callable, List, Optional
 
 import markdown2
 
+QUOTE_CURRENCY_LABELS = {
+    "USD": "美元", "CNY": "元", "HKD": "港元", "JPY": "日元",
+    "KRW": "韩元", "TWD": "新台币", "EUR": "欧元", "GBP": "英镑",
+}
+
+
+def resolve_quote_currency(context: dict) -> Optional[str]:
+    """Resolve trading currency only; never borrow a financial statement currency."""
+    candidates = [context.get("quote_currency")]
+    for block in ("realtime", "today"):
+        value = context.get(block)
+        if isinstance(value, dict):
+            candidates.append(value.get("currency"))
+    for value in candidates:
+        if value:
+            code = str(value).strip().upper()
+            return code if code in QUOTE_CURRENCY_LABELS else None
+    from src.core.trading_calendar import get_market_for_stock
+    market = get_market_for_stock(context.get("code", ""))
+    return {"us": "USD", "cn": "CNY", "hk": "HKD", "jp": "JPY",
+            "kr": "KRW", "tw": "TWD"}.get(market)
+
 TRUNCATION_SUFFIX = "\n\n...(本段内容过长已截断)"
 PAGE_MARKER_PREFIX = f"\n\n📄"
 PAGE_MARKER_SAFE_BYTES = 16 # "\n\n📄 9999/9999"

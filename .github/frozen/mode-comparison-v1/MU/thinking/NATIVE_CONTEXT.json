@@ -1,0 +1,533 @@
+{
+  "code": "MU",
+  "date": "2026-10-16",
+  "today": {
+    "code": "MU",
+    "date": "2026-10-16",
+    "open": 905.489990234375,
+    "high": 907.5,
+    "low": 875.0,
+    "close": 878.8400268554688,
+    "volume": 30293300.0,
+    "amount": 26622964585.54077,
+    "pct_chg": -5.63,
+    "ma5": 933.23,
+    "ma10": 992.77,
+    "ma20": 1032.86,
+    "volume_ratio": 1.08,
+    "data_source": "YfinanceFetcher",
+    "canonical_id": "MU",
+    "ma60": 962.0405721028645
+  },
+  "yesterday": {
+    "code": "MU",
+    "date": "2026-10-15",
+    "open": 871.5800170898438,
+    "high": 931.6500244140625,
+    "low": 858.0,
+    "close": 931.239990234375,
+    "volume": 39095100.0,
+    "amount": 36406920542.211914,
+    "pct_chg": 1.87,
+    "ma5": 963.23,
+    "ma10": 1012.35,
+    "ma20": 1039.7,
+    "volume_ratio": 1.49,
+    "data_source": "YfinanceFetcher",
+    "canonical_id": "MU",
+    "ma60": 963.8941416422526
+  },
+  "volume_change_ratio": 0.77,
+  "price_change_ratio": -5.63,
+  "ma_status": "空头排列 📉",
+  "report_language": "zh",
+  "stock_name": "Micron Technology, Inc.",
+  "news_window_days": 3,
+  "trend_analysis": {
+    "trend_status": "强势空头",
+    "ma_alignment": "强势空头排列，均线发散下行",
+    "trend_strength": 10,
+    "bias_ma5": -5.827827530447172,
+    "bias_ma10": -11.475668797308675,
+    "rsi_12": 31.281208766602916,
+    "volume_status": "量能正常",
+    "volume_trend": "量能正常",
+    "buy_signal": "强烈卖出",
+    "signal_score": 29,
+    "signal_reasons": [
+      " MACD 中性区域",
+      "⚡ RSI弱势(31.3)，关注反弹"
+    ],
+    "risk_factors": [
+      "⚠️ 强势空头，不宜做多",
+      "⚠️ 乖离率过大(-5.8%)，可能破位"
+    ]
+  },
+  "is_index_etf": false,
+  "fundamental_context": {
+    "market": "us",
+    "status": "not_supported",
+    "coverage": {
+      "valuation": "not_supported",
+      "growth": "not_supported",
+      "earnings": "not_supported",
+      "institution": "not_supported",
+      "capital_flow": "not_supported",
+      "dragon_tiger": "not_supported",
+      "boards": "not_supported"
+    },
+    "source_chain": [
+      {
+        "provider": "fundamental_pipeline",
+        "result": "not_supported",
+        "duration_ms": 0
+      }
+    ],
+    "errors": [
+      "MVP仅启用Yahoo财务；其他模块未配置"
+    ],
+    "valuation": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "MVP仅启用Yahoo财务；其他模块未配置"
+      ],
+      "data": {}
+    },
+    "growth": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "MVP仅启用Yahoo财务；其他模块未配置"
+      ],
+      "data": {}
+    },
+    "earnings": {
+      "status": "partial",
+      "coverage": {
+        "status": "partial"
+      },
+      "source_chain": [
+        "growth:yfinance.info",
+        "earnings.financial_report:yfinance",
+        "earnings.dividend:yfinance",
+        "belong_boards:yfinance.info",
+        {
+          "provider": "reviewed_official_release",
+          "source": "https://www.sec.gov/Archives/edgar/data/723125/000072312526000018/a2026q4ex991-pressrelease.htm",
+          "period": "2026-09-03"
+        }
+      ],
+      "errors": [],
+      "data": {
+        "financial_report": {
+          "revenue": 54229000000.0,
+          "net_profit_parent": 37701000000.0,
+          "operating_cash_flow": 43973000000.0,
+          "report_date": "2026-09-03",
+          "currency": "USD",
+          "source": "https://www.sec.gov/Archives/edgar/data/723125/000072312526000018/a2026q4ex991-pressrelease.htm"
+        },
+        "dividend": {
+          "events": [
+            {
+              "event_date": "2026-10-14",
+              "ex_dividend_date": "2026-10-14",
+              "record_date": null,
+              "announcement_date": null,
+              "cash_dividend_per_share": 0.15,
+              "is_pre_tax": true
+            },
+            {
+              "event_date": "2026-07-06",
+              "ex_dividend_date": "2026-07-06",
+              "record_date": null,
+              "announcement_date": null,
+              "cash_dividend_per_share": 0.15,
+              "is_pre_tax": true
+            },
+            {
+              "event_date": "2026-03-30",
+              "ex_dividend_date": "2026-03-30",
+              "record_date": null,
+              "announcement_date": null,
+              "cash_dividend_per_share": 0.15,
+              "is_pre_tax": true
+            },
+            {
+              "event_date": "2025-12-29",
+              "ex_dividend_date": "2025-12-29",
+              "record_date": null,
+              "announcement_date": null,
+              "cash_dividend_per_share": 0.115,
+              "is_pre_tax": true
+            },
+            {
+              "event_date": "2025-10-03",
+              "ex_dividend_date": "2025-10-03",
+              "record_date": null,
+              "announcement_date": null,
+              "cash_dividend_per_share": 0.115,
+              "is_pre_tax": true
+            }
+          ],
+          "ttm_event_count": 4,
+          "ttm_cash_dividend_per_share": 0.565,
+          "coverage": "cash_dividend_pre_tax",
+          "currency": "USD",
+          "as_of": "2026-10-17",
+          "ttm_dividend_yield_pct": 0.0643
+        }
+      }
+    },
+    "institution": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "MVP仅启用Yahoo财务；其他模块未配置"
+      ],
+      "data": {}
+    },
+    "capital_flow": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "MVP仅启用Yahoo财务；其他模块未配置"
+      ],
+      "data": {}
+    },
+    "dragon_tiger": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "MVP仅启用Yahoo财务；其他模块未配置"
+      ],
+      "data": {}
+    },
+    "boards": {
+      "status": "not_supported",
+      "coverage": {
+        "status": "not_supported"
+      },
+      "source_chain": [
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        }
+      ],
+      "errors": [
+        "MVP仅启用Yahoo财务；其他模块未配置"
+      ],
+      "data": {}
+    },
+    "belong_boards": []
+  },
+  "market_phase_context": {
+    "market": "us",
+    "phase": "non_trading",
+    "market_local_time": "2026-10-17T04:17:45.763065-04:00",
+    "session_date": "2026-10-17",
+    "effective_daily_bar_date": "2026-10-16",
+    "is_trading_day": false,
+    "is_market_open_now": false,
+    "is_partial_bar": false,
+    "minutes_to_open": null,
+    "minutes_to_close": null,
+    "trigger_source": "system",
+    "analysis_intent": "auto",
+    "warnings": []
+  },
+  "market_structure_context": {
+    "schema_version": "market-structure-v1",
+    "status": "not_supported",
+    "market": "us",
+    "trade_date": "2026-10-16",
+    "market_theme_context": {
+      "schema_version": "market-theme-v1",
+      "status": "not_supported",
+      "market": "us",
+      "trade_date": "2026-10-16",
+      "active_themes": [],
+      "leading_industries": [],
+      "leading_concepts": [],
+      "lagging_themes": [],
+      "hotspot_constituents": [],
+      "leader_stocks": [],
+      "theme_breadth": {
+        "active_count": 0,
+        "leading_industry_count": 0,
+        "leading_concept_count": 0,
+        "lagging_count": 0
+      },
+      "data_quality": {
+        "status": "not_supported",
+        "missing_fields": [
+          "a_share_theme_context"
+        ],
+        "sources": [
+          {
+            "provider": "dsa",
+            "dataset": "market_structure",
+            "status": "not_supported",
+            "message": "stock market structure is only supported for A-share first version"
+          }
+        ],
+        "errors": []
+      }
+    },
+    "stock_market_position": {
+      "schema_version": "stock-market-position-v1",
+      "status": "not_supported",
+      "stock_code": "MU",
+      "stock_name": "Micron Technology, Inc.",
+      "market": "us",
+      "related_boards": [],
+      "stock_role": "unknown",
+      "theme_phase": "unknown",
+      "risk_tags": [],
+      "missing_fields": [
+        "a_share_theme_context"
+      ]
+    }
+  },
+  "official_research": {
+    "period_end": "2026-09-03",
+    "period_label": "FY2026 Q4",
+    "published_date": "2026-09-30",
+    "publication_time_exact": null,
+    "available_after": "2026-10-02T00:00:00+00:00",
+    "currency": "USD",
+    "values": {
+      "revenue": 54229000000.0,
+      "net_profit_parent": 37701000000.0,
+      "operating_cash_flow": 43973000000.0
+    },
+    "source_url": "https://www.sec.gov/Archives/edgar/data/723125/000072312526000018/a2026q4ex991-pressrelease.htm",
+    "source_sha256": "72cd681a81ed33240e810c42cdf1c848f07feba1c4230e80f119c0b2c1892068",
+    "fetched_at": "2026-10-17T08:04:56.993080+00:00",
+    "extras": {
+      "receivables": {
+        "current_USD": 36197000000.0,
+        "comparison_USD": 31025000000.0,
+        "asof": "2026-09-03",
+        "comparison_asof": "2026-05-28"
+      },
+      "inventories": {
+        "current_USD": 10372000000.0,
+        "comparison_USD": 8567000000.0,
+        "asof": "2026-09-03",
+        "comparison_asof": "2026-05-28"
+      },
+      "Cloud Memory_revenue_USD": 16283000000.0,
+      "Core Data Center_revenue_USD": 18002000000.0,
+      "Mobile and Client_revenue_USD": 13114000000.0,
+      "Automotive and Embedded_revenue_USD": 6824000000.0
+    },
+    "row_proof": {
+      "revenue": {
+        "table": 1,
+        "row": [
+          "Revenue",
+          "$",
+          "54,229",
+          "",
+          "$",
+          "41,456",
+          "",
+          "$",
+          "11,315",
+          "",
+          "",
+          "$",
+          "54,229",
+          "",
+          "$",
+          "41,456",
+          "",
+          "$",
+          "11,315",
+          ""
+        ],
+        "column": "first current quarter, USD millions"
+      },
+      "net_profit_parent": {
+        "table": 1,
+        "row": [
+          "Net income",
+          "37,701",
+          "",
+          "28,243",
+          "",
+          "3,201",
+          "",
+          "",
+          "38,398",
+          "",
+          "28,857",
+          "",
+          "3,469",
+          ""
+        ],
+        "column": "first current quarter, USD millions"
+      },
+      "operating_cash_flow": {
+        "table": 9,
+        "row": [
+          "GAAP net cash provided by operating activities",
+          "$",
+          "43,973",
+          "",
+          "$",
+          "25,388",
+          "",
+          "$",
+          "5,730",
+          "",
+          "$",
+          "89,675",
+          "",
+          "$",
+          "17,525",
+          ""
+        ],
+        "column": "first current quarter, USD millions"
+      },
+      "receivables": {
+        "table": 6,
+        "row": [
+          "Receivables",
+          "36,197",
+          "",
+          "31,025",
+          "",
+          "9,265",
+          ""
+        ]
+      },
+      "inventories": {
+        "table": 6,
+        "row": [
+          "Inventories",
+          "10,372",
+          "",
+          "8,567",
+          "",
+          "8,355",
+          ""
+        ]
+      },
+      "Cloud Memory": {
+        "table": 3,
+        "row": [
+          "Revenue",
+          "$",
+          "16,283",
+          "",
+          "$",
+          "13,769",
+          "",
+          "$",
+          "4,543",
+          ""
+        ],
+        "scope": "business-unit revenue, not profit contribution"
+      },
+      "Core Data Center": {
+        "table": 3,
+        "row": [
+          "Revenue",
+          "$",
+          "18,002",
+          "",
+          "$",
+          "11,524",
+          "",
+          "$",
+          "1,577",
+          ""
+        ],
+        "scope": "business-unit revenue, not profit contribution"
+      },
+      "Mobile and Client": {
+        "table": 3,
+        "row": [
+          "Revenue",
+          "$",
+          "13,114",
+          "",
+          "$",
+          "11,521",
+          "",
+          "$",
+          "3,760",
+          ""
+        ],
+        "scope": "business-unit revenue, not profit contribution"
+      },
+      "Automotive and Embedded": {
+        "table": 3,
+        "row": [
+          "Revenue",
+          "$",
+          "6,824",
+          "",
+          "$",
+          "4,634",
+          "",
+          "$",
+          "1,434",
+          ""
+        ],
+        "scope": "business-unit revenue, not profit contribution"
+      }
+    },
+    "text": "官方已披露经营与财务资料：MU FY2026 Q4；单季度截止2026-09-03，USD；公告日期2026-09-30，精确首次公开时间未独立证明；保守可用代理2026-10-02T00:00:00+00:00（不是披露时间）。\n来源：https://www.sec.gov/Archives/edgar/data/723125/000072312526000018/a2026q4ex991-pressrelease.htm；采集2026-10-17T08:04:56.993080+00:00；正式公告的未审计GAAP表，不等于审计意见。\n单季度金额USD：{\"revenue\":54229000000.0,\"net_profit_parent\":37701000000.0,\"operating_cash_flow\":43973000000.0}\n经营背景：公司按Cloud Memory、Core Data Center、Mobile and Client、Automotive and Embedded披露业务收入；存储需求与客户资本开支的因果联系只能在这些证据上作条件推断，未提供市场份额或竞争排名。\n附加字段（资产负债表是时点存量，不等于季度现金流；分部收入不证明分部利润）：{\"receivables\":{\"current_USD\":36197000000.0,\"comparison_USD\":31025000000.0,\"asof\":\"2026-09-03\",\"comparison_asof\":\"2026-05-28\"},\"inventories\":{\"current_USD\":10372000000.0,\"comparison_USD\":8567000000.0,\"asof\":\"2026-09-03\",\"comparison_asof\":\"2026-05-28\"},\"Cloud Memory_revenue_USD\":16283000000.0,\"Core Data Center_revenue_USD\":18002000000.0,\"Mobile and Client_revenue_USD\":13114000000.0,\"Automotive and Embedded_revenue_USD\":6824000000.0}\n旧Yahoo仍可能为上一季度2026-05-31聚合列；本次采用公司新季度，禁止混用。公告分部收入相加为5.4223e+10USD，与总收入差6e+06USD，差异未解释，不推导精确占比。全年经营现金流896.75亿美元不是本季439.73亿美元。\n其余Yahoo ROE、分红和估值仍为各自聚合/TTM口径，不把官方金额核验扩展到这些指标。上述是财报证据，不是近3日综合新闻搜索；不能据此排除其他风险事件。"
+  },
+  "news_source_note": "官方已披露财报资料已提供；未执行综合新闻搜索，近3日新闻覆盖仍不完整，不排除其他事件。"
+}

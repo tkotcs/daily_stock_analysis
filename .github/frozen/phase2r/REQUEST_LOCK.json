@@ -1,0 +1,33 @@
+{
+  "request_sha256": "08b09a31d1d08c4b1fa33bc92f850feb63709ace5c6f8fd43a63aa9bee82cdee",
+  "canonicalization": "UTF8 json.dumps(ensure_ascii=False,sort_keys=True,separators=(comma,colon)); no BOM/no newline",
+  "analysis_asof": "2026-10-16T06:04:29.560325+00:00",
+  "locked_at": "2026-10-16T06:06:34.555831+00:00",
+  "target_session": "2026-10-15",
+  "business_commit": "a1daaa302b3a72fb5694c9872ceecf2c4dc0b6e4",
+  "fresh_source_Run": 38859033440,
+  "collector_commit": "adeb8cc9759217b306e1b0ea74369790c5684025",
+  "collector_business_commit": "f93a7609e569e3b6c6372e652a3d36a27225d783",
+  "source_capture_request_sha256_8192_NOT_authorized_for_16K": "89db818d48aafab84a8c82accb332986a0f76d7ddce8ecda839cea6c07df8271",
+  "maximum_age_hours": 24,
+  "age_expires_at": "2026-10-17T06:04:29.560325+00:00",
+  "next_session_close": "2026-10-16T20:00:00+00:00",
+  "expires_at": "2026-10-16T20:00:00+00:00",
+  "invalid_if_latest_completed_session_changes": true,
+  "authorize_paid_POST": false,
+  "old_authorizations_reusable": false,
+  "requires_new_user_hash_and_fee_approval": true,
+  "requires_GitHub_user_approval": true,
+  "generation_parameters": {
+    "model": "deepseek-flash",
+    "thinking": {
+      "type": "disabled"
+    },
+    "max_tokens": 16384,
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    }
+  },
+  "endpoint": "https://api.deepseek.com/chat/completions"
+}

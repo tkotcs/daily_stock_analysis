@@ -15,10 +15,12 @@ import logging
 import math
 import re
 import time
+from datetime import date
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Tuple, Callable, Union
 
 import litellm
+from src.formatters import QUOTE_CURRENCY_LABELS, resolve_quote_currency
 from json_repair import repair_json
 from litellm import Router
 
@@ -204,6 +206,12 @@ def _phase_aware_quote_labels_zh(context: Dict[str, Any]) -> Tuple[str, str]:
         return "今日行情", "收盘价"
 
     phase = str(phase_context.get("phase") or "").strip()
+    if (phase in {"intraday", "lunch_break", "closing_auction"}
+            and phase_context.get('session_date')
+            and (context.get('today') or {}).get('date')
+            and str((context.get('today') or {}).get('date')) != str(phase_context['session_date'])
+            and _today_looks_complete_daily_bar(context, phase_context)):
+        return "上一完整交易日行情", "上一完整交易日收盘价"
     if phase in {"premarket", "non_trading"}:
         today = context.get("today")
         if _today_looks_complete_daily_bar(context, phase_context):
@@ -2020,13 +2028,13 @@ class GeminiAnalyzer:
 
         "battle_plan": {
             "sniper_points": {
-                "ideal_buy": "理想买入点：XX元（在MA5附近）",
-                "secondary_buy": "次优买入点：XX元（在MA10附近）",
-                "stop_loss": "止损位：XX元（跌破MA20或X%）",
-                "take_profit": "目标位：XX元（前高/整数关口）"
+                "ideal_buy": "交易模式引用risk_plan情景编号及触发条件；观望填不适用（无新增交易）",
+                "secondary_buy": "交易模式引用备选情景编号；观望填不适用（无新增交易）",
+                "stop_loss": "仅引用对应risk_plan情景止损；观望填不适用（无新增交易）",
+                "take_profit": "仅引用对应risk_plan情景目标；观望填不适用（无新增交易）"
             },
             "position_strategy": {
-                "suggested_position": "建议仓位：X成",
+                "suggested_position": "区分新增与已有仓位；新增上限引用risk_plan，未知已有上限不编造",
                 "entry_plan": "分批建仓策略描述",
                 "risk_control": "风控策略描述"
             },
@@ -2208,13 +2216,13 @@ class GeminiAnalyzer:
 
         "battle_plan": {
             "sniper_points": {
-                "ideal_buy": "理想入场位：XX元（满足主要技能触发条件）",
-                "secondary_buy": "次优入场位：XX元（更保守或确认后执行）",
-                "stop_loss": "止损位：XX元（失效条件或X%风险）",
-                "take_profit": "目标位：XX元（按阻力位/风险回报比制定）"
+                "ideal_buy": "交易模式引用risk_plan情景编号及触发条件；观望填不适用（无新增交易）",
+                "secondary_buy": "交易模式引用备选情景编号；观望填不适用（无新增交易）",
+                "stop_loss": "仅引用对应risk_plan情景止损；观望填不适用（无新增交易）",
+                "take_profit": "仅引用对应risk_plan情景目标；观望填不适用（无新增交易）"
             },
             "position_strategy": {
-                "suggested_position": "建议仓位：X成",
+                "suggested_position": "区分新增与已有仓位；新增上限引用risk_plan，未知已有上限不编造",
                 "entry_plan": "分批建仓策略描述",
                 "risk_control": "风控策略描述"
             },
@@ -2463,13 +2471,13 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 
 """ + CANONICAL_DECISION_SCALE_PROMPT_EN + """
 
-""" + _DASHBOARD_JSON_HEAD_EN + """                "ideal_buy": "Ideal buy point: XX (near MA5)",
-                "secondary_buy": "Secondary buy point: XX (near MA10)",
-                "stop_loss": "Stop-loss: XX (break below MA20 or X%)",
-                "take_profit": "Target: XX (previous high/round-number level)"
+""" + _DASHBOARD_JSON_HEAD_EN + """                "ideal_buy": "Trade: reference risk_plan scenario and trigger; watch: not applicable (no new trade)",
+                "secondary_buy": "Trade: reference alternative scenario; watch: not applicable (no new trade)",
+                "stop_loss": "Reference the corresponding risk_plan stop; watch: not applicable (no new trade)",
+                "take_profit": "Reference the corresponding risk_plan target; watch: not applicable (no new trade)"
             },
             "position_strategy": {
-                "suggested_position": "Suggested position: X/10",
+                "suggested_position": "Distinguish new and existing exposure; reference risk_plan; do not invent existing cap",
                 "entry_plan": "Description of the staged entry plan",
                 "risk_control": "Description of the risk-control strategy"
             },
@@ -2526,13 +2534,13 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 
 """ + CANONICAL_DECISION_SCALE_PROMPT_EN + """
 
-""" + _DASHBOARD_JSON_HEAD_EN + """                "ideal_buy": "Ideal entry: XX (main skill trigger conditions met)",
-                "secondary_buy": "Secondary entry: XX (more conservative or after confirmation)",
-                "stop_loss": "Stop-loss: XX (invalidation condition or X% risk)",
-                "take_profit": "Target: XX (based on resistance/risk-reward ratio)"
+""" + _DASHBOARD_JSON_HEAD_EN + """                "ideal_buy": "Trade: reference risk_plan scenario and trigger; watch: not applicable (no new trade)",
+                "secondary_buy": "Trade: reference alternative scenario; watch: not applicable (no new trade)",
+                "stop_loss": "Reference the corresponding risk_plan stop; watch: not applicable (no new trade)",
+                "take_profit": "Reference the corresponding risk_plan target; watch: not applicable (no new trade)"
             },
             "position_strategy": {
-                "suggested_position": "Suggested position: X/10",
+                "suggested_position": "Distinguish new and existing exposure; reference risk_plan; do not invent existing cap",
                 "entry_plan": "Description of the staged entry plan",
                 "risk_control": "Description of the risk-control strategy"
             },
@@ -4176,7 +4184,7 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
             # 设置生成配置
             generation_config = {
                 "temperature": config.llm_temperature,
-                "max_output_tokens": 8192,
+                "max_output_tokens": getattr(config, 'stock_analysis_max_tokens', 16384),
             }
 
             logger.info(f"[LLM调用] 开始调用 {model_name}...")
@@ -4233,7 +4241,11 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
                 # 解析响应
                 result = self._parse_response(response_text, code, name)
                 result.raw_response = response_text
-                result.search_performed = bool(news_context)
+                # Content may be supplied by RSS/local intelligence without a search.
+                count = context.get('news_result_count')
+                result.search_performed = count is not None
+                result.news_result_count = count
+                result.news_evidence_present = bool(context.get('news_evidence_present', False) or count)
                 result.market_snapshot = self._build_market_snapshot(context)
                 result.model_used = model_used
                 result.report_language = report_language
@@ -4310,6 +4322,133 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
                 report_language=report_language,
             )
     
+    @staticmethod
+    def _format_computed_quote_facts(context: Dict[str, Any], *, english: bool = False) -> str:
+        """Describe supplied bars without confusing a position with a crossing event.
+
+        Never fill missing MAs or infer a prior MA from today's value. The caller
+        must supply two adjacent, comparable daily bars for a crossing assertion.
+        """
+        today = context.get('today') or {}
+        previous = context.get('yesterday') or {}
+
+        def number(row, key):
+            value = row.get(key)
+            if isinstance(value, bool):
+                return None
+            try:
+                value = float(value)
+                return value if math.isfinite(value) and value > 0 else None
+            except (TypeError, ValueError):
+                return None
+
+        comparable = False
+        try:
+            from src.core.trading_calendar import get_market_for_stock, get_trading_dates
+            first, last = date.fromisoformat(str(previous.get('date'))), date.fromisoformat(str(today.get('date')))
+            sessions = get_trading_dates(get_market_for_stock(context.get('code', '')), first, last)
+            comparable = sessions is not None and len(sessions) == 2 and sessions[0].date() == first and sessions[-1].date() == last
+        except (TypeError, ValueError):
+            pass
+        close, opening, prior_close = number(today, 'close'), number(today, 'open'), number(previous, 'close')
+        lines = ['\n### Computed quote facts' if english else '\n### 程序计算的行情事实']
+        if comparable and opening is not None and prior_close is not None:
+            direction = ('gap up' if opening > prior_close else 'gap down' if opening < prior_close else 'flat open') if english else ('高开' if opening > prior_close else '低开' if opening < prior_close else '平开')
+            lines.append(f'open={opening:g}; previous close={prior_close:g}; {direction}')
+        else:
+            lines.append('Opening gap unavailable: no verified previous-session close.' if english else '高低开无法核实：缺少可验证的相邻前交易日收盘。')
+        if close is not None and opening is not None:
+            direction = ('close above open' if close > opening else 'close below open' if close < opening else 'close equals open') if english else ('收盘高于开盘' if close > opening else '收盘低于开盘' if close < opening else '收盘等于开盘')
+            lines.append(f'close={close:g}; open={opening:g}; {direction}')
+        # A partial current bar may show a provisional crossing, never a close confirmation.
+        phase = context.get('market_phase_context') or {}
+        # An intraday session flag must not invalidate a DIFFERENT completed daily bar.
+        phase_partial = phase.get('is_partial_bar') and (
+            not phase.get('session_date') or str(phase['session_date']) == str(today.get('date')))
+        partial = bool(today.get('is_partial_bar') or today.get('is_estimated') or
+                       previous.get('is_partial_bar') or previous.get('is_estimated') or phase_partial)
+        lines.append(('Daily bar date (not the current intraday session): ' if english else
+                      '以下“本日”指所用日线日期，非当前盘中交易日：') + str(today.get('date', 'N/A')))
+        if not partial:
+            lines.append('The supplied close is a completed daily close, NOT a live estimate.' if english else
+                         '此close是已完成日线收盘价，不是运行时的盘中估算价；执行阶段不能改变数据时点。')
+        for period in (5, 10, 20, 60):
+            key = f'ma{period}'
+            current_ma, prior_ma = number(today, key), number(previous, key)
+            if close is None or current_ma is None:
+                lines.append(f'MA{period}: ' + ('unavailable; cannot judge' if english else '暂无可靠数据，无法判断'))
+                continue
+            state = ('above' if close > current_ma else 'below' if close < current_ma else 'equal to') if english else ('高于' if close > current_ma else '低于' if close < current_ma else '等于')
+            event = 'crossing unverified' if english else '穿越事件无法核实'
+            if comparable and prior_close is not None and prior_ma is not None and not partial:
+                down = prior_close >= prior_ma and close < current_ma
+                up = prior_close <= prior_ma and close > current_ma
+                event = ('new downward close crossing' if down else 'new upward close crossing' if up else 'no new close crossing') if english else ('本日收盘新下穿' if down else '本日收盘新上穿' if up else '本日无新收盘穿越')
+            lines.append(f'close {state} MA{period}={current_ma:g}; {event}')
+            if period in (5, 10, 20, 60):
+                role = ('above-close reference; resistance unconfirmed' if current_ma > close else
+                        'below-close reference; support unconfirmed' if current_ma < close else
+                        'at-close reference; support/resistance unconfirmed') if english else (
+                        '收盘上方观察线，阻力有效性待确认' if current_ma > close else
+                        '收盘下方观察线，支撑有效性待确认' if current_ma < close else
+                        '收盘同价观察线，支撑/阻力有效性待确认')
+                lines.append(f'MA{period}: {role}')
+        for left, right in ((5, 10), (5, 20), (5, 60), (10, 20), (10, 60), (20, 60)):
+            a, b = number(today, f'ma{left}'), number(today, f'ma{right}')
+            if a is not None and b is not None:
+                relation = '>' if a > b else '<' if a < b else '='
+                lines.append(f'MA{left}={a:g} {relation} MA{right}={b:g}')
+                pa, pb = number(previous, f'ma{left}'), number(previous, f'ma{right}')
+                event = 'MA-pair crossing unverified' if english else '均线互穿事件无法核实'
+                if comparable and pa is not None and pb is not None and not partial:
+                    down, up = pa >= pb and a < b, pa <= pb and a > b
+                    event = ('new downward MA crossing' if down else 'new upward MA crossing' if up else 'no new MA crossing') if english else ('本日均线新下穿' if down else '本日均线新上穿' if up else '本日无新均线互穿')
+                lines.append(f'MA{left}/MA{right}: {event}')
+        valid_mas = sorted((number(today, f'ma{period}'), period)
+                           for period in (5, 10, 20, 60) if number(today, f'ma{period}') is not None)
+        if valid_mas:
+            ordered = f'MA{valid_mas[0][1]}={valid_mas[0][0]:g}'
+            for (previous_value, _), (value, period) in zip(valid_mas, valid_mas[1:]):
+                ordered += (' = ' if value == previous_value else ' < ') + f'MA{period}={value:g}'
+            lines.append(('MA ascending order (available values only): ' if english else '均线按数值升序（仅有效数据）：') + ordered)
+        rsi = (context.get('trend_analysis') or {}).get('rsi_12')
+        if type(rsi) in (int, float) and math.isfinite(rsi) and 0 <= rsi <= 100:
+            from src.stock_analyzer import StockTrendAnalyzer
+            lower, upper = StockTrendAnalyzer.RSI_OVERSOLD, StockTrendAnalyzer.RSI_OVERBOUGHT
+            state = ('oversold' if rsi < lower else 'overbought' if rsi > upper else 'not oversold or overbought') if english else (
+                     '超卖' if rsi < lower else '超买' if rsi > upper else '未达到超卖或超买阈值')
+            lines.append(f'RSI(12)={rsi:g}; RSI<{lower} / RSI>{upper}; {state}; ' + (
+                'reference thresholds, not a trade or reversal guarantee' if english else '参考阈值，不是买卖或反转保证'))
+        previous_volume = number(previous, 'volume')
+        volume = number(today, 'volume')
+        if comparable and volume is not None and previous_volume is not None:
+            lines.append(f'volume / previous_session_volume = {volume / previous_volume:.4f}; '
+                         + ('previous-day multiple, NOT the multi-day ratio' if english else '仅相对前一交易日倍数，不是多日均量比'))
+        native_ratio = number(today, 'volume_ratio')
+        if native_ratio is not None:
+            lines.append(f'daily volume_ratio = {native_ratio:g}; '
+                         + ('daily volume / PREVIOUS five-session mean; not intraday relative volume' if english else
+                            '本日成交量/此前5个交易日均量（shift 1），不是前日倍数或分时量比'))
+        if native_ratio is not None:
+            from src.stock_analyzer import StockTrendAnalyzer
+            heavy, shrink = StockTrendAnalyzer.VOLUME_HEAVY_RATIO, StockTrendAnalyzer.VOLUME_SHRINK_RATIO
+            label = ('heavy' if native_ratio >= heavy else 'shrink' if native_ratio <= shrink else 'normal') if english else ('放量' if native_ratio >= heavy else '缩量' if native_ratio <= shrink else '量能正常')
+            lines.append(f'volume_ratio classification={label}; heavy >= {heavy:g}; shrink <= {shrink:g}; ' + (
+                'slightly above average is not heavy volume; daily OHLCV does not prove aggressor flow' if english else
+                '略高于均量不等于达到放量阈值；日线OHLCV不能证明主动买卖盘方向'))
+        earnings = (context.get('fundamental_context') or {}).get('earnings') or {}
+        report = (earnings.get('data') or {}).get('financial_report') or {}
+        if report:
+            lines.append(f"Financial report period={report.get('report_date', 'N/A')}; "
+                         f"financial currency={report.get('currency', 'N/A')}; "
+                         f"source={earnings.get('source_chain', [])}; "
+                         + (('issuer release evidence supplied; verification scope is in the attached material' if english else
+                             '已附公司公告证据，核验范围以附表为准') if context.get('official_research') else
+                            ('provided aggregation, not independently issuer-verified here' if english else
+                             '所给聚合字段，本步骤未逐项核验公司原始披露')))
+        lines.append('Position is not an event. Crossings do not establish a volume-confirmed breakout; specify closing confirmation and volume benchmark. State crossings per verified MA; unverified does not mean no crossing.' if english else '位置状态不等于新发生事件。均线穿越不等于有效放量突破；有效突破须说明收盘确认与成交量比较基准。穿越必须逐条对应已核实均线；无法核实不等于本日无穿越。')
+        return '\n'.join(lines) + '\n'
+
     def _format_prompt(
         self, 
         context: Dict[str, Any], 
@@ -4349,14 +4488,16 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
         quote_section_title, close_price_label = _phase_aware_quote_labels(context, report_language)
         hide_regular_session_ohlc = _should_hide_regular_session_ohlc(context)
         realtime_overlay_quote = hide_regular_session_ohlc and _today_has_realtime_overlay(today)
+        quote_currency = resolve_quote_currency(context)
+        currency_label = QUOTE_CURRENCY_LABELS.get(quote_currency, "币种未核实")
         if english:
-            price_unit = ""
+            price_unit = f" {quote_currency or 'currency unverified'}"
             pct_chg_label = "Realtime Change" if realtime_overlay_quote else "Change"
             volume_label = "Realtime Volume" if realtime_overlay_quote else "Volume"
             amount_label = "Realtime Turnover" if realtime_overlay_quote else "Turnover"
             open_label, high_label, low_label = "Open", "High", "Low"
         else:
-            price_unit = " 元"
+            price_unit = f" {currency_label}"
             pct_chg_label = "实时涨跌幅" if realtime_overlay_quote else "涨跌幅"
             volume_label = "实时成交量" if realtime_overlay_quote else "成交量"
             amount_label = "实时成交额" if realtime_overlay_quote else "成交额"
@@ -4376,7 +4517,7 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
             [
                 f"| {pct_chg_label} | {today.get('pct_chg', 'N/A')}% |",
                 f"| {volume_label} | {self._format_volume(today.get('volume'), report_language)} |",
-                f"| {amount_label} | {self._format_amount(today.get('amount'), report_language)} |",
+                f"| {amount_label} | {self._format_amount(today.get('amount'), report_language, quote_currency)} |",
             ]
         )
         quote_rows_text = "\n".join(quote_rows)
@@ -4406,6 +4547,79 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 
 ---
 """
+        if english:
+            prompt += f"\nQuote currency: {quote_currency or 'unverified'}. Prices, MA levels and trading turnover use this currency, not the financial-statement currency.\n"
+        else:
+            prompt += f"\n报价币种：{quote_currency or '未核实'}（{currency_label}）。价格、均线、交易点位和成交额使用报价币种；不得与财报币种混用。\n"
+        prompt += self._format_computed_quote_facts(context, english=english)
+        if english:
+            prompt += """
+Research depth: retain the existing dashboard JSON and all required fields. Use
+short/medium horizons, bullish/bearish scenarios, support/resistance, closing and
+volume confirmation, false-breakout and invalidation conditions. Distinguish
+current MA position from a NEW crossing today, including in summaries; do not
+call all below-MA states new breakdowns. State financial source/period/currency
+and news evidence limits. Missing evidence stays unavailable. Avoid duplicated
+indicator lists and filler; 5000-6000 output tokens is a planning range, not a quota.
+Use the computed pairwise MA comparisons throughout, not a memorized ordering.
+Separate observed facts from hypotheses. Explain a driver, its evidence, a bullish,
+bearish or watch condition and what would invalidate it; do not infer MA slope
+from one snapshot. No news coverage means unknown event risk, not no event risk.
+Add dashboard.battle_plan.risk_plan with numeric max_position_pct (0-100) and
+scenarios: [{"entry":100,"stop":95,"target":110,"position_pct":10,
+"trigger":"hypothetical closing and volume confirmation",
+"invalidation":"hypothesis invalidation"}]. Example numbers are NOT this stock's
+levels. If no justified entry exists, use
+{"mode":"watch","max_position_pct":0,"existing_position_cap_pct":null,"scenarios":[]}.
+max_position_pct caps NEW exposure only; existing_position_cap_pct separately caps
+existing holdings (null means unknown). Never invent a watch-only entry or stop.
+Without a supplied holding mandate, keep the existing-position cap null; discuss
+conditional holding risks, not an invented personal allocation. Watch-only mode
+must also remain watch-only in the summary and legacy entry fields.
+For trade mode, use numeric scenarios, null for an unsupported target, and refer
+to scenario numbers in legacy prose instead of duplicating stop/target/cap values.
+A scenario-specific stop is not a universal stop; state which entry it protects.
+The structured volume_ratio retains the supplied multi-session benchmark;
+label a previous-session volume multiple separately.
+Python computes loss_pct=(entry-stop)/entry*100 and
+reward_risk=(target-entry)/(entry-stop); never invent arithmetic percentages.
+Scenarios are alternatives, not simultaneous allocations. All NEW exposure scenarios must respect the same cap; existing holdings use their separately supplied cap.
+do not repeat numeric position or loss percentages in legacy prose fields.
+"""
+        else:
+            prompt += """
+研究深度：保留原版dashboard JSON及全部必需字段。围绕短期/中期趋势、支撑阻力、
+看多/看空情景展开因果分析，逐一说明触发、收盘和成交量确认、假突破、失效条件与风险。
+摘要及看空信号也必须区分当前均线下方状态与“本日新下穿”；不能把所有低于均线写成新跌破。
+财务须标来源、期间和币种；新闻仅依据已提供内容；缺失材料直接说明，不补造。
+按资料丰富程度分配篇幅，正常5000–6000输出Token仅为规划区间，不是最低字数要求；不重复堆指标。
+全文均线大小关系以程序两两比较为准，不能套用默认排列；单日快照不能证明均线斜率。
+事实与推断分开：重要结论说明依据、驱动机制、看多/看空或观望条件及推翻判断的新信息；无新闻覆盖只表示事件风险未知。
+在dashboard.battle_plan增加risk_plan对象，含数值max_position_pct（0–100）与scenarios数组：
+{"entry":100,"stop":95,"target":110,"position_pct":10,"trigger":"假设的收盘与量能确认","invalidation":"判断失效条件"}。
+以上仅演示结构，不是本股价位。没有入场依据时使用
+{"mode":"watch","max_position_pct":0,"existing_position_cap_pct":null,"scenarios":[]}，不虚构价格。
+max_position_pct仅指新增仓位；existing_position_cap_pct单列既有持仓上限，未知为null；不得相互替代。
+没有用户持仓约束时，既有仓位上限保持null，只讨论条件性持仓风险，不虚构个人配置比例；观望模式的摘要和旧入场字段也不得暗示立即新建仓。
+有交易计划时mode="trade"，scenarios填真实假设数值；无依据目标target=null。
+旧sniper_points及position_strategy只引用情景编号和条件，不另写相冲突的止损、目标或仓位数字。
+不同入场情景不能共用一句“统一止损”；说明止损对应哪个入场。结构化volume_ratio沿用输入多日均量口径，前日成交量倍数另行标注。
+名义损失率=(entry-stop)/entry*100，收益风险比=(target-entry)/(entry-stop)，由Python计算，模型不得自行填写算术百分比。
+各情景互为备选，不同时叠加；所有情景仓位不得超过唯一max_position_pct；原有仓位/入场文案仅写条件，不重复数字仓位、损失率或收益风险比。
+"""
+        if context.get('news_source_note'):
+            prompt += '\n' + str(context['news_source_note']) + '\n'
+        prompt += ('\nUse each supplied financial field with its own source, report period and currency. '
+                   'A partial earnings sub-block is not erased by an unsupported parent block. '
+                   'Yahoo aggregates are not issuer-verified GAAP; missing news/fund/financial data '
+                   'never proves absence of risks. Do not assert unprovided tracking error or market share.\n'
+                   if english else '\n财务逐字段使用已给来源、报告期和币种；上层not_supported不抹去earnings子块partial数据。'
+                   'Yahoo聚合不是公司逐项核验GAAP。未提供新闻、基金或财务资料不能证明风险不存在；'
+                   '不得断言未给出的跟踪误差、市场份额或“无基金管理人风险”。\n')
+        if english:
+            prompt += "\nEvidence limits: supplied news is not a comprehensive search. Titles/metadata do not establish article details or absence of adverse news; mark no-adverse-news checklist items unverified when coverage is incomplete. For each hypothetical entry and stop, supply the scenario inputs only; Python calculates loss and reward/risk. Do not duplicate arithmetic in prose or guarantee realized or portfolio drawdown. Yahoo financial ratios may be TTM/aggregated and are not individually issuer-verified unless explicitly stated. Revenue/profit amounts alone do not establish earnings quality; examine comparable-period cash flows and working capital, otherwise state uncertainty.\n"
+        else:
+            prompt += "\n证据与风险口径：提供新闻不等于执行综合搜索；标题和元数据不能证明全文细节，也不能证明不存在其他重大利空。仅有标题时必须明示；覆盖不足时，无利空检查项应标待核实，不得写近3日无减持、无处罚。每个假设入场与止损仅填情景参数，由Python计算名义损失率和收益风险比；正文不重复算术，不保证实际损失或组合回撤。Yahoo财务比率可能为TTM或聚合口径，除明确声明外未经公司逐项核验。收入、利润绝对金额不能证明盈利质量充分验证；需比较同期间现金流和营运资金，资料不足应保留不确定性。\n"
         prompt += format_market_phase_prompt_section(
             context.get("market_phase_context"),
             report_language=report_language,
@@ -4473,8 +4687,8 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 | **Turnover Rate** | **{rt.get('turnover_rate', 'N/A')}%** | |
 | PE (TTM/dynamic) | {rt.get('pe_ratio', 'N/A')} | |
 | PB | {rt.get('pb_ratio', 'N/A')} | |
-| Total Market Cap | {self._format_amount(rt.get('total_mv'), report_language)} | |
-| Float Market Cap | {self._format_amount(rt.get('circ_mv'), report_language)} | |
+| Total Market Cap | {self._format_amount(rt.get('total_mv'), report_language, quote_currency)} | |
+| Float Market Cap | {self._format_amount(rt.get('circ_mv'), report_language, quote_currency)} | |
 | 60-Day Change | {rt.get('change_60d', 'N/A')}% | Medium-term performance |
 """
         elif 'realtime' in context:
@@ -4483,13 +4697,13 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 ### 实时行情增强数据
 | 指标 | 数值 | 解读 |
 |------|------|------|
-| 当前价格 | {rt.get('price', 'N/A')} 元 | |
+| 当前价格 | {rt.get('price', 'N/A')}{price_unit} | |
 | **量比** | **{rt.get('volume_ratio', 'N/A')}** | {rt.get('volume_ratio_desc', '')} |
 | **换手率** | **{rt.get('turnover_rate', 'N/A')}%** | |
 | 市盈率(动态) | {rt.get('pe_ratio', 'N/A')} | |
 | 市净率 | {rt.get('pb_ratio', 'N/A')} | |
-| 总市值 | {self._format_amount(rt.get('total_mv'))} | |
-| 流通市值 | {self._format_amount(rt.get('circ_mv'))} | |
+| 总市值 | {self._format_amount(rt.get('total_mv'), report_language, quote_currency)} | |
+| 流通市值 | {self._format_amount(rt.get('circ_mv'), report_language, quote_currency)} | |
 | 60日涨跌幅 | {rt.get('change_60d', 'N/A')}% | 中期表现 |
 """
 
@@ -4693,7 +4907,7 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 | 指标 | 数值 | 健康标准 |
 |------|------|----------|
 | **获利比例** | **{profit_ratio:.1%}** | 70-90%时警惕 |
-| 平均成本 | {chip.get('avg_cost', 'N/A')} 元 | 现价应高于5-15% |
+| 平均成本 | {chip.get('avg_cost', 'N/A')}{price_unit} | 现价应高于5-15% |
 | 90%筹码集中度 | {chip.get('concentration_90', 0):.2%} | <15%为集中 |
 | 70%筹码集中度 | {chip.get('concentration_70', 0):.2%} | |
 | 筹码状态 | {chip.get('chip_status', unknown_text)} | |
@@ -4891,7 +5105,7 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
 """
         if news_context and english:
             prompt += f"""
-Below are the news search results for **{stock_name}({code})** from the last {news_window_days} days. Focus on extracting:
+Below is the supplied news material for **{stock_name}({code})** within the last {news_window_days} days; it may come from RSS or local intelligence rather than comprehensive search. Focus on extracting:
 1. 🚨 **Risk alerts**: shareholder reductions, penalties, negative news
 2. 🎯 **Positive catalysts**: earnings, contracts, policy
 3. 📊 **Earnings expectations**: annual report previews, earnings flash reports
@@ -4906,7 +5120,7 @@ Below are the news search results for **{stock_name}({code})** from the last {ne
 """
         elif news_context:
             prompt += f"""
-以下是 **{stock_name}({code})** 近{news_window_days}日的新闻搜索结果，请重点提取：
+以下是 **{stock_name}({code})** 近{news_window_days}日的已提供新闻材料（可能为RSS或本地资讯，不代表综合搜索），请重点提取：
 1. 🚨 **风险警报**：减持、处罚、利空
 2. 🎯 **利好催化**：业绩、合同、政策
 3. 📊 **业绩预期**：年报预告、业绩快报
@@ -4921,11 +5135,11 @@ Below are the news search results for **{stock_name}({code})** from the last {ne
 """
         elif english:
             prompt += """
-No recent news was found for this stock. Base the analysis mainly on the technical data.
+No usable news evidence was provided for this analysis; this does not establish absence of news. Base the analysis mainly on the technical data.
 """
         else:
             prompt += """
-未搜索到该股票近期的相关新闻。请主要依据技术面数据进行分析。
+本次未提供可用新闻证据，不代表该股票没有近期新闻。请主要依据技术面数据进行分析。
 """
 
         # 注入缺失数据警告
@@ -5105,18 +5319,19 @@ Output the complete Decision Dashboard in JSON format."""
         else:
             return f"{volume:.0f} 股"
     
-    def _format_amount(self, amount: Optional[float], report_language: str = "zh") -> str:
+    def _format_amount(self, amount: Optional[float], report_language: str = "zh", currency: Optional[str] = "CNY") -> str:
         """格式化成交额显示"""
         if amount is None:
             return 'N/A'
         if normalize_report_language(report_language) in ("en", "ko"):
-            return self._format_scaled_number_en(amount)
+            return f"{self._format_scaled_number_en(amount)} {currency or 'currency unverified'}"
+        suffix = QUOTE_CURRENCY_LABELS.get(currency, "（币种未核实）")
         if amount >= 1e8:
-            return f"{amount / 1e8:.2f} 亿元"
+            return f"{amount / 1e8:.2f} 亿{suffix}"
         elif amount >= 1e4:
-            return f"{amount / 1e4:.2f} 万元"
+            return f"{amount / 1e4:.2f} 万{suffix}"
         else:
-            return f"{amount:.0f} 元"
+            return f"{amount:.0f} {suffix}"
 
     @staticmethod
     def _format_scaled_number_en(value: float) -> str:
@@ -5153,6 +5368,8 @@ Output the complete Decision Dashboard in JSON format."""
         realtime = context.get('realtime', {}) or {}
         yesterday = context.get('yesterday', {}) or {}
 
+        quote_currency = resolve_quote_currency(context)
+
         prev_close = yesterday.get('close')
         close = today.get('close')
         high = today.get('high')
@@ -5172,6 +5389,8 @@ Output the complete Decision Dashboard in JSON format."""
                 change_amount = None
 
         snapshot = {
+            "computed_quote_facts": self._format_computed_quote_facts(context, english=normalize_report_language(context.get('report_language')) == 'en'),
+            "quote_currency": quote_currency,
             "date": context.get('date', '未知'),
             "close": self._format_price(close),
             "open": self._format_price(today.get('open')),
@@ -5182,7 +5401,7 @@ Output the complete Decision Dashboard in JSON format."""
             "change_amount": self._format_price(change_amount),
             "amplitude": self._format_percent(amplitude),
             "volume": self._format_volume(today.get('volume')),
-            "amount": self._format_amount(today.get('amount')),
+            "amount": self._format_amount(today.get('amount'), currency=quote_currency),
         }
 
         if realtime:

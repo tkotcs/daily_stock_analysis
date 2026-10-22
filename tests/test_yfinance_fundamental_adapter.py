@@ -196,6 +196,25 @@ class TestYfinanceFundamentalAdapter(unittest.TestCase):
         self.assertEqual(div["ttm_event_count"], 3)
         self.assertAlmostEqual(div["ttm_cash_dividend_per_share"], 0.79, places=2)
 
+    def test_ttm_dividend_window_excludes_future_events(self) -> None:
+        dividends = pd.Series(
+            [0.5, 0.26, 0.27, 0.99, 1.0],
+            index=pd.DatetimeIndex(
+                ["2025-08-11", "2026-05-11", "2026-08-14", "2026-08-15", "2026-11-19"],
+                tz="America/New_York",
+            ),
+        )
+        ticker = _build_mock_ticker({"currency": "USD", "currentPrice": 100}, dividends=dividends)
+
+        with patch("yfinance.Ticker", return_value=ticker), self._freeze_dividend_as_of():
+            bundle = YfinanceFundamentalAdapter().get_fundamental_bundle("AAPL")
+
+        dividend = bundle["earnings"]["dividend"]
+        self.assertEqual(dividend["ttm_event_count"], 2)
+        self.assertAlmostEqual(dividend["ttm_cash_dividend_per_share"], 0.53)
+        self.assertAlmostEqual(dividend["ttm_dividend_yield_pct"], 0.53)
+        self.assertEqual(len(dividend["events"]), 5)
+
     def test_falls_back_to_info_when_statements_only_have_4_quarters(self) -> None:
         """yfinance default is 4 quarters → statement-derived YoY refuses to use QoQ.
 

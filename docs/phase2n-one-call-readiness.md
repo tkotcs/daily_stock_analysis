@@ -1,0 +1,13 @@
+# Phase 2N: prepare a disabled frozen NVDA one-call entry
+
+The registered standalone manual workflow remains `.github/workflows/04-nvda-free-preflight.yml`; this is a new configuration revision, never a rerun of a previously paid run. No business or controller code changes: business f93a7609e569e3b6c6372e652a3d36a27225d783 and controller adeb8cc9759217b306e1b0ea74369790c5684025 are immutable checkouts.
+
+The sole request source is artifact `phase2m-request-38748119384` from run 38748119384. Verify its original manifest hash, every downloaded file and the canonical complete JSON SHA `13c38395630faeef2a638e10dcf5966396c7cbf40d26110045f3b47712a06ccd`. There is no market collector, news refresh, prompt builder or alternate model in this workflow.
+
+`execute_live` defaults to false. No dispatch is authorized in Phase 2N. Future dispatch requires new explicit paid authorization, then the real user approval in Environment `nvda-one-call-approval`. The execution ref is restricted to the already whitelisted `deploy/phase2h-request-preparation` branch; do not widen the whitelist or approve via API. Only fast-forward configuration changes on that preparation branch, never main or historic evidence.
+
+Before using the Secret, enforce run_attempt=1, owner/ref, source commits, frozen request identity, disabled thinking, 8192 output, streaming usage, current complete session and expiry. The material is invalid at 2026-10-15T20:00:00+00:00 (2026-10-16 04:00 Beijing), earlier than its 24-hour age limit. Expired material must never be refreshed inside this paid workflow. The per-run authorization expires in at most 15 minutes and is capped 30 seconds before the material deadline. Approval delay or dependency installation cannot extend that deadline.
+
+The fixed controller verifies the actual SDK body hash again before the single HTTPX POST, reads official model/balance/pricing via GET and stops on uncertainty. It disables SDK/transport retry and fallback and records raw/usage results. No second POST, model switching, SMTP or schedules. Scan raw and gzip-decoded artifacts for the exact Secret before upload; do not emit credentials. This is a per-authorized-run one-POST control, not a global monthly hard-budget service.
+
+Preparation only checks the Secret name exists; GitHub does not permit reading its value back. The local account GET does not prove the repository Secret has identical bytes. Runtime free GET preflight under that Secret is still necessary after separate authorization. The unchanged $3/$5 monthly objectives are not verified hard caps. Chinese detailed evidence is delivered separately; project README scope stays unchanged.

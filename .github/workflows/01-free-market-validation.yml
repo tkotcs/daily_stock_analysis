@@ -1,83 +1,107 @@
-name: Manual free market validation
-
+name: Manual native market capture - zero paid POST
 on:
   workflow_dispatch:
     inputs:
-      universe:
-        description: 'NVDA first; watchlist35 only after reviewed NVDA success'
-        required: true
-        default: nvda
+      scope:
+        description: "Start with NVDA; watchlist35 only after source access is verified"
         type: choice
-        options:
-          - nvda
-          - watchlist35
-      nvda_run_id:
-        description: 'Required for watchlist35: accepted NVDA run on this same commit'
-        required: false
-        default: ''
-        type: string
-
+        options: [nvda, watchlist35]
+        default: nvda
 permissions:
   contents: read
-  actions: read
-
 concurrency:
-  group: phase1-free-market-validation
+  group: free-native-market-capture
   cancel-in-progress: false
-
 jobs:
-  validate:
+  capture:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.actor == github.repository_owner && github.run_attempt == 1 }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
+    env:
+      PYTHONIOENCODING: utf-8
+      LITELLM_LOCAL_MODEL_COST_MAP: "True"
+      TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+      CUSTOM_TIKTOKEN_CACHE_DIR: ${{ github.workspace }}/.cache/tiktoken
+      RESEARCH_API_BASE: ${{ vars.RESEARCH_API_BASE }}
+      CAPTURE_SCOPE: ${{ inputs.scope }}
     steps:
-      - name: Verify prerequisite for the 35-symbol round
-        if: inputs.universe == 'watchlist35'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          NVDA_ACCEPTED_RUN_ID: ${{ inputs.nvda_run_id }}
-        run: |
-          [[ "$NVDA_ACCEPTED_RUN_ID" =~ ^[0-9]+$ ]] || exit 1
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$NVDA_ACCEPTED_RUN_ID" > /tmp/nvda-run.json
-          python - <<'PY'
-          import json,os
-          run=json.load(open('/tmp/nvda-run.json'))
-          assert run['conclusion']=='success' and run['event']=='workflow_dispatch'
-          assert run['head_sha']==os.environ['GITHUB_SHA']
-          assert run['path']=='.github/workflows/01-free-market-validation.yml'
-          PY
-          gh run download "$NVDA_ACCEPTED_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'free-market-nvda-*' --dir /tmp/nvda-review
-          python - <<'PY'
-          import json,pathlib
-          files=list(pathlib.Path('/tmp/nvda-review').rglob('summary.json'))
-          assert len(files)==1
-          s=json.loads(files[0].read_text())
-          assert s['universe']=='nvda' and s['passed'] and s['valid']==1
-          assert s['safety_passed'] and all(v==0 for v in s['attempt_counters'].values())
-          assert s['llm_usage_rows'] in (None,0)
-          PY
-      - name: Checkout clean deployment baseline
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
-      - name: Python (same version as official daily workflow)
-        uses: actions/setup-python@v6
+      - uses: actions/checkout@v5
         with:
-          python-version: '3.11'
-          cache: pip
-      - name: Install original dependencies
+          ref: 577624ad8459871630c690e5760ae504ac6f2b9f
+          path: upstream-fixed
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install native dependencies and public tokenizer
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-          python -c "import futu; print('futu SDK import OK')"
-      - name: Run guarded upstream dry-run (no credentials)
-        env:
-          PYTHONIOENCODING: utf-8
-          LITELLM_LOCAL_MODEL_COST_MAP: 'True'
-        run: python .github/scripts/free_market_validation.py --universe '${{ inputs.universe }}' --out validation-evidence
-      - name: Keep actual evidence, including failures
+          python -m pip install -r upstream-fixed/requirements.txt litellm==1.98.1 httpx==0.28.1 openai==2.54.0 tiktoken==0.11.0 pandas==3.0.6 markdown2 pytest
+          python .github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR"
+      - name: Deterministic refusal regression checks
+        run: python -m pytest .github/scripts/test_mvp_capture_refusal.py -q --junitxml=refusal-tests.xml
+      - name: Native capture without supplier or email credentials
+        run: |
+          if [ "$CAPTURE_SCOPE" = nvda ]; then
+            python .github/scripts/mvp_three.py --source upstream-fixed --out capture --only NVDA
+          elif [ "$CAPTURE_SCOPE" = watchlist35 ]; then
+            python .github/scripts/daily_news.py --config .github/research/daily-news-feeds.json --out daily-news
+            python .github/scripts/mvp_three.py --source upstream-fixed --out capture --universe watchlist35 --news-data daily-news/NEWS_PACKET.json
+          else
+            exit 1
+          fi
+      - name: Prepare a consolidated candidate only for the full watchlist
+        if: inputs.scope == 'watchlist35'
+        run: |
+          python .github/scripts/daily_briefing.py gate --source upstream-fixed --out calendar.json
+          python - <<'PY'
+          import json,subprocess,sys
+          session=json.load(open('calendar.json'))['completed_session']
+          subprocess.run([sys.executable,'.github/scripts/daily_briefing.py','prepare',
+              '--source','upstream-fixed','--data','capture',
+              '--profile','.github/research/gpt-6.1-sol-review-profile.json',
+              '--out','daily-ready','--session',session],check=True)
+          PY
+      - name: Summarize actual data coverage and fail if no valid market input
         if: always()
-        uses: actions/upload-artifact@v6
+        run: |
+          python - <<'PY'
+          import json,os,pathlib
+          path=pathlib.Path('capture/RESULTS.json')
+          result=json.loads(path.read_text()) if path.exists() else {'symbols':[]}
+          rows=result['symbols']
+          valid=sum(r['status']=='success_simulated_model' for r in rows)
+          summary=dict(scope=os.environ['CAPTURE_SCOPE'],valid=valid,requested=len(rows),
+              real_model_POSTs=result.get('real_POSTs',0),SMTP_attempts=result.get('mail_sent',0),
+              no_supplier_or_email_secrets_injected=True,symbols=rows)
+          pathlib.Path('FREE_CAPTURE_SUMMARY.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('# Free native capture\n\n```json\n'+json.dumps(summary,ensure_ascii=False,indent=2)+'\n```\n')
+          assert path.exists() and rows and valid>0,'no_valid_market_input_inspect_saved_evidence'
+          assert result['real_POSTs']==0 and result['mail_sent']==0
+          PY
+      - uses: actions/upload-artifact@v6
+        if: always()
         with:
-          name: free-market-${{ inputs.universe }}-${{ github.run_id }}
-          path: validation-evidence/
-          retention-days: 7
+          name: free-native-${{ github.run_id }}
+          retention-days: 14
+          path: |
+            FREE_CAPTURE_SUMMARY.json
+            refusal-tests.xml
+            calendar.json
+            daily-ready/
+            daily-news/CAPTURES.json
+            daily-news/NEWS_PACKET.json
+            capture/RESULTS.json
+            capture/*/STATUS.json
+            capture/*/HTTP_TRACE.json
+            capture/*/ERROR.txt
+            capture/*/DAILY.csv
+            capture/*/NATIVE_CONTEXT.json
+            capture/*/FINAL_REQUEST.json
+            capture/*/FINANCIAL_AUDIT.json
+            capture/*/PRICE_AUDIT.json
+            capture/*/TECHNICAL.json
+            capture/*/chart-*.json

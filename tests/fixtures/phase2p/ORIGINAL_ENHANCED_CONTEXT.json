@@ -1,0 +1,490 @@
+[
+  {
+    "code": "NVDA",
+    "date": "2026-10-14",
+    "today": {
+      "code": "NVDA",
+      "date": "2026-10-14",
+      "open": 225.52999877929688,
+      "high": 226.0,
+      "low": 219.63999938964844,
+      "close": 221.3000030517578,
+      "volume": 117249000.0,
+      "amount": 25947204057.81555,
+      "pct_chg": -3.16,
+      "ma5": 227.18,
+      "ma10": 231.63,
+      "ma20": 228.69,
+      "volume_ratio": 1.33,
+      "data_source": "YfinanceFetcher",
+      "canonical_id": "NVDA",
+      "ma60": 219.63023096720377
+    },
+    "yesterday": {
+      "code": "NVDA",
+      "date": "2026-10-13",
+      "open": 224.33999633789062,
+      "high": 228.63999938964844,
+      "low": 223.05999755859375,
+      "close": 228.52000427246094,
+      "volume": 84036900.0,
+      "amount": 19204112747.044373,
+      "pct_chg": 0.97,
+      "ma5": 230.41,
+      "ma10": 232.34,
+      "ma20": 228.32,
+      "volume_ratio": 0.92,
+      "data_source": "YfinanceFetcher",
+      "canonical_id": "NVDA",
+      "ma60": 219.39286931355795
+    },
+    "volume_change_ratio": 1.4,
+    "price_change_ratio": -3.16,
+    "ma_status": "短期走弱 🔽",
+    "report_language": "zh",
+    "stock_name": "英伟达",
+    "news_window_days": 3,
+    "trend_analysis": {
+      "trend_status": "弱势空头",
+      "ma_alignment": "弱势空头，MA5<MA10 但 MA10≥MA20",
+      "trend_strength": 40,
+      "bias_ma5": -2.5882554502616855,
+      "bias_ma10": -4.460522573735163,
+      "volume_status": "量能正常",
+      "volume_trend": "量能正常",
+      "buy_signal": "观望",
+      "signal_score": 51,
+      "signal_reasons": [
+        "✅ 价格略低于MA5(-2.6%)，回踩买点",
+        " RSI中性(41.8)，震荡整理中"
+      ],
+      "risk_factors": []
+    },
+    "is_index_etf": false,
+    "fundamental_context": {
+      "market": "us",
+      "provider": "yfinance",
+      "as_of": "2026-10-15T14:05:26.258418+00:00",
+      "data_quality": "ok",
+      "missing_fields": [
+        "valuation",
+        "capital_flow"
+      ],
+      "valuation": {
+        "status": "not_supported",
+        "coverage": {
+          "status": "not_supported"
+        },
+        "source_chain": [
+          {
+            "provider": "realtime_quote",
+            "result": "not_supported",
+            "duration_ms": 0
+          }
+        ],
+        "errors": [],
+        "data": {
+          "pe_ratio": null,
+          "pb_ratio": null,
+          "total_mv": null,
+          "circ_mv": null
+        }
+      },
+      "growth": {
+        "status": "ok",
+        "coverage": {
+          "status": "ok"
+        },
+        "source_chain": [
+          {
+            "provider": "growth:yfinance.info",
+            "result": "partial",
+            "duration_ms": 1134
+          },
+          {
+            "provider": "earnings.financial_report:yfinance",
+            "result": "partial",
+            "duration_ms": 1134
+          },
+          {
+            "provider": "earnings.dividend:yfinance",
+            "result": "partial",
+            "duration_ms": 1134
+          },
+          {
+            "provider": "belong_boards:yfinance.info",
+            "result": "partial",
+            "duration_ms": 1134
+          }
+        ],
+        "errors": [],
+        "data": {
+          "revenue_yoy": 105.8511,
+          "net_profit_yoy": 125.9027,
+          "roe": 117.211,
+          "gross_margin": 74.674
+        }
+      },
+      "earnings": {
+        "status": "ok",
+        "coverage": {
+          "status": "ok"
+        },
+        "source_chain": [
+          {
+            "provider": "growth:yfinance.info",
+            "result": "partial",
+            "duration_ms": 1134
+          },
+          {
+            "provider": "earnings.financial_report:yfinance",
+            "result": "partial",
+            "duration_ms": 1134
+          },
+          {
+            "provider": "earnings.dividend:yfinance",
+            "result": "partial",
+            "duration_ms": 1134
+          },
+          {
+            "provider": "belong_boards:yfinance.info",
+            "result": "partial",
+            "duration_ms": 1134
+          }
+        ],
+        "errors": [],
+        "data": {
+          "financial_report": {
+            "report_date": "2026-07-26（FY2027 Q2；Yahoo原列2026-07-31）",
+            "revenue": 96221000000.0,
+            "net_profit_parent": 59688000000.0,
+            "operating_cash_flow": 24077000000.0,
+            "roe": 117.211,
+            "currency": "USD"
+          },
+          "dividend": {
+            "events": [
+              {
+                "event_date": "2026-09-10",
+                "ex_dividend_date": "2026-09-10",
+                "record_date": null,
+                "announcement_date": null,
+                "cash_dividend_per_share": 0.25,
+                "is_pre_tax": true
+              },
+              {
+                "event_date": "2026-06-04",
+                "ex_dividend_date": "2026-06-04",
+                "record_date": null,
+                "announcement_date": null,
+                "cash_dividend_per_share": 0.25,
+                "is_pre_tax": true
+              },
+              {
+                "event_date": "2026-03-11",
+                "ex_dividend_date": "2026-03-11",
+                "record_date": null,
+                "announcement_date": null,
+                "cash_dividend_per_share": 0.01,
+                "is_pre_tax": true
+              },
+              {
+                "event_date": "2025-12-04",
+                "ex_dividend_date": "2025-12-04",
+                "record_date": null,
+                "announcement_date": null,
+                "cash_dividend_per_share": 0.01,
+                "is_pre_tax": true
+              },
+              {
+                "event_date": "2025-09-11",
+                "ex_dividend_date": "2025-09-11",
+                "record_date": null,
+                "announcement_date": null,
+                "cash_dividend_per_share": 0.01,
+                "is_pre_tax": true
+              }
+            ],
+            "ttm_event_count": 4,
+            "ttm_cash_dividend_per_share": 0.52,
+            "coverage": "cash_dividend_pre_tax",
+            "currency": "USD",
+            "as_of": "2026-10-15",
+            "ttm_dividend_yield_pct": 0.2417
+          }
+        }
+      },
+      "institution": {
+        "status": "not_supported",
+        "coverage": {
+          "status": "not_supported"
+        },
+        "source_chain": [
+          {
+            "provider": "fundamental_pipeline",
+            "result": "not_supported",
+            "duration_ms": 0
+          }
+        ],
+        "errors": [
+          "not supported for offshore market"
+        ],
+        "data": {}
+      },
+      "capital_flow": {
+        "status": "not_supported",
+        "coverage": {
+          "status": "not_supported"
+        },
+        "source_chain": [
+          {
+            "provider": "fundamental_pipeline",
+            "result": "not_supported",
+            "duration_ms": 0
+          }
+        ],
+        "errors": [
+          "not supported for this source"
+        ],
+        "data": {}
+      },
+      "dragon_tiger": {
+        "status": "not_supported",
+        "coverage": {
+          "status": "not_supported"
+        },
+        "source_chain": [
+          {
+            "provider": "fundamental_pipeline",
+            "result": "not_supported",
+            "duration_ms": 0
+          }
+        ],
+        "errors": [
+          "not supported for offshore market"
+        ],
+        "data": {}
+      },
+      "boards": {
+        "status": "ok",
+        "coverage": {
+          "status": "ok"
+        },
+        "source_chain": [
+          {
+            "provider": "growth:yfinance.info",
+            "result": "partial",
+            "duration_ms": 1134
+          },
+          {
+            "provider": "earnings.financial_report:yfinance",
+            "result": "partial",
+            "duration_ms": 1134
+          },
+          {
+            "provider": "earnings.dividend:yfinance",
+            "result": "partial",
+            "duration_ms": 1134
+          },
+          {
+            "provider": "belong_boards:yfinance.info",
+            "result": "partial",
+            "duration_ms": 1134
+          }
+        ],
+        "errors": [],
+        "data": {
+          "boards": [
+            {
+              "name": "Technology",
+              "type": "行业"
+            },
+            {
+              "name": "Semiconductors",
+              "type": "概念"
+            }
+          ]
+        }
+      },
+      "belong_boards": [
+        {
+          "name": "Technology",
+          "type": "行业"
+        },
+        {
+          "name": "Semiconductors",
+          "type": "概念"
+        }
+      ],
+      "coverage": {
+        "valuation": "not_supported",
+        "growth": "ok",
+        "earnings": "ok",
+        "institution": "not_supported",
+        "capital_flow": "not_supported",
+        "dragon_tiger": "not_supported",
+        "boards": "ok"
+      },
+      "source_chain": [
+        {
+          "provider": "realtime_quote",
+          "result": "not_supported",
+          "duration_ms": 0
+        },
+        {
+          "provider": "growth:yfinance.info",
+          "result": "partial",
+          "duration_ms": 1134
+        },
+        {
+          "provider": "earnings.financial_report:yfinance",
+          "result": "partial",
+          "duration_ms": 1134
+        },
+        {
+          "provider": "earnings.dividend:yfinance",
+          "result": "partial",
+          "duration_ms": 1134
+        },
+        {
+          "provider": "belong_boards:yfinance.info",
+          "result": "partial",
+          "duration_ms": 1134
+        },
+        {
+          "provider": "growth:yfinance.info",
+          "result": "partial",
+          "duration_ms": 1134
+        },
+        {
+          "provider": "earnings.financial_report:yfinance",
+          "result": "partial",
+          "duration_ms": 1134
+        },
+        {
+          "provider": "earnings.dividend:yfinance",
+          "result": "partial",
+          "duration_ms": 1134
+        },
+        {
+          "provider": "belong_boards:yfinance.info",
+          "result": "partial",
+          "duration_ms": 1134
+        },
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        },
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        },
+        {
+          "provider": "fundamental_pipeline",
+          "result": "not_supported",
+          "duration_ms": 0
+        },
+        {
+          "provider": "growth:yfinance.info",
+          "result": "partial",
+          "duration_ms": 1134
+        },
+        {
+          "provider": "earnings.financial_report:yfinance",
+          "result": "partial",
+          "duration_ms": 1134
+        },
+        {
+          "provider": "earnings.dividend:yfinance",
+          "result": "partial",
+          "duration_ms": 1134
+        },
+        {
+          "provider": "belong_boards:yfinance.info",
+          "result": "partial",
+          "duration_ms": 1134
+        }
+      ],
+      "errors": [
+        "not supported for offshore market",
+        "not supported for this source",
+        "not supported for offshore market"
+      ],
+      "status": "ok",
+      "elapsed_ms": 1136
+    },
+    "market_phase_context": {
+      "market": "us",
+      "phase": "intraday",
+      "market_local_time": "2026-10-15T10:05:23.935154-04:00",
+      "session_date": "2026-10-15",
+      "effective_daily_bar_date": "2026-10-14",
+      "is_trading_day": true,
+      "is_market_open_now": true,
+      "is_partial_bar": true,
+      "minutes_to_open": null,
+      "minutes_to_close": 354,
+      "trigger_source": "system",
+      "analysis_intent": "auto",
+      "warnings": []
+    },
+    "market_structure_context": {
+      "schema_version": "market-structure-v1",
+      "status": "not_supported",
+      "market": "us",
+      "trade_date": "2026-10-14",
+      "market_theme_context": {
+        "schema_version": "market-theme-v1",
+        "status": "not_supported",
+        "market": "us",
+        "trade_date": "2026-10-14",
+        "active_themes": [],
+        "leading_industries": [],
+        "leading_concepts": [],
+        "lagging_themes": [],
+        "hotspot_constituents": [],
+        "leader_stocks": [],
+        "theme_breadth": {
+          "active_count": 0,
+          "leading_industry_count": 0,
+          "leading_concept_count": 0,
+          "lagging_count": 0
+        },
+        "data_quality": {
+          "status": "not_supported",
+          "missing_fields": [
+            "a_share_theme_context"
+          ],
+          "sources": [
+            {
+              "provider": "dsa",
+              "dataset": "market_structure",
+              "status": "not_supported",
+              "message": "stock market structure is only supported for A-share first version"
+            }
+          ],
+          "errors": []
+        }
+      },
+      "stock_market_position": {
+        "schema_version": "stock-market-position-v1",
+        "status": "not_supported",
+        "stock_code": "NVDA",
+        "stock_name": "英伟达",
+        "market": "us",
+        "related_boards": [],
+        "stock_role": "unknown",
+        "theme_phase": "unknown",
+        "risk_tags": [],
+        "missing_fields": [
+          "a_share_theme_context"
+        ]
+      }
+    },
+    "news_result_count": null,
+    "news_evidence_present": true,
+    "news_source_note": "官方RSS标题及元数据已提供，未提供新闻全文；综合新闻搜索未执行。不能据此排除其他重大利空。"
+  }
+]
