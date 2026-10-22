@@ -32,6 +32,12 @@ def quality_findings(model, context):
                 after = re.split('[。；]', value[match.end():])[0]
                 if re.search(r'(?:必须|务必)(?:先)?(?:确认|满足|形成)\s*$', before):
                     continue
+                # A directly awaited order or an open question about forming it
+                # describes a future check, irrespective of the JSON field.
+                # Stop at punctuation so a later current-state assertion is checked.
+                if (re.search(r'(?:等待|待)(?:确认|形成|恢复|达到)?\s*$', before)
+                        or re.search(r'(?:能否|是否)[^，,。；;！？!?]*(?:形成|恢复|达到)\s*$', before)):
+                    continue
                 if re.search('不满足|未满足|不成立|不符合|未形成|必要|条件|前提|要求|需|互斥|不将', before + after):
                     continue
                 names = re.findall(r'MA(?:5|10|20|60)', chain, re.I)

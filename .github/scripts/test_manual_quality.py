@@ -11,6 +11,10 @@ from manual_reports import quality_findings, record_outputs, render_status_index
 @pytest.mark.parametrize('text', [
     '重新评估新增交易前，必须确认MA5>MA10>MA20、乖离率约束、收盘位置及量价配合；主动资金流未知时保持谨慎。',
     '新增交易前务必先确认MA5>MA10>MA20。',
+    '当前没有满足规则的入场情景。先等待MA5>MA10>MA20形成，再检查届时收盘是否确认突破压力。',
+    '中期重点检查能否收复届时MA20并形成MA5>MA10>MA20；后续需使用更新数值。',
+    '是否形成MA5>MA10>MA20，仍待后续观察。',
+    '等待确认MA5>MA10>MA20，再评估。',
 ])
 def test_future_confirmation_is_not_a_claim_of_current_MA_order(text):
     assert not quality_findings(dict(dashboard=dict(phase_decision=dict(watch_conditions=[text]))),context())
@@ -19,10 +23,19 @@ def test_future_confirmation_is_not_a_claim_of_current_MA_order(text):
 @pytest.mark.parametrize('text', [
     '当前MA5>MA10>MA20。',
     '必须确认目前已经MA5>MA10>MA20。',
+    '等待回踩，当前MA5>MA10>MA20。',
+    '中期检查能否收复MA20，当前已经形成MA5>MA10>MA20。',
+    '是否收复MA20尚不明确；目前MA5>MA10>MA20。',
 ])
 def test_current_order_claim_in_watch_conditions_remains_blocking(text):
     findings=quality_findings(dict(dashboard=dict(phase_decision=dict(watch_conditions=[text]))),context())
     assert any(item['category']=='MA_ORDER_CONTRADICTION' for item in findings)
+
+
+def test_future_check_does_not_exempt_later_fact_in_same_field():
+    text = '先等待MA5>MA10>MA20形成；但目前MA5>MA10>MA20。'
+    findings = quality_findings(dict(ma_analysis=text), context())
+    assert len(findings) == 1
 
 
 def context():
