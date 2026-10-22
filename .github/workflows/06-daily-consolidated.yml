@@ -36,7 +36,7 @@ jobs:
       - name: Checkout pinned daily controller
         uses: actions/checkout@v5
         with:
-          ref: aa12e2c411efef8ec4bbaada19c4d41760abeaf0
+          ref: 5b690902f8c8e09f48812d1c3cb23d9721bcc2a9
           path: controller
           persist-credentials: false
       - name: Check required delivery setup before any paid call
@@ -179,7 +179,7 @@ jobs:
           generated=read('daily-real/STATUS.json');mail=read('mail-result/MAIL_STATUS.json')
           summary=dict(configuration=read('CONFIGURATION_STATUS.json'),calendar=read('calendar.json'),session=read('SESSION_STATUS.json'),
               preparation=read('daily-ready/PREPARATION_STATUS.json'),generation=generated,mail=mail,
-              timezone='Asia/Shanghai',scheduled_start='09:00',controller_commit='aa12e2c411efef8ec4bbaada19c4d41760abeaf0',
+              timezone='Asia/Shanghai',scheduled_start='09:00',controller_commit='5b690902f8c8e09f48812d1c3cb23d9721bcc2a9',
               model_attempts=generated.get('actual_model_POST_attempts',int(pathlib.Path('daily-real/POST_ATTEMPT.json').exists())),
               mail_attempts=mail.get('mail_attempts',int(pathlib.Path('mail-result/MAIL_ATTEMPT.json').exists())))
           pathlib.Path('DAILY_EXECUTION_SUMMARY.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2))
