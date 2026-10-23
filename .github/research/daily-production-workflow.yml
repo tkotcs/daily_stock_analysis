@@ -147,15 +147,19 @@ jobs:
           gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "daily-production-$SOURCE_RUN" --dir saved-source
           python controller/.github/scripts/daily_saved_response.py --folder saved-source --source upstream-fixed --out daily-real
       - name: Send this run's validated consolidated report
-        if: env.AUTOMATIC_RUN == 'true' && (steps.ready.outputs.ready == 'true' || env.SAVED_RESPONSE == 'true')
+        if: ${{ !cancelled() && env.AUTOMATIC_RUN == 'true' && ((env.SAVED_RESPONSE != 'true' && steps.calendar.outputs.run == 'true' && steps.session.outputs.run == 'true') || (env.SAVED_RESPONSE == 'true' && success())) }}
         env:
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           EMAIL_RECEIVERS: ${{ secrets.EMAIL_RECEIVERS }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          REPORT_SHA="$(sha256sum daily-real/DAILY_REPORT.md | cut -d ' ' -f1)"
-          python controller/.github/scripts/daily_briefing_mail.py --source upstream-fixed --report daily-real/DAILY_REPORT.md --out mail-result --report-sha256 "$REPORT_SHA" --automatic --send
+          if [ "$SAVED_RESPONSE" = true ]; then
+            REPORT_SHA="$(sha256sum daily-real/DAILY_REPORT.md | cut -d ' ' -f1)"
+            python controller/.github/scripts/daily_briefing_mail.py --source upstream-fixed --report daily-real/DAILY_REPORT.md --out mail-result --report-sha256 "$REPORT_SHA" --automatic --send
+          else
+            python controller/.github/scripts/daily_delivery.py --source upstream-fixed --out mail-result
+          fi
       - name: Save execution state and scan before upload
         if: always()
         id: scan
@@ -168,7 +172,7 @@ jobs:
           python - <<'PY'
           import json,os,pathlib
           files=[pathlib.Path(n) for n in ('CONFIGURATION_STATUS.json','calendar.json','SESSION_STATUS.json')]
-          for name in ('daily-news','daily-ready','daily-real','mail-result'):
+          for name in ('daily-news','daily-ready','daily-real','daily-notice','mail-result'):
               files.extend(p for p in pathlib.Path(name).rglob('*') if p.is_file())
           capture=pathlib.Path('daily-capture')
           for pattern in ('RESULTS.json','*/STATUS.json','*/HTTP_TRACE.json','*/*CAPTURE_WINDOW.json','*/*RECEIVED_DAILY.csv','*/chart-*.json'):
@@ -202,6 +206,7 @@ jobs:
             SESSION_STATUS.json
             daily-ready/
             daily-real/
+            daily-notice/
             mail-result/
             daily-news/CAPTURES.json
             daily-news/NEWS_PACKET.json
