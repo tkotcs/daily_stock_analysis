@@ -124,6 +124,21 @@ def test_no_eligible_equity_does_not_invent_a_focus():
     assert daily.choose_focus([row], {'AAPL': context()}, NOW) is None
 
 
+def test_all_capture_failures_are_distinct_from_no_eligible_equity(tmp_path, monkeypatch):
+    monkeypatch.setattr(daily, 'source_check', lambda *a: None)
+    omitted = [dict(symbol=code, reason='native_capture_failed',
+                    detail='SYNTHETIC latest_completed_session_missing')
+               for code in daily.WATCHLIST]
+    monkeypatch.setattr(daily, 'load_capture', lambda *a: ([], {}, omitted, {}))
+    out = tmp_path/'blocked'
+    assert daily.prepare(tmp_path, tmp_path, PROFILE, out, SESSION, now=NOW) is None
+    state = daily.read(out/'PREPARATION_STATUS.json')
+    assert state['status'] == 'capture_unavailable_no_POST'
+    assert state['valid_rows'] == 0 and state['omitted_rows'] == 35
+    assert state['capture_failure_details'] == omitted
+    assert not (out/'REQUEST.json').exists()
+
+
 def test_MACD_display_keeps_DIF_DEA_histogram_order_after_canonical_JSON_roundtrip(tmp_path):
     ctx = context()
     row = daily.fact_row('AAPL', ctx, dict(MA60_verified=True, rows_read=63,

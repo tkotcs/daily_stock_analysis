@@ -90,3 +90,38 @@ def test_ordinary_financial_failure_still_keeps_explicit_missing_data():
         raise ValueError('missing financial table')
     result=capture.capture_fundamentals(SimpleNamespace(get_fundamental_bundle=load), 'NVDA')
     assert result=={'earnings':{},'errors':['ValueError']}
+
+
+@pytest.mark.parametrize('later', [False, True])
+def test_completed_history_keeps_target_and_excludes_later_bars(tmp_path, later):
+    import pandas as pd
+    frame = pd.DataFrame(dict(date=pd.date_range('2026-08-01', periods=62),
+                              close=range(100, 162)))
+    target = str(frame.iloc[60]['date'].date())
+    if not later:
+        frame = frame.iloc[:61]
+    before = frame.copy(deep=True)
+    selected = capture.completed_history(frame, target, tmp_path)
+    assert len(selected) == 61
+    assert selected.iloc[-1]['close'] == 160
+    pd.testing.assert_frame_equal(before, frame)
+    audit = json.loads((tmp_path/'CAPTURE_WINDOW.json').read_text())
+    assert audit['received_rows'] == len(frame)
+    assert audit['completed_latest_session'] == target
+    assert bool(audit['excluded_later_sessions']) is later
+    assert len(pd.read_csv(tmp_path/'RECEIVED_DAILY.csv')) == len(frame)
+
+
+@pytest.mark.parametrize('rows,target,reason', [
+    (61, '2026-10-02', 'latest_completed_session_missing'),
+    (59, '2026-09-28', 'completed_history_too_short'),
+])
+def test_missing_or_short_history_preserves_evidence_and_stops(tmp_path, rows, target, reason):
+    import pandas as pd
+    frame = pd.DataFrame(dict(date=pd.date_range('2026-08-01', periods=rows),
+                              close=range(rows)))
+    with pytest.raises(ValueError, match=reason):
+        capture.completed_history(frame, target, tmp_path, prefix='REFILL_')
+    assert (tmp_path/'REFILL_RECEIVED_DAILY.csv').exists()
+    audit = json.loads((tmp_path/'REFILL_CAPTURE_WINDOW.json').read_text())
+    assert audit['target_session'] == target and audit['model_POSTs'] == 0

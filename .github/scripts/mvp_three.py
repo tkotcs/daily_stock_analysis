@@ -71,6 +71,30 @@ def attach_previous_ma60(context, computed_daily):
         previous['ma60'] = value
 
 
+def completed_history(frame, target, out, *, prefix=''):
+    """Quarantine later bars and retain diagnostics even when the target is missing."""
+    import pandas as pd
+    dates = pd.to_datetime(frame['date'], errors='raise').dt.strftime('%Y-%m-%d')
+    selected = frame.loc[dates <= target].copy()
+    selected_dates = dates.loc[dates <= target]
+    audit = dict(
+        target_session=target, received_rows=len(frame),
+        received_latest_session=dates.max() if len(frame) else None,
+        completed_rows=len(selected),
+        completed_latest_session=selected_dates.max() if len(selected) else None,
+        excluded_later_sessions=sorted(set(dates.loc[dates > target])),
+        minimum_history_rows=60, model_POSTs=0,
+    )
+    # This is source evidence, never restored into the database on a failed check.
+    frame.to_csv(out/(prefix+'RECEIVED_DAILY.csv'), index=False)
+    save(out/(prefix+'CAPTURE_WINDOW.json'), audit)
+    if len(selected) < 60:
+        raise ValueError('completed_history_too_short')
+    if audit['completed_latest_session'] != target:
+        raise ValueError('latest_completed_session_missing')
+    return selected
+
+
 def fixture(code,context):
     t=context['today'];p=t['close'];note=NOTICE
     news_note=context.get('news_source_note') or '未执行新闻搜索，本轮没有新闻证据。'
@@ -151,7 +175,7 @@ def run_symbol(source,out,code,offline=None,inject=False,research_data=None,news
         frame=pd.read_csv(offline/(code+'-daily.csv'));frame['date']=pd.to_datetime(frame['date']).dt.date
         target=str(frame['date'].max());provider='SAVED_OFFLINE_FIXTURE_NOT_LATEST'
     else:frame,provider=manager.get_daily_data(code,days=180,end_date=end)
-    assert len(frame)>=60 and str(frame['date'].max())[:10]==target,'latest_or_history_invalid'
+    frame=completed_history(frame,target,out)
     for _,r in frame.iterrows():
         assert all(math.isfinite(float(r[k])) for k in ('open','high','low','close','volume'))
         assert 0<float(r['low'])<=min(r['open'],r['close'])<=max(r['open'],r['close'])<=r['high'] and r['volume']>=0
@@ -161,7 +185,8 @@ def run_symbol(source,out,code,offline=None,inject=False,research_data=None,news
     daily=manager.get_daily_data
     def completed_daily(symbol,*a,**k):
         k['end_date']=end
-        return daily(symbol,*a,**k)
+        refill,refill_provider=daily(symbol,*a,**k)
+        return completed_history(refill,target,out,prefix='REFILL_'),refill_provider
     manager.get_daily_data=completed_daily
     if not offline:
         from history_identity_validation import match_source

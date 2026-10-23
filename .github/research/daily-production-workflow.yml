@@ -170,6 +170,9 @@ jobs:
           files=[pathlib.Path(n) for n in ('CONFIGURATION_STATUS.json','calendar.json','SESSION_STATUS.json')]
           for name in ('daily-news','daily-ready','daily-real','mail-result'):
               files.extend(p for p in pathlib.Path(name).rglob('*') if p.is_file())
+          capture=pathlib.Path('daily-capture')
+          for pattern in ('RESULTS.json','*/STATUS.json','*/HTTP_TRACE.json','*/*CAPTURE_WINDOW.json','*/*RECEIVED_DAILY.csv','*/chart-*.json'):
+              files.extend(capture.glob(pattern))
           sensitive=[os.environ.get(k,'').strip() for k in ('SEEKERX','EMAIL_SENDER','EMAIL_PASSWORD','EMAIL_RECEIVERS')]
           sensitive.extend(x.strip() for x in os.environ.get('EMAIL_RECEIVERS','').split(','))
           assert not any(value.encode() in p.read_bytes() for value in sensitive if value for p in files if p.exists()),'credential_scan_failed_no_upload'
@@ -205,3 +208,6 @@ jobs:
             daily-capture/RESULTS.json
             daily-capture/*/STATUS.json
             daily-capture/*/HTTP_TRACE.json
+            daily-capture/*/*CAPTURE_WINDOW.json
+            daily-capture/*/*RECEIVED_DAILY.csv
+            daily-capture/*/chart-*.json

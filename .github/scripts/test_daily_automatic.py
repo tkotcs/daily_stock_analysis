@@ -194,3 +194,18 @@ def test_production_template_pins_controller_and_fails_before_paid_steps():
         if "python - <<'PY'\n" in script:
             code=script.split("python - <<'PY'\n",1)[1].rsplit('\nPY',1)[0]
             ast.parse(code)
+
+
+@pytest.mark.parametrize('name', ['chart-2.json', 'RECEIVED_DAILY.csv', 'REFILL_CAPTURE_WINDOW.json'])
+def test_capture_evidence_is_scanned_before_upload(tmp_path, monkeypatch, name):
+    spec = yaml.load(TEMPLATE.read_text('utf-8'), Loader=yaml.BaseLoader)
+    steps = spec['jobs']['daily']['steps']
+    scan = next(step for step in steps if step.get('id') == 'scan')['run']
+    code = scan.split("python - <<'PY'\n", 1)[1].rsplit('\nPY', 1)[0]
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('SEEKERX', 'SYNTHETIC_FORBIDDEN_CAPTURE_SECRET')
+    child = tmp_path/'daily-capture'/'NVDA'
+    child.mkdir(parents=True)
+    (child/name).write_text('SYNTHETIC_FORBIDDEN_CAPTURE_SECRET')
+    with pytest.raises(AssertionError, match='credential_scan_failed_no_upload'):
+        exec(compile(code, '<production-scan>', 'exec'), {})
