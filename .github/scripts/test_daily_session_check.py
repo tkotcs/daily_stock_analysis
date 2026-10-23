@@ -10,7 +10,18 @@ def test_only_absent_claim_allows_capture():
         calls.append((method, path))
         raise GuardStop('remote_claim_HTTP_404_no_retry')
     assert check_session('2026-10-20', api)['run'] is True
-    assert len(calls) == 1 and calls[0][0] == 'GET'
+    assert len(calls) == 2 and all(call[0] == 'GET' for call in calls)
+
+
+def test_notice_mail_claim_alone_prevents_later_paid_generation():
+    calls = []
+    def api(method, path):
+        calls.append(path)
+        if len(calls) == 1:
+            raise GuardStop('remote_claim_HTTP_404_no_retry')
+        return {'ref': 'refs/' + path.removeprefix('ref/')}
+    assert check_session('2026-10-20', api)['run'] is False
+    assert len(calls) == 2
 
 
 def test_existing_claim_skips_even_if_delivery_is_unknown():

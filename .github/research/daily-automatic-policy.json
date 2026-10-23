@@ -12,6 +12,7 @@
   "max_model_POSTs_per_session": 1,
   "reservation_CNY": "0.05",
   "auto_email": true,
+  "degraded_service_notice": true,
   "retry": false,
   "fallback": false,
   "email_secrets_required_before_POST": [

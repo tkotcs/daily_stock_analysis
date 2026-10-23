@@ -13,18 +13,20 @@ def check_session(session, api):
     from datetime import date
     if date.fromisoformat(session).isoformat() != session:
         raise ValueError('invalid_session_date')
-    digest = hashlib.sha256(('DSA:consolidated-daily:v1:' + session).encode()).hexdigest()
-    ref = 'tags/dsa-mvp-consumed-v1/batch/' + digest
-    try:
-        existing = api('GET', 'ref/' + ref)
-    except GuardStop as error:
-        if str(error) != 'remote_claim_HTTP_404_no_retry':
-            raise
-        return dict(run=True, status='session_unclaimed', session=session)
-    if existing.get('ref') != 'refs/' + ref:
-        raise ValueError('session_claim_response_invalid')
-    return dict(run=False, status='session_reserved_may_be_consumed_no_retry',
-                session=session)
+    for prefix in ('DSA:consolidated-daily:v1:', 'DSA:daily-mail:v1:'):
+        digest = hashlib.sha256((prefix + session).encode()).hexdigest()
+        ref = 'tags/dsa-mvp-consumed-v1/batch/' + digest
+        try:
+            existing = api('GET', 'ref/' + ref)
+        except GuardStop as error:
+            if str(error) != 'remote_claim_HTTP_404_no_retry':
+                raise
+            continue
+        if existing.get('ref') != 'refs/' + ref:
+            raise ValueError('session_claim_response_invalid')
+        return dict(run=False, status='session_reserved_may_be_consumed_no_retry',
+                    session=session)
+    return dict(run=True, status='session_unclaimed', session=session)
 
 
 def main():

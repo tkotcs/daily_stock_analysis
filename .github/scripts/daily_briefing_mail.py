@@ -8,7 +8,8 @@ from types import SimpleNamespace
 from daily_briefing import read, save, sha, source_check
 
 
-def deliver(report, source, out, review_reference, *, send=False,automatic=False):
+def deliver(report, source, out, review_reference, *, send=False,automatic=False,
+            notice_root=None):
     out.mkdir(parents=True, exist_ok=False)
     result = dict(status='mail_preview_only', mail_attempts=0, automatic_retry=False,
                   model_POSTs=0, recipients_or_credentials_exported=False)
@@ -17,7 +18,10 @@ def deliver(report, source, out, review_reference, *, send=False,automatic=False
         digest = sha(content)
         result['report_sha256'] = digest
         status = read(report.parent / 'STATUS.json')
-        expected_status='generated_daily_automatic_validated' if automatic else 'generated_daily_preview_requires_review'
+        notice = notice_root is not None
+        expected_status=('daily_service_notice' if notice else
+                         'generated_daily_automatic_validated' if automatic else
+                         'generated_daily_preview_requires_review')
         if status.get('status') != expected_status:
             raise ValueError('successful_generated_daily_report_required')
         authorization = read(report.parent / 'AUTHORIZATION_USED.json')
@@ -30,6 +34,14 @@ def deliver(report, source, out, review_reference, *, send=False,automatic=False
         from daily_execution_policy import execution_authority
         authority=execution_authority(automatic=automatic,
                                      saved_response=bool(authorization.get('recovered_from_run')))
+        if notice:
+            from daily_delivery import notice_content
+            expected, session = notice_content(notice_root, source)
+            if (not automatic or authorization.get('recovered_from_run')
+                    or content != expected.encode('utf-8')
+                    or authorization.get('target_session') != session):
+                raise ValueError('current_run_service_notice_required')
+            result['delivery_kind'] = 'service_notice'
         if automatic:
             from manual_responses_once import check_time
             if (authorization.get('execution_authority')!=authority
@@ -37,11 +49,12 @@ def deliver(report, source, out, review_reference, *, send=False,automatic=False
                     or status.get('program_validation_passed') is not True
                     or status.get('report_sha256')!=digest):
                 raise ValueError('automatic_current_run_validated_report_required')
-            lock=read(report.parent/'DAILY_LOCK.json')
-            if (lock.get('execution_policy_id')!=authority['policy_id']
-                    or sha((report.parent/'DAILY_LOCK.json').read_bytes())!=authorization['batch_sha256']):
-                raise ValueError('automatic_mail_lock_binding_required')
-            check_time(lock)
+            if not notice:
+                lock=read(report.parent/'DAILY_LOCK.json')
+                if (lock.get('execution_policy_id')!=authority['policy_id']
+                        or sha((report.parent/'DAILY_LOCK.json').read_bytes())!=authorization['batch_sha256']):
+                    raise ValueError('automatic_mail_lock_binding_required')
+                check_time(lock)
         result['execution_authority']=authority
         sender, password, receivers = [os.environ.get(key, '').strip()
                                         for key in ('EMAIL_SENDER', 'EMAIL_PASSWORD', 'EMAIL_RECEIVERS')]
@@ -58,7 +71,7 @@ def deliver(report, source, out, review_reference, *, send=False,automatic=False
         claim = RemoteExecutionClaim(
             GitHubAPI(os.environ['GITHUB_REPOSITORY'], os.environ['GITHUB_TOKEN']),
             sha(('DSA:daily-mail:v1:' + session).encode()), os.environ['GITHUB_RUN_ID'],
-            os.environ['GITHUB_SHA'], symbols=(focus,))
+            os.environ['GITHUB_SHA'], symbols=(focus,), **({'mail_notice': True} if notice else {}))
         save(out / 'MAIL_CLAIM.json', claim.reserve([dict(symbol=focus, request_sha256=digest)]))
         claim.before_send(focus, digest)
         # Saved before SMTP: an ambiguous delivery is never automatically repeated.
@@ -70,7 +83,8 @@ def deliver(report, source, out, review_reference, *, send=False,automatic=False
                                  email_receivers=receiver_list,
                                  email_sender_name='美股科技投资与技术观察日报', stock_email_groups=[])
         delivered = EmailSender(config).send_to_email(
-            content.decode('utf-8'), subject='美股科技投资与技术观察日报｜' + session,
+            content.decode('utf-8'), subject=('美股日报运行通知｜' if notice else
+                                           '美股科技投资与技术观察日报｜') + session,
             timeout_seconds=45)
         result['status'] = 'delivered' if delivered else 'mail_failed_or_unknown_no_retry'
     except BaseException as error:
