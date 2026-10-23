@@ -87,6 +87,28 @@ def check_time(lock):
         raise ValueError('material_expiry_extended')
 
 
+class ResponseStreamFailure(ValueError):
+    """Expose bounded provider diagnostics without copying untrusted messages."""
+    def __init__(self, event):
+        response = event.get('response') or {}
+        error = response.get('error') or event.get('error') or {}
+        if not isinstance(error, dict):
+            error = {}
+        overloaded = (error.get('type') == 'service_unavailable_error'
+                      and error.get('code') == 'server_error')
+        reason = ('upstream_overloaded_no_retry' if overloaded
+                  else 'response_failed_or_incomplete_no_retry')
+        self.details = dict(
+            reason=reason,
+            event_type=event['type'],
+            provider_error_code='server_error' if overloaded else 'unclassified',
+            provider_error_type='service_unavailable_error' if overloaded else 'unclassified',
+            automatic_retry=False, output_accepted=False,
+            usage_known=False,
+        )
+        super().__init__(reason)
+
+
 def completed_response(raw):
     """Accept only an explicit completed response; never treat a partial delta as success."""
     final = None
@@ -98,7 +120,7 @@ def completed_response(raw):
             continue
         event = json.loads(payload)
         if event.get('type') in ('error', 'response.failed', 'response.incomplete'):
-            raise ValueError('response_failed_or_incomplete_no_retry')
+            raise ResponseStreamFailure(event)
         if event.get('type') == 'response.completed':
             if final is not None:
                 raise ValueError('duplicate_completed_event')
@@ -148,7 +170,13 @@ def perform_post_once(request, profile, endpoint, key, out, result, save, batch_
         (out / 'RAW_RESPONSE_BODY.bin').write_bytes(bytes(raw).replace(key.encode(), b'[REDACTED]'))
     if result['HTTP_status'] != 200:
         raise ValueError('HTTP_failure_do_not_retry')
-    response, text = completed_response(bytes(raw))
+    try:
+        response, text = completed_response(bytes(raw))
+    except ResponseStreamFailure as error:
+        result['provider_failure'] = error.details
+        save('PROVIDER_FAILURE.json', error.details)
+        # Preserve the ValueError caller contract and the permanent attempt.
+        raise ValueError(str(error)) from None
     response = json.loads(json.dumps(response, ensure_ascii=False).replace(key, '[REDACTED]'))
     text = text.replace(key, '[REDACTED]')
     save('RESPONSE_RESULT.json', response)

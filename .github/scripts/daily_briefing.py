@@ -237,7 +237,10 @@ def prepare(data, source, profile_path, out, session, *, historical=False, now=N
     save(out / 'CONTEXTS.json', contexts)
     render_report(out, facts)
     if focus is None:
-        save(out / 'PREPARATION_STATUS.json', dict(status='no_eligible_focus_no_POST', model_POSTs=0))
+        save(out / 'PREPARATION_STATUS.json', dict(
+            status='no_eligible_focus_no_POST' if rows else 'capture_unavailable_no_POST',
+            target_session=session, valid_rows=len(rows), omitted_rows=len(omitted),
+            capture_failure_details=omitted, model_POSTs=0))
         return None
     symbol = focus['symbol']
     context = contexts[symbol]

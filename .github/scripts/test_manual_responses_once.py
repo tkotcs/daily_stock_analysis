@@ -1,4 +1,5 @@
 import copy
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,6 +10,24 @@ from manual_responses_once import completed_response, cost, load_bundle
 
 ROOT = Path(__file__).resolve().parents[2]
 BATCH = '3e23087e93c3ad203e1d2ef7ced882261b9c45872fc34d8a37740a4b79ee5223'
+
+
+@pytest.fixture(autouse=True)
+def frozen_test_clock(monkeypatch):
+    """Historical contract fixtures use their own date; production keeps real time."""
+    import manual_responses_once as sender
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 20, 11, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(sender, 'datetime', Clock)
+
+
+def test_expired_material_still_refused_with_test_clock():
+    from manual_responses_once import check_time
+    with pytest.raises(ValueError, match='material_expired_or_invalid_no_refresh'):
+        check_time(dict(analysis_asof='2026-10-19T10:00:00+00:00',
+                        material_expires_at='2026-10-20T10:00:00+00:00'))
 
 
 def test_real_frozen_request_profile_and_actual_financial_input():
@@ -28,6 +47,56 @@ def test_truncated_stream_and_duplicate_completion_refused():
                 b'data: {"type":"response.incomplete"}\n\n', (event + event).encode()):
         with pytest.raises(ValueError):
             completed_response(raw)
+
+
+def test_upstream_overload_is_explicit_without_copying_provider_message():
+    from manual_responses_once import ResponseStreamFailure
+    event = dict(type='response.failed', response=dict(
+        status='failed', error=dict(code='server_error', type='service_unavailable_error',
+                                   message='SYNTHETIC_PRIVATE_PROVIDER_MESSAGE')))
+    raw = ('data: ' + json.dumps(event) + '\n\n').encode()
+    with pytest.raises(ResponseStreamFailure) as failed:
+        completed_response(raw)
+    assert str(failed.value) == 'upstream_overloaded_no_retry'
+    assert 'SYNTHETIC_PRIVATE' not in json.dumps(failed.value.details)
+    assert failed.value.details['automatic_retry'] is False
+    assert failed.value.details['output_accepted'] is False
+
+
+def test_HTTP200_overloaded_stream_preserves_one_attempt_no_output(tmp_path, monkeypatch):
+    import httpx
+    import manual_responses_once as sender
+    calls = []
+    key = 'SYNTHETIC_CREDENTIAL'
+    raw = ('data: ' + json.dumps(dict(type='response.failed', response=dict(
+        error=dict(type='service_unavailable_error', code='server_error',
+                   message=key)))) + '\n\n').encode()
+    class Response:
+        status_code = 200
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def iter_bytes(self): yield raw
+    class Client:
+        def __init__(self, **kwargs):
+            assert kwargs['transport']._pool._retries == 0
+            assert kwargs['follow_redirects'] is False
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def stream(self, *args, **kwargs):
+            calls.append(args)
+            return Response()
+    monkeypatch.setattr(httpx, 'Client', Client)
+    saved = {}
+    result = dict(actual_model_POST_attempts=0)
+    with pytest.raises(ValueError, match='upstream_overloaded_no_retry'):
+        sender.perform_post_once({}, {}, 'https://example.test/responses', key,
+                                 tmp_path, result, saved.__setitem__, 'SYNTHETIC_HASH')
+    assert len(calls) == 1 and result['actual_model_POST_attempts'] == 1
+    assert saved['POST_ATTEMPT.json']['state'] == 'reserved_before_transport_may_be_charged'
+    assert saved['PROVIDER_FAILURE.json']['provider_error_type'] == 'service_unavailable_error'
+    assert result['HTTP_status'] == 200
+    assert not (tmp_path/'MODEL_RAW_TEXT.txt').exists()
+    assert key.encode() not in (tmp_path/'RAW_RESPONSE_BODY.bin').read_bytes()
 
 
 def test_actual_usage_cached_subset_and_reasoning_not_double_charged():
