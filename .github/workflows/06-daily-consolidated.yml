@@ -36,7 +36,7 @@ jobs:
       - name: Checkout pinned daily controller
         uses: actions/checkout@v5
         with:
-          ref: 57d7538644b9cbba9fb5c6640966deaa5f044eed
+          ref: 701a5b2344e5823308042282ad55cf8a14b93228
           path: controller
           persist-credentials: false
       - name: Check required delivery setup before any paid call
@@ -175,7 +175,7 @@ jobs:
           for name in ('daily-news','daily-ready','daily-real','daily-notice','mail-result'):
               files.extend(p for p in pathlib.Path(name).rglob('*') if p.is_file())
           capture=pathlib.Path('daily-capture')
-          for pattern in ('RESULTS.json','*/STATUS.json','*/HTTP_TRACE.json','*/*CAPTURE_WINDOW.json','*/*RECEIVED_DAILY.csv','*/chart-*.json'):
+          for pattern in ('RESULTS.json','*/STATUS.json','*/HTTP_TRACE.json','*/*CAPTURE_WINDOW.json','*/*RECEIVED_DAILY.csv','*/chart-*.json','*/reconciled-*.json','*/NATIVE_CONTEXT.json','*/FINAL_REQUEST.json','*/FINANCIAL_AUDIT.json','*/TECHNICAL.json','*/PRICE_AUDIT.json'):
               files.extend(capture.glob(pattern))
           sensitive=[os.environ.get(k,'').strip() for k in ('SEEKERX','EMAIL_SENDER','EMAIL_PASSWORD','EMAIL_RECEIVERS')]
           sensitive.extend(x.strip() for x in os.environ.get('EMAIL_RECEIVERS','').split(','))
@@ -186,7 +186,7 @@ jobs:
           generated=read('daily-real/STATUS.json');mail=read('mail-result/MAIL_STATUS.json')
           summary=dict(configuration=read('CONFIGURATION_STATUS.json'),calendar=read('calendar.json'),session=read('SESSION_STATUS.json'),
               preparation=read('daily-ready/PREPARATION_STATUS.json'),generation=generated,mail=mail,
-              timezone='Asia/Shanghai',scheduled_start='09:00',controller_commit='57d7538644b9cbba9fb5c6640966deaa5f044eed',
+              timezone='Asia/Shanghai',scheduled_start='09:00',controller_commit='701a5b2344e5823308042282ad55cf8a14b93228',
               model_attempts=generated.get('actual_model_POST_attempts',int(pathlib.Path('daily-real/POST_ATTEMPT.json').exists())),
               mail_attempts=mail.get('mail_attempts',int(pathlib.Path('mail-result/MAIL_ATTEMPT.json').exists())))
           pathlib.Path('DAILY_EXECUTION_SUMMARY.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2))
@@ -210,9 +210,16 @@ jobs:
             mail-result/
             daily-news/CAPTURES.json
             daily-news/NEWS_PACKET.json
+            daily-news/*.xml
             daily-capture/RESULTS.json
             daily-capture/*/STATUS.json
             daily-capture/*/HTTP_TRACE.json
             daily-capture/*/*CAPTURE_WINDOW.json
             daily-capture/*/*RECEIVED_DAILY.csv
             daily-capture/*/chart-*.json
+            daily-capture/*/reconciled-*.json
+            daily-capture/*/NATIVE_CONTEXT.json
+            daily-capture/*/FINAL_REQUEST.json
+            daily-capture/*/FINANCIAL_AUDIT.json
+            daily-capture/*/TECHNICAL.json
+            daily-capture/*/PRICE_AUDIT.json
