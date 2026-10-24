@@ -49,7 +49,7 @@ jobs:
           python -m pytest .github/scripts/test_daily_partial.py -q --junitxml=partial-tests.xml --basetemp=partial-test-work
           python - <<'PY'
           import pathlib
-          reports=list(pathlib.Path('partial-test-work').glob('test_partial_delivery_recomput*/daily-notice/DAILY_REPORT.html'))
+          reports=[p for p in pathlib.Path('partial-test-work').glob('test_partial_delivery_recomput*/daily-notice/DAILY_REPORT.html') if not p.parent.parent.is_symlink()]
           assert len(reports)==1,'one_synthetic_mail_preview_required'
           folder=pathlib.Path('partial-layout');folder.mkdir()
           report=reports[0].read_text('utf-8')

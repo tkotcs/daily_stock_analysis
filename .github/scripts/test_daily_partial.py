@@ -147,7 +147,7 @@ def partial_model(tmp_path, monkeypatch):
     return child
 
 
-@pytest.mark.parametrize('bad', [None, 'incomplete', 'binding', 'model_changed'])
+@pytest.mark.parametrize('bad', [None, 'news_mapping', 'incomplete', 'binding', 'model_changed'])
 def test_complete_model_filters_bad_units_and_keeps_good_text(tmp_path, monkeypatch, bad):
     child = partial_model(tmp_path, monkeypatch)
     if bad == 'incomplete':
@@ -160,9 +160,13 @@ def test_complete_model_filters_bad_units_and_keeps_good_text(tmp_path, monkeypa
         model = daily.read(child/'PARSED_MODEL_JSON.json')
         model['analysis_summary'] = 'CHANGED'
         daily.save(child/'PARSED_MODEL_JSON.json', model)
+    if bad == 'news_mapping':
+        monkeypatch.setattr(delivery, 'news_references', lambda *a: {
+            'news:invented:0': dict(title='SYNTHETIC shifted reference',
+                                  url='https://example.test/shifted')})
     kept, removed = delivery.surviving_model(tmp_path, SESSION, NOW)
     text = json.dumps(kept)
-    if bad is None:
+    if bad in (None, 'news_mapping'):
         assert 'SYNTHETIC useful section' in text and 'SYNTHETIC useful explanation' in text
         assert 'invalid citation' not in text and 'MA5<' not in text
         assert 'ma_analysis' in removed and 'daily_sections[2].text' in removed

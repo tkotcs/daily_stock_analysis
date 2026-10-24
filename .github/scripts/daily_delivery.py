@@ -58,7 +58,9 @@ def surviving_model(root, session, now):
                            or path.startswith(p+'.') for p in blocked)
         kept, removed = [], list(blocked)
         known = {'context:'+row['symbol'] for row in facts['rows']}
-        refs = news_references(contexts, now)
+        # Expiration can change numbered news IDs. Never rebind an old citation.
+        refs = {ref: entry for ref, entry in news_references(contexts, now).items()
+                if facts.get('news_references', {}).get(ref) == entry}
         known.update(refs)
         sections = model.get('daily_sections')
         if isinstance(sections, list):
