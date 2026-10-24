@@ -41,7 +41,8 @@ def deliver(report, source, out, review_reference, *, send=False,automatic=False
                     or content != expected.encode('utf-8')
                     or authorization.get('target_session') != session):
                 raise ValueError('current_run_service_notice_required')
-            result['delivery_kind'] = 'service_notice'
+            result['delivery_kind'] = ('partial_research' if '（可用内容版）' in expected.split('\n')[0]
+                                       else 'service_notice')
         if automatic:
             from manual_responses_once import check_time
             if (authorization.get('execution_authority')!=authority
@@ -83,7 +84,9 @@ def deliver(report, source, out, review_reference, *, send=False,automatic=False
                                  email_receivers=receiver_list,
                                  email_sender_name='美股科技投资与技术观察日报', stock_email_groups=[])
         delivered = EmailSender(config).send_to_email(
-            content.decode('utf-8'), subject=('美股日报运行通知｜' if notice else
+            content.decode('utf-8'), subject=('美股晨报（可用内容版）｜'
+                                           if result.get('delivery_kind') == 'partial_research' else
+                                           '美股日报运行通知｜' if notice else
                                            '美股科技投资与技术观察日报｜') + session,
             timeout_seconds=45)
         result['status'] = 'delivered' if delivered else 'mail_failed_or_unknown_no_retry'

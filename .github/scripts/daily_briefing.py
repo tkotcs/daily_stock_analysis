@@ -527,6 +527,9 @@ def finish_report(out, lock, context, facts, contexts, text, result, persist, *,
     focused.mkdir()
     save_full_report(focused, lock['focus_symbol'], focus_model, context,
                      analyzer._format_computed_quote_facts(context), False)
+    # Audit the complete response, retaining the automatic discovery origin.
+    from manual_reports import save_quality_review
+    save_quality_review(focused, lock['focus_symbol'], model, context)
     if automatic:
         review=read(focused/'QA_FINDINGS.json')
         counts=review['evidence_status_counts']

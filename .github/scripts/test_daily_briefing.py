@@ -278,7 +278,7 @@ def github_env(monkeypatch):
         monkeypatch.setenv(key, value)
 
 
-@pytest.mark.parametrize('outcome', ['success', 'bad_sections', 'transport_failure','confirmed_QA'])
+@pytest.mark.parametrize('outcome', ['success', 'bad_sections', 'transport_failure','confirmed_QA','section_QA'])
 @pytest.mark.parametrize('automatic',[False,True])
 def test_daily_generation_uses_single_shared_transport_keeps_failure_evidence(tmp_path, monkeypatch, outcome,automatic):
     github_env(monkeypatch)
@@ -313,6 +313,8 @@ def test_daily_generation_uses_single_shared_transport_keeps_failure_evidence(tm
         model['daily_sections'][0]['sources'] = ['SYNTHETIC-invented']
     if outcome == 'confirmed_QA':
         model['technical_analysis']='SYNTHETIC: MA5<MA10<MA20<MA60'
+    if outcome == 'section_QA':
+        model['daily_sections'][0]['text']='SYNTHETIC: MA5<MA10<MA20<MA60'
     import httpx
     class Response:
         status_code = 503 if outcome == 'transport_failure' else 200
@@ -344,16 +346,20 @@ def test_daily_generation_uses_single_shared_transport_keeps_failure_evidence(tm
     assert result['actual_model_POST_attempts'] == 1
     assert (tmp_path / 'real/RAW_RESPONSE_BODY.bin').exists()
     expected='generated_daily_automatic_validated' if automatic else 'generated_daily_preview_requires_review'
-    passed=outcome=='success' or outcome=='confirmed_QA' and not automatic
+    passed=outcome=='success' or outcome in ('confirmed_QA','section_QA') and not automatic
     assert result['status'] == (expected if passed else 'failed_no_retry')
     if passed:
         assert (tmp_path / 'real/DAILY_REPORT.md').exists()
         assert result['report_sha256']==daily.sha((tmp_path/'real/DAILY_REPORT.md').read_bytes())
         if automatic:
             assert '按用户授权自动发送' in (tmp_path/'real/DAILY_REPORT.md').read_text('utf-8')
-    elif outcome in ('bad_sections','confirmed_QA'):
+    elif outcome in ('bad_sections','confirmed_QA','section_QA'):
         assert result['usage']['input_tokens'] == 20
         assert (tmp_path / 'real/PARSED_MODEL_JSON.json').exists()
         assert not (tmp_path / 'real/DAILY_REPORT.md').exists()
-        if outcome=='confirmed_QA':
+        if outcome in ('confirmed_QA','section_QA'):
             assert daily.read(tmp_path/'real/AUTOMATIC_VALIDATION.json')['confirmed_blockers']>0
+    if outcome=='section_QA':
+        findings=daily.read(tmp_path/'real/focus/QA_FINDINGS.json')['findings']
+        assert any(f['field_path']=='daily_sections[0].text'
+                   and f['discovery_origin']=='automatic_narrow_rule' for f in findings)

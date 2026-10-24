@@ -114,6 +114,37 @@ def capture(config_path, out):
     return result
 
 
+def saved_feed_items(folder, cutoff):
+    """Reparse hash-bound raw feeds independently of price capture success."""
+    config = json.loads((Path(__file__).resolve().parents[1] /
+                         'research/daily-news-feeds.json').read_bytes())
+    receipts_path = folder/'CAPTURES.json'
+    if not receipts_path.is_file():
+        return [], []
+    receipts = json.loads(receipts_path.read_bytes()).get('captures', [])
+    items, omitted = [], []
+    for feed in config['feeds']:
+        try:
+            matches = [r for r in receipts if r.get('symbol') == feed['symbol']]
+            if len(matches) != 1:
+                raise ValueError('feed_receipt_missing_or_duplicate')
+            receipt = matches[0]
+            fetched = aware_date(receipt['fetched_at'])
+            if (receipt.get('HTTP_status') != 200 or receipt.get('response_complete') is not True
+                    or receipt.get('url') != feed['url']
+                    or not cutoff-timedelta(hours=24) <= fetched <= cutoff):
+                raise ValueError('feed_receipt_not_current_complete')
+            raw = (folder/(feed['symbol']+'.xml')).read_bytes()
+            if hashlib.sha256(raw).hexdigest() != receipt['sha256']:
+                raise ValueError('feed_raw_hash_mismatch')
+            admitted, _ = parse_feed(raw, feed, fetched, limit=config['max_items_per_symbol'])
+            items.extend(dict(symbol=feed['symbol'], **item) for item in admitted
+                         if cutoff-timedelta(days=3) <= aware_date(item['published_at']) <= cutoff)
+        except (ValueError, KeyError, TypeError, OSError, ET.ParseError):
+            omitted.append(feed['symbol'])
+    return items, omitted
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', required=True, type=Path)
