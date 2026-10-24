@@ -525,8 +525,12 @@ def finish_report(out, lock, context, facts, contexts, text, result, persist, *,
     focus_model = {k: v for k, v in model.items() if k not in ('daily_sections', 'focus_symbol')}
     focused = out / 'focus'
     focused.mkdir()
+    from manual_reports import quality_findings
+    section_findings = [f for f in quality_findings(model, context)
+                        if f['field_path'].startswith('daily_sections[')]
     save_full_report(focused, lock['focus_symbol'], focus_model, context,
-                     analyzer._format_computed_quote_facts(context), False)
+                     analyzer._format_computed_quote_facts(context), False,
+                     additional_findings=section_findings)
     if automatic:
         review=read(focused/'QA_FINDINGS.json')
         counts=review['evidence_status_counts']

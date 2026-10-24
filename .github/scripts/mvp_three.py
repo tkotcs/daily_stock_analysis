@@ -7,6 +7,66 @@ sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
 from free_market_validation import WATCHLIST,ETFS,NAMES
 NOTICE='模拟模型响应，仅验证流水线；行情为本次注明的数据来源，不是已通过验收的真实AI研报。'
 
+def reconcile_missing_close(payload, companions, now):
+    """Use an already captured complete daily bar only when all remaining values agree."""
+    import copy
+    from zoneinfo import ZoneInfo
+    result=copy.deepcopy(payload);changes=[]
+    local=ZoneInfo('America/New_York')
+    def number(value):return type(value) in (int,float) and math.isfinite(value)
+    for chart in result.get('chart',{}).get('result') or []:
+        meta=chart.get('meta',{})
+        if (meta.get('dataGranularity')!='1d' or meta.get('currency')!='USD'
+                or meta.get('exchangeTimezoneName')!='America/New_York'):
+            continue
+        quote=(chart.get('indicators',{}).get('quote') or [{}])[0]
+        adj=(chart.get('indicators',{}).get('adjclose') or [{}])[0].get('adjclose',[])
+        for index,stamp in enumerate(chart.get('timestamp') or []):
+            if index>=len(quote.get('close',[])) or quote['close'][index] is not None:
+                continue
+            day=dt.datetime.fromtimestamp(stamp,local).date().isoformat()
+            import exchange_calendars as xc
+            cal=xc.get_calendar('XNYS')
+            if not cal.is_session(day) or cal.session_close(day).timestamp()>now.timestamp():
+                continue
+            candidates=[]
+            for other in companions:
+                om=other.get('meta',{})
+                if any(om.get(key)!=meta.get(key) for key in
+                       ('symbol','currency','exchangeTimezoneName','instrumentType','dataGranularity')):
+                    continue
+                oq=(other.get('indicators',{}).get('quote') or [{}])[0]
+                oa=(other.get('indicators',{}).get('adjclose') or [{}])[0].get('adjclose',[])
+                for j,ts in enumerate(other.get('timestamp') or []):
+                    if (dt.datetime.fromtimestamp(ts,local).date().isoformat()!=day
+                            or ts>now.timestamp()):
+                        continue
+                    try:
+                        values={key:oq[key][j] for key in ('open','high','low','close','volume')}
+                        adjusted=oa[j]
+                        if not all(number(v) for v in (*values.values(),adjusted)):
+                            continue
+                        if not (0<values['low']<=min(values['open'],values['close'])
+                                <=max(values['open'],values['close'])<=values['high']
+                                and values['volume']>0 and adjusted>0):
+                            continue
+                        if any(not number(quote[key][index]) or not math.isclose(
+                                quote[key][index],values[key],rel_tol=1e-9,abs_tol=1e-8)
+                               for key in ('open','high','low','volume')):
+                            continue
+                        if index>=len(adj) or (adj[index] is not None and
+                                not math.isclose(adj[index],adjusted,rel_tol=1e-9)):
+                            continue
+                        candidates.append((values['close'],adjusted))
+                    except (KeyError,IndexError,TypeError):
+                        continue
+            if candidates and len(set(candidates))==1:
+                quote['close'][index],adj[index]=candidates[0]
+                changes.append(dict(symbol=meta['symbol'],session=day,
+                                    fields=['close','adjclose'],basis='matching_saved_daily_OHLV'))
+    return result,changes
+
+
 def install_capture_transport(out, *, offline=False):
     """Keep terminal Yahoo refusals outside the native provider retry loops."""
     import curl_cffi.requests as curl
@@ -29,7 +89,21 @@ def install_capture_transport(out, *, offline=False):
                 # BaseException intentionally escapes native Exception retries.
                 raise FreeSafetyStop(f'Yahoo_HTTP_{response.status_code}_stop_no_retry')
             if '/finance/chart/' in row['path']:
-                name='chart-'+str(len(trace))+'.json';save(out/name,response.json());row['response_file']=name
+                payload=response.json()
+                name='chart-'+str(len(trace))+'.json';save(out/name,payload);row['response_file']=name
+                companions=[]
+                for prior in trace:
+                    if prior.get('status')==200 and prior.get('response_file'):
+                        companions.extend(json.loads((out/prior['response_file']).read_bytes()).get('chart',{}).get('result') or [])
+                corrected,changes=reconcile_missing_close(payload,companions,dt.datetime.now(dt.timezone.utc))
+                if changes:
+                    fixed='reconciled-'+str(len(trace))+'.json';save(out/fixed,corrected)
+                    row.update(reconciliation=changes,reconciled_file=fixed)
+                    # Preserve the original HTTP object and raw source JSON for audit.
+                    class ReconciledResponse:
+                        def json(self,*a,**k):return corrected
+                        def __getattr__(self,key):return getattr(response,key)
+                    return ReconciledResponse()
             return response
         except Exception as e:row['error']=type(e).__name__;raise
         finally:trace.append(row);persist()

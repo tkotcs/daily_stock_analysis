@@ -42,6 +42,23 @@ jobs:
           python .github/scripts/prepare_offline_assets.py --cache "$TIKTOKEN_CACHE_DIR"
       - name: Deterministic refusal regression checks
         run: python -m pytest .github/scripts/test_mvp_capture_refusal.py -q --junitxml=refusal-tests.xml
+      - name: Offline partial delivery checks and synthetic email layout
+        env:
+          DSA_FIXED_SOURCE: ${{ github.workspace }}/upstream-fixed
+        run: |
+          python -m pytest .github/scripts/test_daily_partial.py -q --junitxml=partial-tests.xml --basetemp=partial-test-work
+          python - <<'PY'
+          import pathlib
+          reports=list(pathlib.Path('partial-test-work').glob('test_partial_delivery_recomput*/daily-notice/DAILY_REPORT.html'))
+          assert len(reports)==1,'one_synthetic_mail_preview_required'
+          folder=pathlib.Path('partial-layout');folder.mkdir()
+          report=reports[0].read_text('utf-8')
+          report=report.replace('<body>','<body><p>合成数据排版检查，不是真实研报，不发送。</p>',1)
+          (folder/'PREVIEW.html').write_text(report,'utf-8')
+          PY
+          if command -v google-chrome >/dev/null; then
+            google-chrome --headless --no-sandbox --disable-gpu --hide-scrollbars --screenshot="$PWD/partial-layout/PREVIEW.png" --window-size=1280,1100 "file://$PWD/partial-layout/PREVIEW.html"
+          fi
       - name: Native capture without supplier or email credentials
         run: |
           if [ "$CAPTURE_SCOPE" = nvda ]; then
@@ -90,10 +107,13 @@ jobs:
           path: |
             FREE_CAPTURE_SUMMARY.json
             refusal-tests.xml
+            partial-tests.xml
+            partial-layout/
             calendar.json
             daily-ready/
             daily-news/CAPTURES.json
             daily-news/NEWS_PACKET.json
+            daily-news/*.xml
             capture/RESULTS.json
             capture/*/STATUS.json
             capture/*/HTTP_TRACE.json
@@ -105,3 +125,4 @@ jobs:
             capture/*/PRICE_AUDIT.json
             capture/*/TECHNICAL.json
             capture/*/chart-*.json
+            capture/*/reconciled-*.json

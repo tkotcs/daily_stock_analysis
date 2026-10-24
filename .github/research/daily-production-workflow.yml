@@ -175,7 +175,7 @@ jobs:
           for name in ('daily-news','daily-ready','daily-real','daily-notice','mail-result'):
               files.extend(p for p in pathlib.Path(name).rglob('*') if p.is_file())
           capture=pathlib.Path('daily-capture')
-          for pattern in ('RESULTS.json','*/STATUS.json','*/HTTP_TRACE.json','*/*CAPTURE_WINDOW.json','*/*RECEIVED_DAILY.csv','*/chart-*.json'):
+          for pattern in ('RESULTS.json','*/STATUS.json','*/HTTP_TRACE.json','*/*CAPTURE_WINDOW.json','*/*RECEIVED_DAILY.csv','*/chart-*.json','*/reconciled-*.json','*/NATIVE_CONTEXT.json','*/FINAL_REQUEST.json','*/FINANCIAL_AUDIT.json','*/TECHNICAL.json','*/PRICE_AUDIT.json'):
               files.extend(capture.glob(pattern))
           sensitive=[os.environ.get(k,'').strip() for k in ('SEEKERX','EMAIL_SENDER','EMAIL_PASSWORD','EMAIL_RECEIVERS')]
           sensitive.extend(x.strip() for x in os.environ.get('EMAIL_RECEIVERS','').split(','))
@@ -210,9 +210,16 @@ jobs:
             mail-result/
             daily-news/CAPTURES.json
             daily-news/NEWS_PACKET.json
+            daily-news/*.xml
             daily-capture/RESULTS.json
             daily-capture/*/STATUS.json
             daily-capture/*/HTTP_TRACE.json
             daily-capture/*/*CAPTURE_WINDOW.json
             daily-capture/*/*RECEIVED_DAILY.csv
             daily-capture/*/chart-*.json
+            daily-capture/*/reconciled-*.json
+            daily-capture/*/NATIVE_CONTEXT.json
+            daily-capture/*/FINAL_REQUEST.json
+            daily-capture/*/FINANCIAL_AUDIT.json
+            daily-capture/*/TECHNICAL.json
+            daily-capture/*/PRICE_AUDIT.json
