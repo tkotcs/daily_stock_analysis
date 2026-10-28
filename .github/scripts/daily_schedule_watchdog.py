@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
+import re
 import subprocess
 from zoneinfo import ZoneInfo
 
@@ -61,15 +62,64 @@ def inspect(session, now, repository, workflow, gh):
     return "dispatch_needed"
 
 
+def dispatch_receipt(dispatched):
+    """Persist protocol facts, never raw CLI output or provider-controlled text."""
+    output = dispatched.stdout.decode("utf-8", errors="replace").replace("\r\n", "\n")
+    matches = re.findall(r"^HTTP/\S+ (\d{3})(?: .*)?$", output, re.MULTILINE)
+    status = int(matches[0]) if len(matches) == 1 else None
+    receipt = dict(status="dispatch_uncertain_no_retry", HTTP_status=status,
+                   failure_code="dispatch_response_uncertain")
+    if dispatched.returncode == 0 and status == 204:
+        return dict(status="production_dispatched", HTTP_status=204)
+    try:
+        body = json.loads(output.split("\n\n", 1)[1])
+    except (IndexError, ValueError):
+        return receipt
+    if (dispatched.returncode and status in {400, 401, 403, 404, 422, 429}
+            and isinstance(body, dict) and str(body.get("status")) == str(status)):
+        code = "github_dispatch_rejected"
+        if status == 422 and body.get("message") == "Actions has been disabled for this repository.":
+            code = "actions_disabled_for_repository"
+        return dict(status="dispatch_rejected", HTTP_status=status, failure_code=code)
+    return receipt
+
+
+def dispatch_slot(args, session, now):
+    """Keep every reservation; only a proven HTTP rejection permits one later retry."""
+    first_failure = None
+    for attempt in (1, 2):
+        suffix = "" if attempt == 1 else "-2"
+        marker = args.state_dir / (session + ".dispatch-attempt" + suffix + ".json")
+        receipt_path = args.state_dir / (session + ".dispatch-result" + suffix + ".json")
+        if not marker.exists():
+            return marker, receipt_path, attempt, None
+        if not receipt_path.exists():
+            return None, None, attempt, dict(
+                status="local_dispatch_already_reserved_no_retry", attempt=attempt)
+        reservation = json.loads(marker.read_bytes())
+        receipt = json.loads(receipt_path.read_bytes())
+        if (receipt.get("session") != session or reservation.get("session") != session
+                or receipt.get("checked_at") != reservation.get("checked_at")):
+            raise ValueError("dispatch_receipt_reservation_mismatch")
+        first_failure = dict(status="local_dispatch_already_reserved_no_retry",
+                             previous_dispatch=receipt, attempt=attempt)
+        if receipt.get("status") != "dispatch_rejected":
+            return None, None, attempt, first_failure
+        elapsed = now - datetime.fromisoformat(receipt["checked_at"])
+        if elapsed < timedelta(minutes=20):
+            return None, None, attempt, dict(first_failure, status="dispatch_rejected_wait")
+    return None, None, 2, dict(first_failure, status="dispatch_rejected_retry_limit")
+
+
 def execute(args, now):
     session = target_session(now)
     result = dict(checked_at=now.isoformat(), session=session, model_POSTs=0,
                   SMTP_attempts=0, dry_run=args.dry_run)
     if session is None:
         return dict(result, status="outside_delivery_window_or_holiday")
-    marker = args.state_dir / (session + ".dispatch-attempt.json")
-    if marker.exists():
-        return dict(result, status="local_dispatch_already_reserved_no_retry")
+    marker, receipt_path, attempt, stopped = dispatch_slot(args, session, now)
+    if stopped:
+        return dict(result, **stopped)
     status = inspect(session, now, args.repository, args.workflow, args.gh)
     if status != "dispatch_needed" or args.dry_run:
         return dict(result, status=status)
@@ -78,12 +128,15 @@ def execute(args, now):
     with marker.open("x", encoding="utf-8") as stream:
         json.dump(dict(result, status="dispatch_reserved_may_be_sent"), stream)
     dispatched = subprocess.run(
-        [args.gh, "workflow", "run", args.workflow, "--repo", args.repository,
-         "--ref", "main", "-f", "operation=run_paid_daily"],
+        [args.gh, "api", "--include", "--method", "POST",
+         f"repos/{args.repository}/actions/workflows/{args.workflow}/dispatches",
+         "--input", "-"],
+        input=json.dumps(dict(ref="main", inputs=dict(operation="run_paid_daily"))).encode(),
         capture_output=True, timeout=60)
-    if dispatched.returncode:
-        raise RuntimeError("dispatch_failed_or_uncertain_no_retry")
-    return dict(result, status="production_dispatched")
+    receipt = dict(result, **dispatch_receipt(dispatched), attempt=attempt)
+    with receipt_path.open("x", encoding="utf-8") as stream:
+        json.dump(receipt, stream, indent=2)
+    return receipt
 
 
 def main():
@@ -109,6 +162,9 @@ def main():
     (args.state_dir / "latest.json").write_text(
         json.dumps(result, indent=2), encoding="utf-8")
     print(json.dumps(result))
+    if result["status"] in {"dispatch_rejected", "dispatch_uncertain_no_retry",
+                            "dispatch_rejected_wait", "dispatch_rejected_retry_limit"}:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

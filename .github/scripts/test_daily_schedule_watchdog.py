@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import json
 from types import SimpleNamespace
 from unittest.mock import patch
 import pytest
@@ -66,3 +67,103 @@ def test_model_claim_stops_before_runs():
     }) as read:
         assert watchdog.inspect("2026-10-21", NOW, "o/r", "w", "gh") == "model_reserved_no_retry"
         assert read.call_count == 1
+
+
+def response(status=422, message="Actions has been disabled for this repository.",
+             returncode=1):
+    payload = json.dumps(dict(status=str(status), message=message))
+    return SimpleNamespace(returncode=returncode, stdout=(
+        f"HTTP/2.0 {status} Response\r\nX-Github-Request-Id: example\r\n\r\n"
+        + payload).encode(), stderr=b"must not be persisted")
+
+
+def test_disabled_actions_is_a_redacted_definitive_rejection():
+    receipt = watchdog.dispatch_receipt(response())
+    assert receipt == dict(status="dispatch_rejected", HTTP_status=422,
+                           failure_code="actions_disabled_for_repository")
+    assert "must not" not in json.dumps(receipt)
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 422, 429])
+def test_known_client_rejections_are_distinguished_from_uncertain_dispatch(status):
+    assert watchdog.dispatch_receipt(response(status))["status"] == "dispatch_rejected"
+
+
+@pytest.mark.parametrize("result", [
+    SimpleNamespace(returncode=1, stdout=b"", stderr=b"HTTP 422"),
+    SimpleNamespace(returncode=1, stdout=b"HTTP/2.0 422 Error\n\n{}", stderr=b""),
+    response(500),
+    response(502),
+    response(200, returncode=0),
+    response(422, returncode=0),
+])
+def test_ambiguous_or_server_failure_cannot_authorize_retry(result):
+    assert watchdog.dispatch_receipt(result)["status"] == "dispatch_uncertain_no_retry"
+
+
+def test_no_content_is_success():
+    result = SimpleNamespace(returncode=0, stdout=b"HTTP/2.0 204 No Content\n\n")
+    assert watchdog.dispatch_receipt(result) == dict(
+        status="production_dispatched", HTTP_status=204)
+
+
+def test_rejected_attempt_rechecks_remote_and_retries_once_without_deleting(tmp_path):
+    args = SimpleNamespace(state_dir=tmp_path, dry_run=False,
+                           repository="o/r", workflow="w", gh="gh")
+    with patch.object(watchdog, "inspect", return_value="dispatch_needed") as inspect, \
+            patch.object(watchdog.subprocess, "run", return_value=response()) as run:
+        first = watchdog.execute(args, NOW)
+        marker = tmp_path / "2026-10-21.dispatch-attempt.json"
+        original = marker.read_bytes()
+        assert first["failure_code"] == "actions_disabled_for_repository"
+        assert watchdog.execute(args, NOW + timedelta(minutes=19))["status"] == "dispatch_rejected_wait"
+        assert run.call_count == inspect.call_count == 1
+        second = watchdog.execute(args, NOW + timedelta(minutes=20))
+        assert second["attempt"] == 2
+        assert run.call_count == inspect.call_count == 2
+        assert watchdog.execute(args, NOW + timedelta(minutes=40))["status"] == "dispatch_rejected_retry_limit"
+        assert run.call_count == 2
+        assert marker.read_bytes() == original
+        assert len(list(tmp_path.iterdir())) == 4
+        command = run.call_args.args[0]
+        assert command[1:5] == ["api", "--include", "--method", "POST"]
+        assert json.loads(run.call_args.kwargs["input"])["inputs"] == {"operation": "run_paid_daily"}
+
+
+@pytest.mark.parametrize("remote_status", [
+    "model_reserved_no_retry", "mail_reserved_no_retry", "existing_run_no_retry",
+])
+def test_rejected_retry_is_still_blocked_by_remote_claim_or_run(tmp_path, remote_status):
+    args = SimpleNamespace(state_dir=tmp_path, dry_run=False,
+                           repository="o/r", workflow="w", gh="gh")
+    with patch.object(watchdog, "inspect", side_effect=["dispatch_needed", remote_status]), \
+            patch.object(watchdog.subprocess, "run", return_value=response()) as run:
+        watchdog.execute(args, NOW)
+        assert watchdog.execute(args, NOW + timedelta(minutes=20))["status"] == remote_status
+        assert run.call_count == 1
+
+
+def test_success_and_unknown_result_never_retry(tmp_path):
+    for dispatched in [response(204, returncode=0), response(500)]:
+        state = tmp_path / str(dispatched.returncode)
+        args = SimpleNamespace(state_dir=state, dry_run=False,
+                               repository="o/r", workflow="w", gh="gh")
+        with patch.object(watchdog, "inspect", return_value="dispatch_needed"), \
+                patch.object(watchdog.subprocess, "run", return_value=dispatched) as run:
+            watchdog.execute(args, NOW)
+            result = watchdog.execute(args, NOW + timedelta(minutes=20))
+            assert result["status"] == "local_dispatch_already_reserved_no_retry"
+            assert result["previous_dispatch"]["HTTP_status"] in {204, 500}
+            assert run.call_count == 1
+
+
+def test_dry_run_cannot_create_a_second_reservation(tmp_path):
+    args = SimpleNamespace(state_dir=tmp_path, dry_run=False,
+                           repository="o/r", workflow="w", gh="gh")
+    with patch.object(watchdog, "inspect", return_value="dispatch_needed"), \
+            patch.object(watchdog.subprocess, "run", return_value=response()) as run:
+        watchdog.execute(args, NOW)
+        args.dry_run = True
+        assert watchdog.execute(args, NOW + timedelta(minutes=20))["status"] == "dispatch_needed"
+        assert run.call_count == 1
+        assert len(list(tmp_path.iterdir())) == 2
